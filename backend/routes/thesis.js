@@ -494,7 +494,7 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
 // Extracts grounded research components from authorized abstract or full text.
 router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, res) => {
   try {
-    const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED === 'true';
+    const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED !== 'false';
     if (!isEnabled) {
       return res.status(200).json({
         enabled: false,
@@ -502,14 +502,22 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
       });
     }
 
-    if (!req.user) {
-      return res.status(401).json({
-        message: 'Sign in with your student account to generate AI-assisted research summaries.',
-        code: 'AUTHENTICATION_REQUIRED',
-      });
+    let entitlements = null;
+    if (req.user) {
+      entitlements = await getEffectiveEntitlements(req.user._id);
+    } else {
+      entitlements = {
+        plan: 'guest',
+        label: 'Guest Access',
+        quotas: {
+          dailySearchLimit: 10,
+          dailyDatasetLookupLimit: 0,
+          dailySummaryGenerationLimit: 2,
+          canAccessFullTextSummary: false,
+        },
+      };
     }
 
-    const entitlements = await getEffectiveEntitlements(req.user._id);
     const { id } = req.params;
     const { language = 'en', forceRefresh = false, paper: inputPaper } = req.body || {};
 
@@ -535,9 +543,11 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
       };
     }
 
+    const scope = req.user ? String(req.user._id) : (req.ip || 'guest');
     const summaryResult = await getOrGeneratePaperSummary({
       paper,
       user: req.user,
+      scope,
       entitlements,
       language: language === 'bn' ? 'bn' : 'en',
       forceRefresh: Boolean(forceRefresh),
@@ -560,7 +570,7 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
 // GET /api/thesis/:id/summary
 router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, res) => {
   try {
-    const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED === 'true';
+    const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED !== 'false';
     if (!isEnabled) {
       return res.status(200).json({
         enabled: false,
@@ -568,14 +578,22 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
       });
     }
 
-    if (!req.user) {
-      return res.status(401).json({
-        message: 'Sign in with your student account to generate AI-assisted research summaries.',
-        code: 'AUTHENTICATION_REQUIRED',
-      });
+    let entitlements = null;
+    if (req.user) {
+      entitlements = await getEffectiveEntitlements(req.user._id);
+    } else {
+      entitlements = {
+        plan: 'guest',
+        label: 'Guest Access',
+        quotas: {
+          dailySearchLimit: 10,
+          dailyDatasetLookupLimit: 0,
+          dailySummaryGenerationLimit: 2,
+          canAccessFullTextSummary: false,
+        },
+      };
     }
 
-    const entitlements = await getEffectiveEntitlements(req.user._id);
     const { id } = req.params;
     const language = req.query.language === 'bn' ? 'bn' : 'en';
     const forceRefresh = req.query.forceRefresh === 'true';
@@ -596,9 +614,11 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
       };
     }
 
+    const scope = req.user ? String(req.user._id) : (req.ip || 'guest');
     const summaryResult = await getOrGeneratePaperSummary({
       paper,
       user: req.user,
+      scope,
       entitlements,
       language,
       forceRefresh,

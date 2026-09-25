@@ -1529,6 +1529,7 @@ export default function App() {
           onSelectAuthor={(auth) => setInspectingAuthor(auth)}
           onViewInstitutionLandscape={(inst) => setInspectingLandscapeInst(inst)}
           onSavedPapersChange={fetchUserSavedCount}
+          onRequireAuth={(msg) => alert(msg || 'Sign in with your student account to access this feature.')}
         />
       )}
 

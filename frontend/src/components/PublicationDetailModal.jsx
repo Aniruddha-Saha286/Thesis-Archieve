@@ -140,8 +140,6 @@ export default function PublicationDetailModal({
     };
   }, [isAuthenticated, currentThesisId]);
 
-  if (!thesis) return null;
-
   const handleToggleSave = async () => {
     if (!isAuthenticated) {
       if (onRequireAuth) {
@@ -252,16 +250,14 @@ export default function PublicationDetailModal({
     }
   };
 
-  const fetchSummary = async (lang = summaryState.language, force = false) => {
-    if (!isAuthenticated) {
-      if (onRequireAuth) {
-        onRequireAuth('Sign in with your student account to generate AI-assisted research summaries.');
-      } else {
-        alert('Sign in with your student account to generate research summaries.');
-      }
-      return;
+  const handleSummaryTabClick = () => {
+    setActiveTab('summary');
+    if (!summaryState.requested && !summaryState.loading) {
+      fetchSummary(summaryState.language);
     }
+  };
 
+  const fetchSummary = async (lang = summaryState.language, force = false) => {
     const requestedThesisId = currentThesisId;
     setSummaryState((s) => ({
       ...s,
@@ -305,6 +301,17 @@ export default function PublicationDetailModal({
       }));
     } catch (err) {
       if (currentThesisIdRef.current !== requestedThesisId) return;
+      if (err.response?.status === 401) {
+        if (onRequireAuth) {
+          onRequireAuth('Sign in with your student account to generate AI-assisted research summaries.');
+        }
+        setSummaryState((s) => ({
+          ...s,
+          loading: false,
+          error: 'Sign in with your student account to generate AI-assisted research summaries.',
+        }));
+        return;
+      }
       const isQuota = err.response?.status === 429 || err.response?.data?.code === 'DAILY_SUMMARY_LIMIT_REACHED';
       const msg = err.response?.data?.message || 'Failed to generate summary for this paper.';
       setSummaryState((s) => ({
@@ -314,6 +321,12 @@ export default function PublicationDetailModal({
       }));
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'summary' && !summaryState.requested && !summaryState.loading) {
+      fetchSummary(summaryState.language);
+    }
+  }, [activeTab, currentThesisId]);
 
   const copySummaryText = () => {
     if (!summaryState.data?.summary) return;
@@ -351,6 +364,8 @@ export default function PublicationDetailModal({
       setTimeout(() => setCopiedDoi(false), 2000);
     }
   };
+
+  if (!thesis) return null;
 
   const pubType = (thesis.publicationType || thesis.degreeType || 'article').toLowerCase();
   const isThesisType = pubType.includes('thesis') || pubType.includes('dissertation') || pubType.includes('capstone');
@@ -621,7 +636,7 @@ export default function PublicationDetailModal({
 
           <button
             type="button"
-            onClick={() => setActiveTab('summary')}
+            onClick={handleSummaryTabClick}
             className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
               activeTab === 'summary'
                 ? 'border-amber-600 text-amber-950 bg-amber-50/50'

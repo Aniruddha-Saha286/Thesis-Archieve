@@ -135,6 +135,7 @@ function aggregateTopFields(fieldGroups = []) {
       fieldId: rawId,
       fullFieldId: g.key || '',
       fieldName: name,
+      name,
       count,
       percentage,
       color: COLOR_BLIND_PALETTE[idx] || '#78716C',
@@ -147,6 +148,7 @@ function aggregateTopFields(fieldGroups = []) {
       fieldId: 'other',
       fullFieldId: 'other',
       fieldName: 'Other Disciplines',
+      name: 'Other Disciplines',
       count: otherCount,
       percentage: otherPercentage,
       color: COLOR_BLIND_PALETTE[6], // Dedicated 'Other' color
@@ -202,7 +204,7 @@ async function getInstitutionResearchLandscape({
   toYear = null,
   forceRefresh = false,
 }) {
-  const isEnabled = process.env.INSTITUTION_ANALYTICS_ENABLED === 'true';
+  const isEnabled = process.env.INSTITUTION_ANALYTICS_ENABLED !== 'false';
   if (!isEnabled) {
     return {
       enabled: false,
@@ -280,13 +282,31 @@ async function getInstitutionResearchLandscape({
           }
           const filterParam = filterParts.join(',');
 
-          // 1. Fetch institution details
-          const instRes = await fetch(`https://api.openalex.org/institutions/${cleanId}`, {
-            signal: AbortSignal.timeout(5000),
-            headers: {
-              'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
-            },
-          });
+          const reqHeaders = {
+            'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
+          };
+
+          // Parallelize OpenAlex requests to avoid sequential latency and timeouts
+          const [instRes, fieldsRes, yearsRes] = await Promise.all([
+            fetch(`https://api.openalex.org/institutions/${cleanId}`, {
+              signal: AbortSignal.timeout(8000),
+              headers: reqHeaders,
+            }),
+            fetch(
+              `https://api.openalex.org/works?filter=${encodeURIComponent(filterParam)}&group_by=primary_topic.field.id`,
+              {
+                signal: AbortSignal.timeout(8000),
+                headers: reqHeaders,
+              }
+            ),
+            fetch(
+              `https://api.openalex.org/works?filter=${encodeURIComponent(filterParam)}&group_by=publication_year`,
+              {
+                signal: AbortSignal.timeout(8000),
+                headers: reqHeaders,
+              }
+            ),
+          ]);
 
           if (instRes.ok) {
             const instData = await instRes.json();
@@ -302,46 +322,20 @@ async function getInstitutionResearchLandscape({
             };
           } else if (fixture) {
             institutionMeta = fixture.institution;
-            rawFieldGroups = fixture.fields;
-            rawYearGroups = fixture.years;
           }
 
-          if (institutionMeta && rawFieldGroups.length === 0) {
-            // 2. Fetch field distribution (grouped by primary topic field)
-            const fieldsRes = await fetch(
-              `https://api.openalex.org/works?filter=${encodeURIComponent(filterParam)}&group_by=primary_topic.field.id`,
-              {
-                signal: AbortSignal.timeout(5000),
-                headers: {
-                  'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
-                },
-              }
-            );
+          if (fieldsRes.ok) {
+            const fData = await fieldsRes.json();
+            rawFieldGroups = fData.group_by || [];
+          } else if (fixture) {
+            rawFieldGroups = fixture.fields;
+          }
 
-            if (fieldsRes.ok) {
-              const fData = await fieldsRes.json();
-              rawFieldGroups = fData.group_by || [];
-            } else if (fixture) {
-              rawFieldGroups = fixture.fields;
-            }
-
-            // 3. Fetch yearly trend
-            const yearsRes = await fetch(
-              `https://api.openalex.org/works?filter=${encodeURIComponent(filterParam)}&group_by=publication_year`,
-              {
-                signal: AbortSignal.timeout(5000),
-                headers: {
-                  'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
-                },
-              }
-            );
-
-            if (yearsRes.ok) {
-              const yData = await yearsRes.json();
-              rawYearGroups = yData.group_by || [];
-            } else if (fixture) {
-              rawYearGroups = fixture.years;
-            }
+          if (yearsRes.ok) {
+            const yData = await yearsRes.json();
+            rawYearGroups = yData.group_by || [];
+          } else if (fixture) {
+            rawYearGroups = fixture.years;
           }
         } catch (fetchErr) {
           // If network failed and fixture is available, use fixture as fallback

@@ -1,4 +1,5 @@
 const assert = require('assert');
+const { getDhakaDateString } = require('../utils/dhakaDate');
 const {
   getOrGeneratePaperSummary,
   extractGroundedAbstractSummary,
@@ -198,7 +199,7 @@ async function runPaperSummaryTests() {
 
     const dummyUser = {
       _id: 'usr_mock_quota',
-      dailySummaryUsage: { date: '2026-09-25', count: 1 }, // Already at limit of 1
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 1 }, // Already at limit of 1
       save: async () => {},
     };
 

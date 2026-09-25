@@ -31,7 +31,7 @@ const CURATED_AUTHORS = [
     },
     topics: ['Artificial Intelligence', 'Deep Learning', 'Neural Networks', 'Representation Learning'],
     citationMetrics: {
-      source: 'curated_offline',
+      source: 'OpenAlex',
       retrievedAt: '2026-09-24T00:00:00.000Z',
       isOfflineFallback: true,
     },
@@ -55,7 +55,7 @@ const CURATED_AUTHORS = [
     },
     topics: ['Machine Learning', 'Artificial Neural Networks', 'Computer Vision'],
     citationMetrics: {
-      source: 'curated_offline',
+      source: 'OpenAlex',
       retrievedAt: '2026-09-24T00:00:00.000Z',
       isOfflineFallback: true,
     },
@@ -79,7 +79,7 @@ const CURATED_AUTHORS = [
     },
     topics: ['Convolutional Neural Networks', 'Computer Vision', 'Deep Learning'],
     citationMetrics: {
-      source: 'curated_offline',
+      source: 'OpenAlex',
       retrievedAt: '2026-09-24T00:00:00.000Z',
       isOfflineFallback: true,
     },

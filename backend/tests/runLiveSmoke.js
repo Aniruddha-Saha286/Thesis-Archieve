@@ -4,6 +4,7 @@ const { searchGlobalDatasets } = require('../services/datasetDiscoveryService');
 const institutionService = require('../services/institutionService');
 const authorService = require('../services/authorService');
 const { getInstitutionResearchLandscape } = require('../services/institutionAnalyticsService');
+const { getOrGeneratePaperSummary } = require('../services/paperSummaryService');
 
 async function runLiveSmokeTests() {
   console.log('===============================================================');
@@ -85,6 +86,35 @@ async function runLiveSmokeTests() {
     assert(landscape.fieldDistribution, 'Field distribution should be computed');
     assert(landscape.publicationTrends, 'Publication trends should be computed');
     console.log(`    Oxford top discipline: ${landscape.fieldDistribution.slices[0]?.name} (${landscape.fieldDistribution.slices[0]?.percentage}%)`);
+  });
+
+  // 6. Live Grounded Paper Summary Generation
+  await test('Live Grounded Paper Summary: generates grounded abstract findings and key terms', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+    const summaryResult = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'smoke_paper_transformer',
+        title: 'Attention Is All You Need',
+        abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable.',
+      },
+      user: null,
+      scope: 'live_smoke_guest',
+      entitlements: {
+        plan: 'guest',
+        quotas: {
+          dailySummaryGenerationLimit: 2,
+          canAccessFullTextSummary: false,
+        },
+      },
+      language: 'en',
+    });
+
+    assert.strictEqual(summaryResult.enabled, true);
+    assert.strictEqual(summaryResult.coverage, 'abstract_only');
+    assert(summaryResult.summary?.tldr, 'Summary should have TLDR');
+    assert(summaryResult.summary?.researchObjective, 'Summary should have research objective');
+    assert(Array.isArray(summaryResult.summary?.keyTerms), 'Key terms should be an array');
+    console.log(`    Generated grounded summary with ${summaryResult.summary.keyTerms.length} key domain terms.`);
   });
 
   console.log(`\n===============================================================`);

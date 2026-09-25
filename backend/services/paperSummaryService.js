@@ -154,11 +154,12 @@ function extractGroundedAbstractSummary(abstractText, language = 'en') {
 async function getOrGeneratePaperSummary({
   paper,
   user,
+  scope,
   entitlements,
   language = 'en',
   forceRefresh = false,
 }) {
-  const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED === 'true';
+  const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED !== 'false';
   if (!isEnabled) {
     return {
       enabled: false,
@@ -268,7 +269,7 @@ async function getOrGeneratePaperSummary({
 
   const reservation = await reserveUsage({
     user,
-    scope: user ? (user._id ? user._id.toString() : user.id || 'usr') : 'guest',
+    scope: user ? (user._id ? user._id.toString() : user.id || 'usr') : (scope || 'guest'),
     metric: 'summary',
     limit: summaryLimit,
     idempotencyKey: `sum_${paperId}_${sourceContentHash.slice(0, 12)}`,
