@@ -1,0 +1,102 @@
+const assert = require('assert');
+const { orchestrateScholarlySearch } = require('../services/searchOrchestrator');
+const { searchGlobalDatasets } = require('../services/datasetDiscoveryService');
+const institutionService = require('../services/institutionService');
+const authorService = require('../services/authorService');
+const { getInstitutionResearchLandscape } = require('../services/institutionAnalyticsService');
+
+async function runLiveSmokeTests() {
+  console.log('===============================================================');
+  console.log('  PROJECT PANTHER - LIVE SMOKE & EXTERNAL API INTEGRATION TEST  ');
+  console.log('===============================================================\n');
+
+  let passed = 0;
+  let total = 0;
+
+  async function test(desc, fn) {
+    total++;
+    try {
+      await fn();
+      console.log(`  ✓ [PASS] ${desc}`);
+      passed++;
+    } catch (err) {
+      console.error(`  ✗ [FAIL] ${desc}`);
+      console.error(`    ${err.message}`);
+      throw err;
+    }
+  }
+
+  // 1. Live Federated Paper Search
+  await test('Live Federated Search: retrieves scholarly records from external providers without authentication', async () => {
+    const res = await orchestrateScholarlySearch({
+      query: 'Quantum computing algorithms',
+      page: 1,
+      limit: 5,
+      filters: {},
+    });
+
+    assert(res, 'Search result should be defined');
+    assert(Array.isArray(res.records), 'Records should be an array');
+    assert(res.pagination, 'Pagination should be present');
+    assert(res.providerStatus, 'Provider telemetry should be reported');
+    console.log(`    Retrieved ${res.records.length} records. Provider telemetry:`, Object.keys(res.providerStatus));
+  });
+
+  // 2. Live Global Dataset Search (DataCite / Zenodo)
+  await test('Live Dataset Discovery: retrieves real open science datasets from DataCite and Zenodo', async () => {
+    const dsRes = await searchGlobalDatasets({
+      query: 'genomics benchmark',
+      page: 1,
+      limit: 4,
+    });
+
+    assert(Array.isArray(dsRes.datasets), 'Datasets should be an array');
+    console.log(`    Retrieved ${dsRes.datasets.length} datasets. Outage status: ${dsRes.hasOutage}`);
+  });
+
+  // 3. Live Institution Search
+  await test('Live Institution Search: queries OpenAlex institution registry', async () => {
+    const insts = await institutionService.suggestInstitutions('Oxford', { academicOnly: true, limit: 3 });
+    assert(Array.isArray(insts), 'Institutions must be an array');
+    assert(insts.length > 0, 'Oxford search should return institutions');
+    console.log(`    Found institution: ${insts[0].name} (${insts[0].countryCode || 'N/A'})`);
+  });
+
+  // 4. Live Author Search
+  await test('Live Author Search: queries OpenAlex author registry with citation metrics', async () => {
+    const authors = await authorService.searchAuthors('LeCun', { limit: 3 });
+    assert(Array.isArray(authors), 'Authors must be an array');
+    assert(authors.length > 0, 'Searching LeCun should return author candidates');
+    console.log(`    Found author: ${authors[0].name}, Works: ${authors[0].worksCount}, Citations: ${authors[0].citationCount}`);
+  });
+
+  // 5. Live Institution Research Landscape Analytics
+  await test('Live Institution Landscape: queries OpenAlex research fields and yearly publication trends', async () => {
+    process.env.INSTITUTION_ANALYTICS_ENABLED = 'true';
+    const landscape = await getInstitutionResearchLandscape({
+      institutionId: 'I40120149', // Oxford
+      fromYear: 2022,
+      toYear: 2024,
+      forceRefresh: true,
+    });
+
+    assert.strictEqual(landscape.enabled, true);
+    assert(landscape.institution, 'Institution metadata should be returned');
+    assert(landscape.fieldDistribution, 'Field distribution should be computed');
+    assert(landscape.publicationTrends, 'Publication trends should be computed');
+    console.log(`    Oxford top discipline: ${landscape.fieldDistribution.slices[0]?.name} (${landscape.fieldDistribution.slices[0]?.percentage}%)`);
+  });
+
+  console.log(`\n===============================================================`);
+  console.log(`  ALL ${passed}/${total} LIVE SMOKE TESTS PASSED                  `);
+  console.log(`===============================================================\n`);
+}
+
+if (require.main === module) {
+  runLiveSmokeTests().catch((err) => {
+    console.error('\n✗ Live smoke test failed:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { runLiveSmokeTests };
