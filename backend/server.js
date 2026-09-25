@@ -20,6 +20,7 @@ const membershipRoutes = require('./routes/membership');
 const institutionsRoutes = require('./routes/institutions');
 const authorsRoutes = require('./routes/authors');
 const subjectsRoutes = require('./routes/subjects');
+const analyticsRoutes = require('./routes/analytics');
 const { apiLimiter } = require('./middleware/rateLimit');
 
 const app = express();
@@ -105,6 +106,7 @@ app.use('/api/membership', membershipRoutes);
 app.use('/api/institutions', institutionsRoutes);
 app.use('/api/authors', authorsRoutes);
 app.use('/api/subjects', subjectsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 const { searchGlobalDatasets } = require('./services/datasetDiscoveryService');
 app.get('/api/datasets', async (req, res) => {

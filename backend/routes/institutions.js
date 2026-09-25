@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { suggestInstitutions } = require('../services/institutionService');
+const { getInstitutionResearchLandscape } = require('../services/institutionAnalyticsService');
+const { analyticsLimiter } = require('../middleware/rateLimit');
 
 // GET /api/institutions/suggest
 // Free discovery autocomplete; never bills search credits
@@ -21,6 +23,34 @@ router.get('/suggest', async (req, res) => {
   } catch (err) {
     console.error('Institution suggest route error:', err.message);
     return res.status(500).json({ message: 'Failed to retrieve institution suggestions' });
+  }
+});
+
+// GET /api/institutions/:id/analytics
+// Authoritative OpenAlex Research Landscape analytics (flagged under INSTITUTION_ANALYTICS_ENABLED)
+router.get('/:id/analytics', analyticsLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fromYear, toYear, forceRefresh } = req.query;
+
+    const result = await getInstitutionResearchLandscape({
+      institutionId: id,
+      fromYear,
+      toYear,
+      forceRefresh: forceRefresh === 'true',
+    });
+
+    if (result.error) {
+      return res.status(result.statusCode || 500).json(result);
+    }
+
+    return res.json(result);
+  } catch (err) {
+    console.error('Institution analytics route error:', err);
+    return res.status(500).json({
+      message: 'Failed to retrieve institution research landscape analytics.',
+      code: 'ANALYTICS_ERROR',
+    });
   }
 });
 

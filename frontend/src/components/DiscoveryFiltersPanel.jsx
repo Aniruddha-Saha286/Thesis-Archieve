@@ -12,6 +12,7 @@ import {
   Loader2,
   Info,
   RotateCcw,
+  PieChart,
 } from 'lucide-react';
 
 const COMMON_COUNTRIES = [
@@ -33,6 +34,7 @@ export default function DiscoveryFiltersPanel({
   // Institution
   selectedInstitution = null, // { id, name, countryCode, type, ror }
   onSelectInstitution,
+  onViewInstitutionLandscape,
   institutionMode = 'affiliation', // 'affiliation' | 'awarding'
   onChangeInstitutionMode,
   academicOnly = true,
@@ -244,29 +246,44 @@ export default function DiscoveryFiltersPanel({
         </div>
 
         {effectiveInstitution ? (
-          <div className="bg-[#FAF9F5] border border-[#1C1B18] p-2.5 rounded-sm flex items-start justify-between gap-2">
-            <div>
-              <div className="font-semibold text-[#1C1B18] text-xs">
-                {effectiveInstitution.name}
+          <div className="space-y-2">
+            <div className="bg-[#FAF9F5] border border-[#1C1B18] p-2.5 rounded-sm flex items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold text-[#1C1B18] text-xs">
+                  {effectiveInstitution.name}
+                </div>
+                <div className="text-[10px] font-mono-meta text-[#737067] flex items-center gap-1.5 mt-0.5">
+                  {effectiveInstitution.countryCode && (
+                    <span className="bg-white border border-[#D5D1C7] px-1 rounded-2xs font-bold text-[#1C1B18]">
+                      {effectiveInstitution.countryCode}
+                    </span>
+                  )}
+                  <span>{effectiveInstitution.type || 'education'}</span>
+                  {effectiveInstitution.ror && <span>• ROR verified</span>}
+                </div>
               </div>
-              <div className="text-[10px] font-mono-meta text-[#737067] flex items-center gap-1.5 mt-0.5">
-                {effectiveInstitution.countryCode && (
-                  <span className="bg-white border border-[#D5D1C7] px-1 rounded-2xs font-bold text-[#1C1B18]">
-                    {effectiveInstitution.countryCode}
-                  </span>
-                )}
-                <span>{effectiveInstitution.type || 'education'}</span>
-                {effectiveInstitution.ror && <span>• ROR verified</span>}
-              </div>
+              <button
+                type="button"
+                onClick={handleClearInstitution}
+                className="text-[#737067] hover:text-[#1C1B18] text-xs cursor-pointer p-1"
+                title="Remove institution"
+                aria-label="Remove institution filter"
+              >
+                ✕
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleClearInstitution}
-              className="text-[#737067] hover:text-[#1C1B18] text-xs cursor-pointer"
-              title="Remove institution"
-            >
-              ✕
-            </button>
+
+            {onViewInstitutionLandscape && (
+              <button
+                type="button"
+                onClick={() => onViewInstitutionLandscape(effectiveInstitution)}
+                className="w-full min-h-[44px] py-2 px-3 bg-white hover:bg-[#FAF9F5] border border-[#1C1B18] text-[#1C1B18] text-xs font-mono-meta font-bold rounded-sm transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                title="View OpenAlex Research Landscape for this institution"
+              >
+                <PieChart className="w-3.5 h-3.5 text-[#1C1B18]" />
+                <span>Research Landscape</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="relative" ref={instDropdownRef}>

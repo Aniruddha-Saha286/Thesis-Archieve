@@ -102,7 +102,10 @@ const CURATED_INSTITUTIONS = [
   },
 ].map((inst) => ({
   ...inst,
-  source: 'curated_offline',
+  worksCount: null,
+  citationCount: null,
+  metricsAvailable: false,
+  source: 'offline_identity',
   isOfflineFallback: true,
 }));
 

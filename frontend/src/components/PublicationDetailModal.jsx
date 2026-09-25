@@ -36,6 +36,7 @@ export default function PublicationDetailModal({
   onReportIssue,
   onOpenMembership,
   onSelectAuthor,
+  onViewInstitutionLandscape,
   onRequireAuth,
   onSavedPapersChange,
 }) {
@@ -909,7 +910,21 @@ export default function PublicationDetailModal({
                             auth.institutions.map((inst, iIdx) => (
                               <span key={iIdx} className="inline-flex items-center gap-1">
                                 {iIdx > 0 && '; '}
-                                <span className="font-medium text-[#1C1B18]">{inst.name}</span>
+                                {onViewInstitutionLandscape && (inst.id || inst.openAlexId) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onViewInstitutionLandscape(inst);
+                                      onClose();
+                                    }}
+                                    className="font-medium text-[#1C1B18] hover:text-amber-800 underline transition cursor-pointer text-left"
+                                    title="View OpenAlex Research Landscape for this institution"
+                                  >
+                                    {inst.name}
+                                  </button>
+                                ) : (
+                                  <span className="font-medium text-[#1C1B18]">{inst.name}</span>
+                                )}
                                 {inst.countryCode && (
                                   <span className="font-mono-meta text-[11px] text-[#737067]">
                                     [{inst.countryCode}]

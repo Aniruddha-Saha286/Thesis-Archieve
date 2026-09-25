@@ -21,6 +21,7 @@ import TopicAlertsModal from './components/TopicAlertsModal';
 import ReportIssueModal from './components/ReportIssueModal';
 import MembershipModal from './components/MembershipModal';
 import AuthorProfileModal from './components/AuthorProfileModal';
+import InstitutionLandscapeModal from './components/InstitutionLandscapeModal';
 import DiscoveryFiltersPanel from './components/DiscoveryFiltersPanel';
 import {
   Filter,
@@ -121,6 +122,7 @@ export default function App() {
   const [membershipPlan, setMembershipPlan] = useState('free');
   const [searchQuota, setSearchQuota] = useState(null);
   const [searchQuotaError, setSearchQuotaError] = useState(null);
+  const [inspectingLandscapeInst, setInspectingLandscapeInst] = useState(null);
 
   // Discovery Tabs & Mobile Filter state
   const [activeTab, setActiveTab] = useState('publications'); // 'publications' | 'datasets'
@@ -930,6 +932,7 @@ export default function App() {
                   setSessionId(null);
                   setCurrentPage(1);
                 }}
+                onViewInstitutionLandscape={(inst) => setInspectingLandscapeInst(inst)}
                 institutionMode={institutionMode}
                 onChangeInstitutionMode={(mode) => {
                   setInstitutionMode(mode);
@@ -1524,6 +1527,7 @@ export default function App() {
           onReportIssue={(item) => setReportingThesis(item)}
           onOpenMembership={() => setIsMembershipOpen(true)}
           onSelectAuthor={(auth) => setInspectingAuthor(auth)}
+          onViewInstitutionLandscape={(inst) => setInspectingLandscapeInst(inst)}
           onSavedPapersChange={fetchUserSavedCount}
         />
       )}
@@ -1540,6 +1544,30 @@ export default function App() {
             setCurrentPage(1);
           }}
           onViewThesisDetail={(work) => setSelectedDetailThesis(work)}
+        />
+      )}
+
+      {/* Institution Research Landscape Modal */}
+      {inspectingLandscapeInst && (
+        <InstitutionLandscapeModal
+          isOpen={!!inspectingLandscapeInst}
+          institution={inspectingLandscapeInst}
+          onClose={() => setInspectingLandscapeInst(null)}
+          onFilterByField={(fieldName) => {
+            const matched = subjectsList.find(
+              (s) =>
+                s.label.toLowerCase() === fieldName.toLowerCase() ||
+                (s.shortLabel && s.shortLabel.toLowerCase() === fieldName.toLowerCase())
+            );
+            if (matched) {
+              setSelectedSubjectId(matched.id);
+              setSelectedCategory(matched.label);
+            } else {
+              setSelectedCategory(fieldName);
+            }
+            setSessionId(null);
+            setCurrentPage(1);
+          }}
         />
       )}
 
