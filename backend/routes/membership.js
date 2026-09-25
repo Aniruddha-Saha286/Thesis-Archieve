@@ -38,7 +38,8 @@ router.get('/status', async (req, res) => {
       expiresAt: { $gt: now },
     }).sort({ startsAt: 1, expiresAt: 1 });
 
-    const currentPeriodDoc = allActivePeriods.find(p => p.startsAt <= now && p.expiresAt > now) || (allActivePeriods.length > 0 ? allActivePeriods[0] : null);
+    // Strict currentPeriod definition: startsAt <= now < expiresAt
+    const currentPeriodDoc = allActivePeriods.find(p => p.startsAt <= now && p.expiresAt > now) || null;
     const futureRenewalDoc = allActivePeriods.find(p => p.startsAt > now && (!currentPeriodDoc || String(p._id) !== String(currentPeriodDoc._id))) || null;
 
     const formatPeriod = (p) => {

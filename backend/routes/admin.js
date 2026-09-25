@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Thesis = require('../models/Thesis');
 const Report = require('../models/Report');
@@ -478,121 +479,183 @@ router.post('/payments/:id/approve', async (req, res) => {
     const planDef = getPlan(planCode);
     const planName = order?.planName || planDef.name;
     const amountBdt = order?.pricePaisa ? (order.pricePaisa / 100) : (planDef.price || 500);
-
-    // 5. Atomic conditional status transition on payment submission
-    const submission = await PaymentSubmission.findOneAndUpdate(
-      { _id: req.params.id, status: { $in: ['submitted', 'under_review'] } },
-      {
-        status: 'approved',
-        adminInstructions: adminNotes || existingSubmission.adminInstructions || '',
-        reviewedBy: req.user._id,
-        reviewedAt: new Date(),
-      },
-      { new: true }
-    )
-      .populate('user', 'name email')
-      .populate('order');
-
-    if (!submission) {
-      // Concurrency race: check if another thread just approved it
-      const raceCheck = await PaymentSubmission.findById(req.params.id);
-      if (raceCheck?.status === 'approved') {
-        const racePeriod = await MembershipPeriod.findOne({ paymentSubmission: raceCheck._id });
-        return res.status(200).json({
-          message: 'Payment submission was concurrently approved; returning existing membership record.',
-          submission: raceCheck,
-          period: racePeriod,
-          isReplay: true,
-        });
-      }
-      return res.status(409).json({ message: 'Payment status transition conflict.' });
-    }
-
-    const userId = submission.user._id;
+    const userId = existingSubmission.user._id;
     const now = new Date();
 
-    // 6. Renewal Chaining Calculation
-    // Find active paid periods (excluding any tied to this submission)
-    const activePaid = await MembershipPeriod.findOne({
-      user: userId,
-      status: 'active',
-      expiresAt: { $gt: now },
-      paymentSubmission: { $ne: submission._id },
-    }).sort({ expiresAt: -1 });
-
+    // 5. Concurrency & Transactional Activation
+    // Wrap payment approval workflow in a MongoDB session transaction for atomic state updates;
+    // fallback gracefully to sequential execution with compensation rollback if running on a standalone
+    // MongoDB instance (such as local development without a replica set).
+    let session = null;
+    let submission = null;
+    let period = null;
+    let activePaid = null;
     let startsAt = now;
-    let newExpiresAt;
+    let newExpiresAt = null;
 
-    if (activePaid) {
-      // Active Renewal: append purchased duration strictly after current coverage without losing days
-      // Existing coverage is NEVER marked expired prematurely; it remains active through its original expiry
-      startsAt = activePaid.expiresAt;
-      newExpiresAt = addDhakaCalendarMonths(activePaid.expiresAt, durationMonths);
-    } else {
-      // New or Expired user: starts immediately
-      startsAt = now;
-      newExpiresAt = addDhakaCalendarMonths(now, durationMonths);
-    }
+    const executeApprovalWork = async (activeSession = null) => {
+      const sessionOpt = activeSession ? { session: activeSession } : {};
 
-    // 7. Convert any active trial to converted
-    await TrialGrant.updateMany(
-      { user: userId, status: 'active' },
-      { status: 'converted' }
-    );
+      const sub = await PaymentSubmission.findOneAndUpdate(
+        { _id: req.params.id, status: { $in: ['submitted', 'under_review'] } },
+        {
+          status: 'approved',
+          adminInstructions: adminNotes || existingSubmission.adminInstructions || '',
+          reviewedBy: req.user._id,
+          reviewedAt: new Date(),
+        },
+        { new: true, ...sessionOpt }
+      )
+        .populate('user', 'name email')
+        .populate('order');
 
-    // 8. Create or reconcile the MembershipPeriod
-    let period;
-    try {
-      period = await MembershipPeriod.findOne({ paymentSubmission: submission._id });
-      if (!period) {
-        period = new MembershipPeriod({
+      if (!sub) {
+        return { conflict: true };
+      }
+
+      // Renewal Chaining Calculation
+      const foundActivePaid = await MembershipPeriod.findOne(
+        {
           user: userId,
-          order: submission.order?._id || null,
-          paymentSubmission: submission._id,
+          status: 'active',
+          expiresAt: { $gt: now },
+          paymentSubmission: { $ne: sub._id },
+        },
+        null,
+        sessionOpt
+      ).sort({ expiresAt: -1 });
+
+      let calculatedStartsAt = now;
+      let calculatedExpiresAt = null;
+
+      if (foundActivePaid) {
+        calculatedStartsAt = foundActivePaid.expiresAt;
+        calculatedExpiresAt = addDhakaCalendarMonths(foundActivePaid.expiresAt, durationMonths);
+      } else {
+        calculatedStartsAt = now;
+        calculatedExpiresAt = addDhakaCalendarMonths(now, durationMonths);
+      }
+
+      // Convert active trial to converted
+      await TrialGrant.updateMany(
+        { user: userId, status: 'active' },
+        { status: 'converted' },
+        sessionOpt
+      );
+
+      // Create or reconcile the MembershipPeriod
+      let p = await MembershipPeriod.findOne({ paymentSubmission: sub._id }, null, sessionOpt);
+      if (!p) {
+        p = new MembershipPeriod({
+          user: userId,
+          order: sub.order?._id || null,
+          paymentSubmission: sub._id,
           plan: planDef.code,
-          startsAt,
-          expiresAt: newExpiresAt,
+          startsAt: calculatedStartsAt,
+          expiresAt: calculatedExpiresAt,
           status: 'active',
         });
-        await period.save();
+        await p.save(sessionOpt);
       }
-    } catch (saveErr) {
-      if (saveErr.code === 11000) {
-        period = await MembershipPeriod.findOne({ paymentSubmission: submission._id });
+
+      // Update order status to completed
+      if (sub.order) {
+        await MembershipOrder.findByIdAndUpdate(sub.order._id, { status: 'completed' }, sessionOpt);
+      }
+
+      // Log immutable audit event
+      const auditPayload = [
+        {
+          actor: req.user._id,
+          action: 'payment.approved',
+          targetType: 'PaymentSubmission',
+          targetId: String(sub._id),
+          metadata: {
+            userId: String(userId),
+            trxId: sub.normalizedTrxId,
+            planCode: planDef.code,
+            pricePaisa: order?.pricePaisa || planDef.pricePaisa,
+            durationMonths,
+            startsAt: calculatedStartsAt,
+            expiresAt: calculatedExpiresAt,
+            renewal: Boolean(foundActivePaid),
+            transactional: Boolean(activeSession),
+          },
+          ipAddress: req.ip || '',
+        },
+      ];
+      await AuditEvent.create(auditPayload, sessionOpt);
+
+      return {
+        sub,
+        p,
+        activePaid: foundActivePaid,
+        startsAt: calculatedStartsAt,
+        newExpiresAt: calculatedExpiresAt,
+      };
+    };
+
+    try {
+      session = await mongoose.startSession();
+      await session.withTransaction(async () => {
+        const result = await executeApprovalWork(session);
+        if (result.conflict) {
+          throw new Error('STATUS_TRANSITION_CONFLICT');
+        }
+        submission = result.sub;
+        period = result.p;
+        activePaid = result.activePaid;
+        startsAt = result.startsAt;
+        newExpiresAt = result.newExpiresAt;
+      });
+    } catch (txErr) {
+      const isReplicaSetError =
+        txErr.message?.includes('replica set') ||
+        txErr.message?.includes('Transaction numbers are only allowed') ||
+        txErr.code === 20 ||
+        txErr.codeName === 'IllegalOperation';
+
+      if (isReplicaSetError) {
+        // Fallback to sequential execution on standalone MongoDB instance with manual rollback
+        const result = await executeApprovalWork(null);
+        if (result.conflict) {
+          const raceCheck = await PaymentSubmission.findById(req.params.id);
+          if (raceCheck?.status === 'approved') {
+            const racePeriod = await MembershipPeriod.findOne({ paymentSubmission: raceCheck._id });
+            return res.status(200).json({
+              message: 'Payment submission was concurrently approved; returning existing membership record.',
+              submission: raceCheck,
+              period: racePeriod,
+              isReplay: true,
+            });
+          }
+          return res.status(409).json({ message: 'Payment status transition conflict.' });
+        }
+        submission = result.sub;
+        period = result.p;
+        activePaid = result.activePaid;
+        startsAt = result.startsAt;
+        newExpiresAt = result.newExpiresAt;
+      } else if (txErr.message === 'STATUS_TRANSITION_CONFLICT') {
+        const raceCheck = await PaymentSubmission.findById(req.params.id);
+        if (raceCheck?.status === 'approved') {
+          const racePeriod = await MembershipPeriod.findOne({ paymentSubmission: raceCheck._id });
+          return res.status(200).json({
+            message: 'Payment submission was concurrently approved; returning existing membership record.',
+            submission: raceCheck,
+            period: racePeriod,
+            isReplay: true,
+          });
+        }
+        return res.status(409).json({ message: 'Payment status transition conflict.' });
       } else {
-        // Durable compensation: rollback submission status if period creation failed
-        await PaymentSubmission.findByIdAndUpdate(submission._id, {
-          status: previousStatus,
-          reviewedAt: null,
-          reviewedBy: null,
-        });
-        throw saveErr;
+        throw txErr;
+      }
+    } finally {
+      if (session) {
+        await session.endSession();
       }
     }
-
-    // 9. Update order status to completed
-    if (submission.order) {
-      await MembershipOrder.findByIdAndUpdate(submission.order._id, { status: 'completed' });
-    }
-
-    // 10. Log immutable audit event with snapshot data
-    await AuditEvent.create({
-      actor: req.user._id,
-      action: 'payment.approved',
-      targetType: 'PaymentSubmission',
-      targetId: String(submission._id),
-      metadata: {
-        userId: String(userId),
-        trxId: submission.normalizedTrxId,
-        planCode: planDef.code,
-        pricePaisa: order?.pricePaisa || planDef.pricePaisa,
-        durationMonths,
-        startsAt,
-        expiresAt: newExpiresAt,
-        renewal: Boolean(activePaid),
-      },
-      ipAddress: req.ip || '',
-    });
 
     // 11. In-app Notification using snapshot terms
     const notif = new Notification({
