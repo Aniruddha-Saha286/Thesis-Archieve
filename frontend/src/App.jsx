@@ -1148,7 +1148,7 @@ export default function App() {
             {/* Top Bar: Summary, Search Quota & Propose Button */}
             <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#E2DFD8] gap-3">
               <div className="text-xs text-[#605D55] flex items-center gap-3 flex-wrap">
-                <span>
+                <span aria-live="polite" aria-atomic="true">
                   Showing page <strong className="text-[#1C1B18]">{currentPage}</strong> •{' '}
                   <strong className="text-[#1C1B18]">{theses.length}</strong> publications retrieved
                   {selectedCategory !== 'All Disciplines' && ` in ${selectedCategory}`}

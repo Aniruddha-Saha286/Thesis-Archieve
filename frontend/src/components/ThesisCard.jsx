@@ -245,13 +245,13 @@ export default function ThesisCard({
           thesis.subjects.slice(0, 2).map((sub) => (
             <span
               key={sub.id}
-              className="bg-[#FAF9F5] text-[#1C1B18] border border-[#D5D1C7] px-2 py-0.5 rounded-sm font-semibold uppercase text-[10px]"
+              className="bg-[#FAF9F5] text-[#1C1B18] border border-[#D5D1C7] px-2 py-0.5 rounded-sm font-semibold uppercase text-xs"
             >
               {sub.shortLabel || sub.label}
             </span>
           ))
         ) : thesis.category ? (
-          <span className="bg-[#FAF9F5] text-[#5C5950] border border-[#D5D1C7] px-2 py-0.5 rounded-sm font-semibold uppercase text-[10px]">
+          <span className="bg-[#FAF9F5] text-[#5C5950] border border-[#D5D1C7] px-2 py-0.5 rounded-sm font-semibold uppercase text-xs">
             {thesis.category}
           </span>
         ) : null}
@@ -272,8 +272,8 @@ export default function ThesisCard({
         {thesis.title}
       </h3>
 
-      {/* Abstract: Readable 14px text */}
-      <p className="text-sm text-[#524F47] leading-relaxed font-light line-clamp-3">
+      {/* Abstract: Readable 15px text with generous line-height */}
+      <p className="text-[15px] text-[#4A4740] leading-relaxed font-light line-clamp-3">
         {thesis.abstract || 'No abstract text deposited in public scholarly metadata.'}
       </p>
 
@@ -368,7 +368,7 @@ export default function ThesisCard({
               href={thesis.pdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[42px]"
+              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[44px]"
               title={`Open direct verified full-text PDF: ${thesis.title}`}
             >
               <FileText className="w-4 h-4 text-amber-300" />
@@ -379,7 +379,7 @@ export default function ThesisCard({
               href={thesis.fullTextUrl || thesis.pdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[42px]"
+              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[44px]"
               title="Open full text landing page"
             >
               <ExternalLink className="w-4 h-4 text-blue-300" />
@@ -390,7 +390,7 @@ export default function ThesisCard({
               href={`https://doi.org/${thesis.doi}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[42px]"
+              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[44px]"
               title="Open official publisher DOI landing page"
             >
               <ExternalLink className="w-4 h-4 text-amber-300" />
@@ -400,7 +400,7 @@ export default function ThesisCard({
             <button
               type="button"
               onClick={() => onViewDetail && onViewDetail(thesis)}
-              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[42px] cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-medium transition shadow-2xs min-h-[44px] cursor-pointer"
             >
               <FileText className="w-4 h-4 text-amber-300" />
               <span>View Details</span>
@@ -412,7 +412,7 @@ export default function ThesisCard({
             type="button"
             onClick={handleToggleSave}
             disabled={savingPaper}
-            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 border rounded-sm text-sm font-medium transition min-h-[42px] cursor-pointer ${
+            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 border rounded-sm text-sm font-medium transition min-h-[44px] cursor-pointer ${
               isSaved
                 ? 'bg-amber-100 border-amber-400 text-amber-900 font-bold'
                 : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border-[#D5D1C7] text-[#1C1B18]'
@@ -427,7 +427,7 @@ export default function ThesisCard({
           <button
             type="button"
             onClick={() => onCite && onCite(thesis)}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm text-sm font-medium transition min-h-[42px] cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm text-sm font-medium transition min-h-[44px] cursor-pointer"
             title="Cite in BibTeX, RIS, or APA"
           >
             <Quote className="w-4 h-4 text-[#737067]" />
@@ -438,7 +438,7 @@ export default function ThesisCard({
           <button
             type="button"
             onClick={() => onAddToCompare && onAddToCompare(thesis)}
-            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 border rounded-sm text-sm font-medium transition min-h-[42px] cursor-pointer ${
+            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 border rounded-sm text-sm font-medium transition min-h-[44px] cursor-pointer ${
               inComparison
                 ? 'bg-purple-100 text-purple-900 border-purple-300 font-bold'
                 : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border-[#D5D1C7] text-[#1C1B18]'
@@ -459,7 +459,7 @@ export default function ThesisCard({
           <button
             type="button"
             onClick={() => onViewDetail && onViewDetail(thesis, 'overview')}
-            className="inline-flex items-center justify-center gap-1 text-[#605D55] hover:text-[#1C1B18] text-xs font-mono-meta underline px-2 py-2 min-h-[42px] cursor-pointer"
+            className="inline-flex items-center justify-center gap-1 text-[#605D55] hover:text-[#1C1B18] text-xs font-mono-meta underline px-2 py-2 min-h-[44px] cursor-pointer"
             title="Inspect full metadata and open science datasets"
           >
             <span>Details &rarr;</span>
@@ -469,7 +469,7 @@ export default function ThesisCard({
           <button
             type="button"
             onClick={() => onViewDetail && onViewDetail(thesis, 'summary')}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FAF9F5] hover:bg-amber-50/70 border border-[#D5D1C7] text-[#1C1B18] hover:text-amber-900 hover:border-amber-300 rounded-sm text-xs font-mono-meta transition min-h-[42px] cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FAF9F5] hover:bg-amber-50/70 border border-[#D5D1C7] text-[#1C1B18] hover:text-amber-900 hover:border-amber-300 rounded-sm text-xs font-mono-meta transition min-h-[44px] cursor-pointer"
             title="Grounded research summary extracted from paper text"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
@@ -488,7 +488,7 @@ export default function ThesisCard({
                     onViewDetail(thesis);
                   }
                 }}
-                className="inline-flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-2 rounded-sm text-xs font-mono-meta transition cursor-pointer min-h-[42px]"
+                className="inline-flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-2 rounded-sm text-xs font-mono-meta transition cursor-pointer min-h-[44px]"
                 title="Paper-specific dataset access locked for Standard Academic plan"
               >
                 <Lock className="w-3.5 h-3.5 text-amber-700" />
@@ -499,7 +499,7 @@ export default function ThesisCard({
                 href={thesis.datasetUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] text-[#1C1B18] border border-[#D5D1C7] px-3 py-2 rounded-sm text-xs font-mono-meta transition min-h-[42px]"
+                className="inline-flex items-center gap-1.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] text-[#1C1B18] border border-[#D5D1C7] px-3 py-2 rounded-sm text-xs font-mono-meta transition min-h-[44px]"
                 title="Direct open research dataset"
               >
                 <Database className="w-3.5 h-3.5 text-[#2C6B3F]" />
@@ -515,7 +515,7 @@ export default function ThesisCard({
           <button
             type="button"
             onClick={handleUpvote}
-            className={`px-3 py-2 border rounded-sm transition flex items-center gap-1.5 text-xs font-mono-meta min-h-[42px] cursor-pointer ${
+            className={`px-3 py-2 border rounded-sm transition flex items-center gap-1.5 text-xs font-mono-meta min-h-[44px] cursor-pointer ${
               hasUpvoted
                 ? 'bg-emerald-50 border-emerald-400 text-emerald-800 font-bold'
                 : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border-[#D5D1C7] text-[#1C1B18]'
@@ -531,7 +531,7 @@ export default function ThesisCard({
             <button
               type="button"
               onClick={() => setShowMoreMenu(!showMoreMenu)}
-              className="p-2.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm transition flex items-center justify-center min-h-[42px] min-w-[42px] cursor-pointer"
+              className="p-2.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm transition flex items-center justify-center min-h-[44px] min-w-[42px] cursor-pointer"
               title="More actions (Google Scholar, Semantic Scholar, DOI, Code, Report)"
             >
               <MoreHorizontal className="w-4 h-4 text-[#605D55]" />
