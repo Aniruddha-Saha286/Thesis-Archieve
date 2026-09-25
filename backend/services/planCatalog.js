@@ -22,6 +22,8 @@ const PLAN_CATALOG = {
       canAccessPaperDatasets: false, // Paper-specific dataset discovery locked
       dailySearchLimit: 10,          // 10 committed searches per Asia/Dhaka day
       dailyDatasetLookupLimit: 0,
+      dailySummaryGenerationLimit: 1, // 1 grounded summary per day (abstract-only)
+      canAccessFullTextSummary: false,
     },
     features: [
       '10 committed paper searches per Asia/Dhaka calendar day',
@@ -55,6 +57,8 @@ const PLAN_CATALOG = {
       canAccessPaperDatasets: true,   // Paper-specific dataset discovery enabled
       dailySearchLimit: 20,           // 20 committed paper searches per Asia/Dhaka day
       dailyDatasetLookupLimit: 5,     // Up to 5 paper dataset lookups per day
+      dailySummaryGenerationLimit: 3, // Up to 3 grounded summaries per day
+      canAccessFullTextSummary: true,
     },
     features: [
       '20 committed paper searches per Asia/Dhaka calendar day',
@@ -89,6 +93,8 @@ const PLAN_CATALOG = {
       canAccessPaperDatasets: true,
       dailySearchLimit: null,        // Unlimited
       dailyDatasetLookupLimit: null, // Unlimited
+      dailySummaryGenerationLimit: 5,
+      canAccessFullTextSummary: true,
     },
     features: [
       'Unlimited daily scholarly searches',
@@ -118,6 +124,8 @@ const PLAN_CATALOG = {
       canAccessPaperDatasets: true,
       dailySearchLimit: null,        // Unlimited
       dailyDatasetLookupLimit: null, // Unlimited
+      dailySummaryGenerationLimit: 15,
+      canAccessFullTextSummary: true,
     },
     features: [
       'Unlimited daily scholarly searches',
@@ -153,6 +161,8 @@ const PLAN_CATALOG = {
       canAccessPaperDatasets: true,
       dailySearchLimit: null,        // Unlimited
       dailyDatasetLookupLimit: null, // Unlimited
+      dailySummaryGenerationLimit: 30,
+      canAccessFullTextSummary: true,
     },
     features: [
       'All Premium research benefits for a full 12 calendar months',
@@ -188,6 +198,8 @@ const PLAN_CATALOG = {
       canAccessPaperDatasets: true,
       dailySearchLimit: null,
       dailyDatasetLookupLimit: null,
+      dailySummaryGenerationLimit: null,
+      canAccessFullTextSummary: true,
     },
     features: ['Depository Operations & Moderator Privileges'],
     isPaid: false,

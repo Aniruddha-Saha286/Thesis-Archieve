@@ -115,6 +115,7 @@ export default function App() {
   const [isProposeOpen, setIsProposeOpen] = useState(false);
   const [citingThesis, setCitingThesis] = useState(null);
   const [selectedDetailThesis, setSelectedDetailThesis] = useState(null);
+  const [detailInitialTab, setDetailInitialTab] = useState('overview');
   const [reportingThesis, setReportingThesis] = useState(null);
   const [isMembershipOpen, setIsMembershipOpen] = useState(false);
   const [membershipPlan, setMembershipPlan] = useState('free');
@@ -1382,7 +1383,10 @@ export default function App() {
                       setSelectedPublisher(pub);
                       setCurrentPage(1);
                     }}
-                    onViewDetail={(item) => setSelectedDetailThesis(item)}
+                    onViewDetail={(item, tab = 'overview') => {
+                      setSelectedDetailThesis(item);
+                      setDetailInitialTab(tab);
+                    }}
                     onAddToCompare={handleToggleCompare}
                     inComparison={comparisonPapers.some(
                       (p) => (p._id || p.id || p.paperId) === (thesis._id || thesis.id)
@@ -1506,6 +1510,7 @@ export default function App() {
         <PublicationDetailModal
           key={selectedDetailThesis._id || selectedDetailThesis.id || selectedDetailThesis.doi || selectedDetailThesis.title || 'detail-modal'}
           thesis={selectedDetailThesis}
+          initialTab={detailInitialTab}
           onClose={() => setSelectedDetailThesis(null)}
           onSelectPublisher={(pub) => {
             setSelectedPublisher(pub);

@@ -55,9 +55,21 @@ function markBilled(scope, metric, idempotencyKey, dateStr) {
   billedContexts.get(contextKey).add(idempotencyKey);
 }
 
+function getUsageField(metric) {
+  if (metric === 'summary') return 'dailySummaryUsage';
+  if (metric === 'dataset') return 'dailyDatasetUsage';
+  return 'dailySearchUsage';
+}
+
+function getQuotaExceededCode(metric) {
+  if (metric === 'summary') return 'SUMMARY_QUOTA_EXCEEDED';
+  if (metric === 'dataset') return 'DATASET_QUOTA_EXCEEDED';
+  return 'SEARCH_QUOTA_EXCEEDED';
+}
+
 /**
- * Atomically reserves a usage credit (search query or dataset lookup) with idempotency.
- * Refinements under an already-billed searchContextId or replayed searchActionId
+ * Atomically reserves a usage credit (search query, dataset lookup, or paper summary) with idempotency.
+ * Refinements under an already-billed context or replayed actionId
  * do NOT decrement credits.
  */
 async function reserveUsage({
@@ -69,16 +81,18 @@ async function reserveUsage({
   dateStr = null,
 }) {
   const todayDhaka = dateStr || getDhakaDateString(new Date());
+  const usageField = getUsageField(metric);
+  const quotaExceededCode = getQuotaExceededCode(metric);
 
   // Check if this action/context has already been billed
   if (idempotencyKey && isAlreadyBilled(scope, metric, idempotencyKey, todayDhaka)) {
     let currentCount = 0;
     if (user) {
-      currentCount = (user.dailySearchUsage && user.dailySearchUsage.date === todayDhaka)
-        ? (user.dailySearchUsage.count || 0)
+      currentCount = (user[usageField] && user[usageField].date === todayDhaka)
+        ? (user[usageField].count || 0)
         : 0;
     } else {
-      const gu = guestSearchStore.get(scope);
+      const gu = guestSearchStore.get(`${scope}:${metric}`);
       currentCount = (gu && gu.date === todayDhaka) ? gu.count : 0;
     }
 
@@ -94,18 +108,18 @@ async function reserveUsage({
 
   // If user is authenticated
   if (user) {
-    if (!user.dailySearchUsage || user.dailySearchUsage.date !== todayDhaka) {
-      user.dailySearchUsage = { date: todayDhaka, count: 0 };
+    if (!user[usageField] || user[usageField].date !== todayDhaka) {
+      user[usageField] = { date: todayDhaka, count: 0 };
     }
 
-    const currentCount = user.dailySearchUsage.count || 0;
+    const currentCount = user[usageField].count || 0;
 
     // Check limit
     if (limit !== null && currentCount >= limit) {
       return {
         allowed: false,
         billed: false,
-        code: 'SEARCH_QUOTA_EXCEEDED',
+        code: quotaExceededCode,
         count: currentCount,
         used: currentCount,
         limit,
@@ -114,14 +128,14 @@ async function reserveUsage({
     }
 
     // Atomically increment and save
-    user.dailySearchUsage.count = currentCount + 1;
+    user[usageField].count = currentCount + 1;
     await user.save();
 
     if (idempotencyKey) {
       markBilled(scope, metric, idempotencyKey, todayDhaka);
     }
 
-    const updatedCount = user.dailySearchUsage.count;
+    const updatedCount = user[usageField].count;
     return {
       allowed: true,
       billed: true,
@@ -133,17 +147,18 @@ async function reserveUsage({
   }
 
   // Unauthenticated guest user
-  let guestUsage = guestSearchStore.get(scope);
+  const guestKey = `${scope}:${metric}`;
+  let guestUsage = guestSearchStore.get(guestKey);
   if (!guestUsage || guestUsage.date !== todayDhaka) {
     guestUsage = { date: todayDhaka, count: 0 };
-    guestSearchStore.set(scope, guestUsage);
+    guestSearchStore.set(guestKey, guestUsage);
   }
 
   if (limit !== null && guestUsage.count >= limit) {
     return {
       allowed: false,
       billed: false,
-      code: 'SEARCH_QUOTA_EXCEEDED',
+      code: quotaExceededCode,
       count: guestUsage.count,
       used: guestUsage.count,
       limit,
@@ -177,6 +192,7 @@ async function releaseReservedCredit({
   dateStr = null,
 }) {
   const todayDhaka = dateStr || getDhakaDateString(new Date());
+  const usageField = getUsageField(metric);
 
   if (idempotencyKey) {
     const contextKey = getContextKey(scope, metric, todayDhaka);
@@ -186,11 +202,12 @@ async function releaseReservedCredit({
     }
   }
 
-  if (user && user.dailySearchUsage && user.dailySearchUsage.date === todayDhaka) {
-    user.dailySearchUsage.count = Math.max(0, (user.dailySearchUsage.count || 1) - 1);
+  if (user && user[usageField] && user[usageField].date === todayDhaka) {
+    user[usageField].count = Math.max(0, (user[usageField].count || 1) - 1);
     await user.save().catch(() => {});
   } else if (!user) {
-    const gu = guestSearchStore.get(scope);
+    const guestKey = `${scope}:${metric}`;
+    const gu = guestSearchStore.get(guestKey);
     if (gu && gu.date === todayDhaka) {
       gu.count = Math.max(0, gu.count - 1);
     }

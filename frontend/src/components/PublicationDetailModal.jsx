@@ -28,6 +28,7 @@ import {
 export default function PublicationDetailModal({
   thesis,
   onClose,
+  initialTab = 'overview',
   onSelectPublisher,
   onCite,
   onAddToCompare,
@@ -42,12 +43,21 @@ export default function PublicationDetailModal({
   const currentThesisId = thesis ? (thesis._id || thesis.id || thesis.doi || thesis.title || '') : '';
   const currentThesisIdRef = useRef(currentThesisId);
 
-  // Active Tab: 'overview' | 'authors' | 'datasets' | 'citations'
-  const [activeTab, setActiveTab] = useState('overview');
+  // Active Tab: 'overview' | 'authors' | 'datasets' | 'citations' | 'summary'
+  const [activeTab, setActiveTab] = useState(initialTab || 'overview');
   const [showAllAuthors, setShowAllAuthors] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savingPaper, setSavingPaper] = useState(false);
   const [copiedDoi, setCopiedDoi] = useState(false);
+
+  const [summaryState, setSummaryState] = useState({
+    requested: false,
+    loading: false,
+    data: null,
+    error: null,
+    language: 'en',
+    copied: false,
+  });
 
   const [datasetsState, setDatasetsState] = useState({
     requested: false,
@@ -84,7 +94,7 @@ export default function PublicationDetailModal({
   // Strictly reset dataset discovery and tabs whenever a different thesis is opened
   useEffect(() => {
     currentThesisIdRef.current = currentThesisId;
-    setActiveTab('overview');
+    setActiveTab(initialTab || 'overview');
     setShowAllAuthors(false);
     setCopiedDoi(false);
     setDatasetsState({
@@ -98,7 +108,15 @@ export default function PublicationDetailModal({
       message: '',
       quota: null,
     });
-  }, [currentThesisId]);
+    setSummaryState({
+      requested: false,
+      loading: false,
+      data: null,
+      error: null,
+      language: 'en',
+      copied: false,
+    });
+  }, [currentThesisId, initialTab]);
 
   // Check saved papers state on load
   useEffect(() => {
@@ -230,6 +248,98 @@ export default function PublicationDetailModal({
     setActiveTab('datasets');
     if (!datasetsState.requested && !datasetsState.loading) {
       fetchDatasets();
+    }
+  };
+
+  const fetchSummary = async (lang = summaryState.language, force = false) => {
+    if (!isAuthenticated) {
+      if (onRequireAuth) {
+        onRequireAuth('Sign in with your student account to generate AI-assisted research summaries.');
+      } else {
+        alert('Sign in with your student account to generate research summaries.');
+      }
+      return;
+    }
+
+    const requestedThesisId = currentThesisId;
+    setSummaryState((s) => ({
+      ...s,
+      requested: true,
+      loading: true,
+      error: null,
+      language: lang,
+    }));
+
+    try {
+      const id = thesis._id || thesis.id || 'ext';
+      const payload = {
+        language: lang,
+        forceRefresh: force,
+        paper: {
+          title: thesis.title,
+          abstract: thesis.abstract,
+          doi: thesis.doi || '',
+          pdfUrl: thesis.pdfUrl || '',
+        },
+      };
+
+      const res = await axios.post(`/api/thesis/${encodeURIComponent(id)}/summary`, payload);
+      if (currentThesisIdRef.current !== requestedThesisId) return;
+
+      if (res.data.enabled === false) {
+        setSummaryState((s) => ({
+          ...s,
+          loading: false,
+          data: null,
+          error: res.data.message || 'Quick Summary is currently disabled by administrator configuration.',
+        }));
+        return;
+      }
+
+      setSummaryState((s) => ({
+        ...s,
+        loading: false,
+        data: res.data,
+        error: null,
+      }));
+    } catch (err) {
+      if (currentThesisIdRef.current !== requestedThesisId) return;
+      const isQuota = err.response?.status === 429 || err.response?.data?.code === 'DAILY_SUMMARY_LIMIT_REACHED';
+      const msg = err.response?.data?.message || 'Failed to generate summary for this paper.';
+      setSummaryState((s) => ({
+        ...s,
+        loading: false,
+        error: isQuota ? `[Daily Limit] ${msg}` : msg,
+      }));
+    }
+  };
+
+  const copySummaryText = () => {
+    if (!summaryState.data?.summary) return;
+    const s = summaryState.data.summary;
+    const text = [
+      `TITLE: ${thesis.title}`,
+      `TL;DR: ${s.tldr}`,
+      `OBJECTIVE: ${s.researchObjective}`,
+      `METHODOLOGY: ${s.methodology}`,
+      `DATA/SAMPLE: ${s.datasetSample}`,
+      `MAIN FINDINGS: ${s.mainFindings}`,
+      `LIMITATIONS: ${s.limitations}`,
+      `KEY TERMS: ${(s.keyTerms || []).join(', ')}`,
+      `[AI-generated summary via Project Panther - verify against original paper]`,
+    ].join('\n\n');
+
+    navigator.clipboard.writeText(text);
+    setSummaryState((prev) => ({ ...prev, copied: true }));
+    setTimeout(() => {
+      setSummaryState((prev) => ({ ...prev, copied: false }));
+    }, 2000);
+  };
+
+  const handleQuickSummaryClick = () => {
+    setActiveTab('summary');
+    if (!summaryState.requested && !summaryState.loading) {
+      fetchSummary(summaryState.language);
     }
   };
 
@@ -462,6 +572,20 @@ export default function PublicationDetailModal({
               </span>
             </button>
 
+            {/* Quick Summary Shortcut */}
+            <button
+              type="button"
+              onClick={handleQuickSummaryClick}
+              className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
+                activeTab === 'summary'
+                  ? 'bg-amber-100 text-amber-950 border border-amber-400 font-bold'
+                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18]'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-amber-600" />
+              <span>Quick Summary</span>
+            </button>
+
             {/* Report Issue */}
             {onReportIssue && (
               <button
@@ -492,6 +616,19 @@ export default function PublicationDetailModal({
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span>Overview</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('summary')}
+            className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
+              activeTab === 'summary'
+                ? 'border-amber-600 text-amber-950 bg-amber-50/50'
+                : 'border-transparent text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5]/60'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span>Quick Summary</span>
           </button>
 
           <button
@@ -1303,6 +1440,304 @@ export default function PublicationDetailModal({
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 5: GROUNDED QUICK SUMMARY */}
+          {activeTab === 'summary' && (
+            <div className="space-y-5">
+              {/* Header with Language Choice & Actions */}
+              <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-serif-title text-base sm:text-lg font-bold text-[#1C1B18]">
+                      Grounded Research Quick Summary
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[#605D55] font-mono-meta mt-1">
+                    Direct factual decomposition extracted from author text. Zero hallucination policy.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Language Selector */}
+                  <div className="inline-flex rounded-sm border border-[#D5D1C7] p-0.5 bg-[#FAF9F5] text-xs font-mono-meta">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetchSummary('en');
+                      }}
+                      className={`px-3 py-1.5 rounded-xs font-bold transition min-h-[36px] ${
+                        summaryState.language === 'en'
+                          ? 'bg-[#1C1B18] text-white'
+                          : 'text-[#605D55] hover:text-black'
+                      }`}
+                    >
+                      English
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetchSummary('bn');
+                      }}
+                      className={`px-3 py-1.5 rounded-xs font-bold transition min-h-[36px] ${
+                        summaryState.language === 'bn'
+                          ? 'bg-[#1C1B18] text-white'
+                          : 'text-[#605D55] hover:text-black'
+                      }`}
+                    >
+                      বাংলা (Bangla)
+                    </button>
+                  </div>
+
+                  {summaryState.data?.summary && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={copySummaryText}
+                        className="min-h-[40px] px-3 py-1.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm text-xs font-mono-meta font-bold transition flex items-center gap-1.5 cursor-pointer"
+                        title="Copy structured summary to clipboard"
+                      >
+                        <Bookmark className="w-3.5 h-3.5 text-amber-700" />
+                        <span>{summaryState.copied ? '✓ Copied' : 'Copy Summary'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fetchSummary(summaryState.language, true)}
+                        className="min-h-[40px] px-3 py-1.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm text-xs font-mono-meta font-bold transition flex items-center gap-1.5 cursor-pointer"
+                        title="Regenerate summary"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Refresh</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* State 1: Not Requested Yet (Honest trigger screen) */}
+              {!summaryState.requested && !summaryState.loading && (
+                <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-6 sm:p-8 rounded-sm text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center mx-auto text-amber-800">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div className="max-w-lg mx-auto space-y-2">
+                    <h4 className="text-base font-bold text-[#1C1B18]">
+                      Extract Grounded Key Research Findings
+                    </h4>
+                    <p className="text-xs sm:text-sm text-[#524F47] leading-relaxed">
+                      Generate an objective, methodology, data/sample, and findings breakdown. Project Panther strictly forbids hallucination — missing experimental data is marked as “Not reported”.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => fetchSummary(summaryState.language)}
+                      className="min-h-[44px] px-6 py-2.5 bg-[#1C1B18] hover:bg-[#2E2C28] text-white font-mono-meta text-xs uppercase tracking-wider font-bold rounded-sm transition shadow-2xs cursor-pointer inline-flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Generate Grounded Summary</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* State 2: Loading Skeleton */}
+              {summaryState.loading && (
+                <div className="space-y-4 animate-pulse">
+                  <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-sm flex items-center gap-3">
+                    <RefreshCw className="w-4 h-4 text-amber-700 animate-spin" />
+                    <span className="text-xs font-mono-meta text-amber-900 font-bold">
+                      Analyzing author text and verifying grounded claims...
+                    </span>
+                  </div>
+                  <div className="bg-white p-5 border border-[#E5E2DA] rounded-sm space-y-3">
+                    <div className="h-4 bg-[#E5E2DA] rounded w-1/4"></div>
+                    <div className="h-3 bg-[#F0ECE1] rounded w-full"></div>
+                    <div className="h-3 bg-[#F0ECE1] rounded w-5/6"></div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-5 border border-[#E5E2DA] rounded-sm space-y-3">
+                      <div className="h-4 bg-[#E5E2DA] rounded w-1/3"></div>
+                      <div className="h-3 bg-[#F0ECE1] rounded w-full"></div>
+                      <div className="h-3 bg-[#F0ECE1] rounded w-2/3"></div>
+                    </div>
+                    <div className="bg-white p-5 border border-[#E5E2DA] rounded-sm space-y-3">
+                      <div className="h-4 bg-[#E5E2DA] rounded w-1/3"></div>
+                      <div className="h-3 bg-[#F0ECE1] rounded w-full"></div>
+                      <div className="h-3 bg-[#F0ECE1] rounded w-2/3"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* State 3: Error State */}
+              {summaryState.error && !summaryState.loading && (
+                <div className="bg-red-50 border border-red-300 p-5 rounded-sm space-y-3 shadow-2xs">
+                  <div className="flex items-center gap-2 text-red-900 font-bold text-sm">
+                    <AlertTriangle className="w-5 h-5 text-red-700 shrink-0" />
+                    <span>Summary Service Notice</span>
+                  </div>
+                  <p className="text-xs text-red-800 leading-relaxed">
+                    {summaryState.error}
+                  </p>
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => fetchSummary(summaryState.language, true)}
+                      className="min-h-[44px] px-4 py-2 bg-red-900 text-white font-mono-meta text-xs uppercase font-bold rounded-sm transition cursor-pointer"
+                    >
+                      Retry Generation
+                    </button>
+                    {summaryState.error.includes('Daily Limit') && onOpenMembership && (
+                      <button
+                        type="button"
+                        onClick={onOpenMembership}
+                        className="min-h-[44px] px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-mono-meta text-xs uppercase font-bold rounded-sm transition cursor-pointer"
+                      >
+                        Upgrade Membership Plan
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* State 4: Summary Result View */}
+              {summaryState.data?.summary && !summaryState.loading && (
+                <div className="space-y-4">
+                  {/* Coverage & AI Disclaimer Notice Banner */}
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-300 rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono-meta">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-sm font-bold uppercase text-[10px] ${
+                          summaryState.data.coverage === 'full_text'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : 'bg-amber-100 text-amber-900 border border-amber-400'
+                        }`}
+                      >
+                        {summaryState.data.coverage === 'full_text'
+                          ? '✓ Full-Text Grounded'
+                          : '⚡ Based on Abstract Only'}
+                      </span>
+                      <span className="text-[#605D55]">
+                        {summaryState.data.summary.disclaimer || 'AI-generated; verify against the original paper'}
+                      </span>
+                    </div>
+
+                    {summaryState.data.quota && (
+                      <span className="text-[#737067] text-[11px]">
+                        Daily Quota: {summaryState.data.quota.used}/{summaryState.data.quota.limit} used
+                      </span>
+                    )}
+                  </div>
+
+                  {/* TL;DR Highlight Card */}
+                  <div className="bg-white border-2 border-[#1C1B18] p-5 sm:p-6 rounded-sm space-y-2 shadow-2xs">
+                    <span className="text-[11px] font-mono-meta text-amber-800 uppercase tracking-wider font-bold block">
+                      TL;DR Executive Summary:
+                    </span>
+                    <p className="font-sans text-[15px] sm:text-base text-[#1C1B18] leading-relaxed font-medium">
+                      {summaryState.data.summary.tldr}
+                    </p>
+                  </div>
+
+                  {/* Structured Core Aspects Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Research Objective */}
+                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
+                        🎯 Research Objective / Problem:
+                      </span>
+                      <p className="text-sm text-[#2E2C28] leading-relaxed">
+                        {summaryState.data.summary.researchObjective}
+                      </p>
+                    </div>
+
+                    {/* Methodology */}
+                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
+                        🔬 Methodology & Study Design:
+                      </span>
+                      <p className="text-sm text-[#2E2C28] leading-relaxed">
+                        {summaryState.data.summary.methodology}
+                      </p>
+                    </div>
+
+                    {/* Data / Sample / Dataset */}
+                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
+                        📊 Data & Corpus / Sample:
+                      </span>
+                      <p className="text-sm text-[#2E2C28] leading-relaxed">
+                        {summaryState.data.summary.datasetSample}
+                      </p>
+                    </div>
+
+                    {/* Main Findings */}
+                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
+                        💡 Key Empirical Findings:
+                      </span>
+                      <p className="text-sm text-[#2E2C28] leading-relaxed">
+                        {summaryState.data.summary.mainFindings}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Limitations Card */}
+                  <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                    <span className="text-[11px] font-mono-meta text-amber-900 uppercase tracking-wider font-bold block">
+                      ⚠️ Author-Stated Limitations:
+                    </span>
+                    <p className="text-sm text-[#524F47] leading-relaxed">
+                      {summaryState.data.summary.limitations}
+                    </p>
+                    {summaryState.data.summary.inferredLimitations && (
+                      <p className="text-xs text-[#737067] italic pt-1 border-t border-[#F0ECE1]">
+                        Cautious Inferred Scope: {summaryState.data.summary.inferredLimitations}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Key Terms */}
+                  {summaryState.data.summary.keyTerms?.length > 0 && (
+                    <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 shadow-2xs">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
+                        🏷️ Key Domain Terms:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {summaryState.data.summary.keyTerms.map((term, tIdx) => (
+                          <span
+                            key={tIdx}
+                            className="bg-[#FAF9F5] border border-[#D5D1C7] text-[#1C1B18] px-2.5 py-1 rounded-sm text-xs font-mono-meta font-medium"
+                          >
+                            {term}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Full Text Section References */}
+                  {summaryState.data.summary.evidenceReferences?.length > 0 && (
+                    <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 shadow-2xs">
+                      <span className="text-[11px] font-mono-meta text-emerald-800 uppercase tracking-wider font-bold block">
+                        📑 Full-Text Evidence References:
+                      </span>
+                      <div className="space-y-2">
+                        {summaryState.data.summary.evidenceReferences.map((ev, eIdx) => (
+                          <div key={eIdx} className="text-xs p-2.5 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm font-mono-meta">
+                            <strong className="text-[#1C1B18] block">{ev.sectionOrPage}</strong>
+                            <span className="text-[#605D55] italic">"{ev.quote}"</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

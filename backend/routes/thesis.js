@@ -25,6 +25,13 @@ const {
   isAlreadyBilled,
   guestSearchStore,
 } = require('../services/usageReservationService');
+const { summaryGenerationLimiter } = require('../middleware/rateLimit');
+const { getOrGeneratePaperSummary } = require('../services/paperSummaryService');
+const {
+  isValidDatasetRepositoryUrl,
+  isValidCodeRepositoryUrl,
+  isValidDocumentUrl,
+} = require('../utils/urlValidator');
 
 // GET /api/thesis
 // Public discovery search endpoint with daily search quotas:
@@ -482,6 +489,135 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
   }
 });
 
+// POST /api/thesis/:id/summary
+// Grounded Quick Summary endpoint (feature flagged under PAPER_SUMMARIZER_ENABLED).
+// Extracts grounded research components from authorized abstract or full text.
+router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, res) => {
+  try {
+    const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED === 'true';
+    if (!isEnabled) {
+      return res.status(200).json({
+        enabled: false,
+        message: 'Quick Summary is currently disabled by administrator configuration.',
+      });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Sign in with your student account to generate AI-assisted research summaries.',
+        code: 'AUTHENTICATION_REQUIRED',
+      });
+    }
+
+    const entitlements = await getEffectiveEntitlements(req.user._id);
+    const { id } = req.params;
+    const { language = 'en', forceRefresh = false, paper: inputPaper } = req.body || {};
+
+    let paper = inputPaper || null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      const localDoc = await Thesis.findById(id).lean();
+      if (localDoc) {
+        paper = {
+          ...localDoc,
+          ...(paper || {}),
+        };
+      }
+    }
+
+    if (!paper) {
+      paper = {
+        _id: id,
+        id,
+        title: req.body?.title || req.query?.title || '',
+        abstract: req.body?.abstract || req.query?.abstract || '',
+        doi: req.body?.doi || req.query?.doi || '',
+        pdfUrl: req.body?.pdfUrl || req.query?.pdfUrl || '',
+      };
+    }
+
+    const summaryResult = await getOrGeneratePaperSummary({
+      paper,
+      user: req.user,
+      entitlements,
+      language: language === 'bn' ? 'bn' : 'en',
+      forceRefresh: Boolean(forceRefresh),
+    });
+
+    if (summaryResult.quotaExceeded) {
+      return res.status(429).json(summaryResult);
+    }
+
+    return res.json(summaryResult);
+  } catch (err) {
+    console.error('Error generating paper summary:', err);
+    return res.status(500).json({
+      message: 'Failed to generate summary for this publication.',
+      code: 'SUMMARY_GENERATION_FAILED',
+    });
+  }
+});
+
+// GET /api/thesis/:id/summary
+router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, res) => {
+  try {
+    const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED === 'true';
+    if (!isEnabled) {
+      return res.status(200).json({
+        enabled: false,
+        message: 'Quick Summary is currently disabled by administrator configuration.',
+      });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Sign in with your student account to generate AI-assisted research summaries.',
+        code: 'AUTHENTICATION_REQUIRED',
+      });
+    }
+
+    const entitlements = await getEffectiveEntitlements(req.user._id);
+    const { id } = req.params;
+    const language = req.query.language === 'bn' ? 'bn' : 'en';
+    const forceRefresh = req.query.forceRefresh === 'true';
+
+    let paper = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      paper = await Thesis.findById(id).lean();
+    }
+
+    if (!paper) {
+      paper = {
+        _id: id,
+        id,
+        title: req.query.title || '',
+        abstract: req.query.abstract || '',
+        doi: req.query.doi || '',
+        pdfUrl: req.query.pdfUrl || '',
+      };
+    }
+
+    const summaryResult = await getOrGeneratePaperSummary({
+      paper,
+      user: req.user,
+      entitlements,
+      language,
+      forceRefresh,
+    });
+
+    if (summaryResult.quotaExceeded) {
+      return res.status(429).json(summaryResult);
+    }
+
+    return res.json(summaryResult);
+  } catch (err) {
+    console.error('Error fetching paper summary:', err);
+    return res.status(500).json({
+      message: 'Failed to generate summary for this publication.',
+      code: 'SUMMARY_GENERATION_FAILED',
+    });
+  }
+});
+
 // GET /api/thesis/datasets/discover
 // Global dataset search querying DataCite and Zenodo
 router.get('/datasets/discover', optionalAuth, async (req, res) => {
@@ -652,6 +788,26 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const cleanPdfUrl = (pdfUrl && typeof pdfUrl === 'string') ? pdfUrl.trim() : '';
+    const cleanDatasetUrl = (datasetUrl && typeof datasetUrl === 'string') ? datasetUrl.trim() : '';
+    const cleanCodeUrl = (codeUrl && typeof codeUrl === 'string') ? codeUrl.trim() : '';
+
+    if (cleanDatasetUrl && !isValidDatasetRepositoryUrl(cleanDatasetUrl)) {
+      return res.status(400).json({
+        message: 'Invalid dataset repository URL. Must be a valid HTTP/HTTPS URL from a recognized repository (e.g. Zenodo, DataCite, GitHub, OSF, Kaggle).',
+      });
+    }
+
+    if (cleanCodeUrl && !isValidCodeRepositoryUrl(cleanCodeUrl)) {
+      return res.status(400).json({
+        message: 'Invalid code repository URL. Must be a valid public code repository (e.g. GitHub, GitLab).',
+      });
+    }
+
+    if (cleanPdfUrl && !isValidDocumentUrl(cleanPdfUrl)) {
+      return res.status(400).json({
+        message: 'Invalid document/PDF URL. Must be a valid public HTTP/HTTPS URL.',
+      });
+    }
 
     const newThesis = new Thesis({
       title: title.trim(),

@@ -126,6 +126,16 @@ const userSchema = new mongoose.Schema({
     count: { type: Number, default: 0 },
   },
 
+  dailyDatasetUsage: {
+    date: { type: String, default: '' },
+    count: { type: Number, default: 0 },
+  },
+
+  dailySummaryUsage: {
+    date: { type: String, default: '' },
+    count: { type: Number, default: 0 },
+  },
+
   topicAlerts: [{
     topic: { type: String, required: true },
     category: { type: String, default: 'All Disciplines' },

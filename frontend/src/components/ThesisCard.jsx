@@ -458,11 +458,22 @@ export default function ThesisCard({
           {/* Details Action */}
           <button
             type="button"
-            onClick={() => onViewDetail && onViewDetail(thesis)}
+            onClick={() => onViewDetail && onViewDetail(thesis, 'overview')}
             className="inline-flex items-center justify-center gap-1 text-[#605D55] hover:text-[#1C1B18] text-xs font-mono-meta underline px-2 py-2 min-h-[42px] cursor-pointer"
             title="Inspect full metadata and open science datasets"
           >
             <span>Details &rarr;</span>
+          </button>
+
+          {/* Quick Summary Action */}
+          <button
+            type="button"
+            onClick={() => onViewDetail && onViewDetail(thesis, 'summary')}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FAF9F5] hover:bg-amber-50/70 border border-[#D5D1C7] text-[#1C1B18] hover:text-amber-900 hover:border-amber-300 rounded-sm text-xs font-mono-meta transition min-h-[42px] cursor-pointer"
+            title="Grounded research summary extracted from paper text"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span>Summary</span>
           </button>
 
           {/* Dataset Action / Badge */}
