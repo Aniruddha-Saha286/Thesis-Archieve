@@ -63,15 +63,6 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
-  const registerStudent = async (name, email, password) => {
-    const res = await axios.post('/api/auth/register-student', { name, email, password });
-    axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-    localStorage.setItem('thesis_vault_token', res.data.token);
-    setToken(res.data.token);
-    setUser(res.data.user);
-    return res.data;
-  };
-
   const updateUserStatus = (newStatus, extraFields = {}) => {
     setUser((prev) => (prev ? { ...prev, status: newStatus, ...extraFields } : prev));
   };
@@ -91,7 +82,6 @@ export const AuthProvider = ({ children }) => {
     isAdmin: user?.role === 'admin',
     isPending: ['pending', 'banned', 'rejected'].includes(user?.status) && user?.role !== 'admin',
     login,
-    registerStudent,
     loginWithGoogle,
     logout,
     refreshUser: fetchCurrentUser,

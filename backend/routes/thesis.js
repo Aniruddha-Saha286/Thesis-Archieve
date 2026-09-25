@@ -276,16 +276,16 @@ router.get('/publishers/list', async (req, res) => {
     ]);
 
     const majorPublishers = [
-      { name: 'arXiv Open Access / Cornell University', count: '2.4M+' },
-      { name: 'PubMed Central / Europe PMC Open Science', count: '45M+' },
-      { name: 'HAL Open Science / CNRS European Archive', count: '2.5M+' },
-      { name: 'DOAJ Open Access Directory', count: '10M+' },
-      { name: 'Springer Nature Open', count: '1.2M+' },
-      { name: 'Elsevier / ScienceDirect Open', count: '980k+' },
-      { name: 'Oxford University Press', count: '450k+' },
-      { name: 'Cambridge University Press', count: '380k+' },
-      { name: 'IEEE Computer Society', count: '650k+' },
-      { name: 'Wiley Open Access', count: '720k+' },
+      { name: 'arXiv Open Access / Cornell University', count: null },
+      { name: 'PubMed Central / Europe PMC Open Science', count: null },
+      { name: 'HAL Open Science / CNRS European Archive', count: null },
+      { name: 'DOAJ Open Access Directory', count: null },
+      { name: 'Springer Nature Open', count: null },
+      { name: 'Elsevier / ScienceDirect Open', count: null },
+      { name: 'Oxford University Press', count: null },
+      { name: 'Cambridge University Press', count: null },
+      { name: 'IEEE Computer Society', count: null },
+      { name: 'Wiley Open Access', count: null },
     ];
 
     const list = publishersFromDb
@@ -559,6 +559,82 @@ router.post('/:id/report', optionalAuth, async (req, res) => {
   }
 });
 
+// POST /api/thesis/:id/upvote
+// Endorse a research publication (atomic toggle for local repository records)
+router.post('/:id/upvote', authenticateToken, async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    if (!rawId) {
+      return res.status(400).json({ message: 'Thesis identifier is required.' });
+    }
+
+    let thesis = null;
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      thesis = await Thesis.findById(rawId);
+    }
+    if (!thesis) {
+      thesis = await Thesis.findOne({
+        $or: [
+          { catalogId: rawId },
+          { doi: rawId },
+        ],
+      });
+    }
+
+    if (!thesis) {
+      return res.status(200).json({
+        code: 'EXTERNAL_PAPER_UPVOTE_UNSUPPORTED',
+        message: 'Endorsements are currently supported for locally cataloged theses and institutional papers.',
+        upvotes: 0,
+        hasUpvoted: false,
+      });
+    }
+
+    const userIdStr = req.user._id.toString();
+    const alreadyUpvoted = (thesis.upvotedBy || []).some(
+      (uid) => (uid?._id ? uid._id.toString() : uid.toString()) === userIdStr
+    );
+
+    let updatedThesis;
+    if (alreadyUpvoted) {
+      updatedThesis = await Thesis.findByIdAndUpdate(
+        thesis._id,
+        {
+          $pull: { upvotedBy: req.user._id },
+          $inc: { upvotes: -1 },
+        },
+        { new: true }
+      );
+    } else {
+      updatedThesis = await Thesis.findByIdAndUpdate(
+        thesis._id,
+        {
+          $addToSet: { upvotedBy: req.user._id },
+          $inc: { upvotes: 1 },
+        },
+        { new: true }
+      );
+    }
+
+    const finalUpvotes = Math.max(0, updatedThesis.upvotes || 0);
+    if (updatedThesis.upvotes < 0) {
+      await Thesis.findByIdAndUpdate(thesis._id, { upvotes: 0 });
+    }
+
+    emitThesisUpdated(updatedThesis);
+
+    return res.json({
+      success: true,
+      upvotes: finalUpvotes,
+      hasUpvoted: !alreadyUpvoted,
+      thesisId: updatedThesis._id,
+    });
+  } catch (err) {
+    console.error('Error upvoting thesis:', err);
+    return res.status(500).json({ message: 'Failed to process endorsement.' });
+  }
+});
+
 // POST /api/thesis
 // Submits a user-contributed thesis.
 // Authenticated user required. Status defaults strictly to 'pending' until admin moderation.
@@ -717,23 +793,23 @@ router.put('/:id/pin', authenticateToken, requireAdmin, async (req, res) => {
 
       thesis = new Thesis({
         title: paperData.title || `Scholarly Publication ${rawId}`,
-        abstract: paperData.abstract || 'Peer-reviewed scholarly record curated from international depository.',
-        category: paperData.category || 'Computer Science & NLP',
+        abstract: paperData.abstract || 'No abstract provided in source catalog.',
+        category: paperData.category || 'Other Disciplines',
         degreeType: paperData.degreeType || 'Research Publication',
-        publicationType: paperData.publicationType || 'journal-article',
-        university: paperData.university || paperData.venue || 'Global Academic Consortium',
-        department: paperData.department || 'Scholarly Research',
+        publicationType: paperData.publicationType || 'unknown',
+        university: paperData.university || paperData.venue || '',
+        department: paperData.department || '',
         author: authorStr,
         authors: authorList,
-        publisher: paperData.publisher || paperData.venue || 'Open Scholarly Depository',
+        publisher: paperData.publisher || paperData.venue || '',
         doi: paperData.doi || '',
-        publishedYear: paperData.publishedYear || new Date().getFullYear(),
+        publishedYear: paperData.publishedYear ? parseInt(paperData.publishedYear) : null,
         pdfUrl: paperData.pdfUrl || '',
         isDirectPdf: Boolean(paperData.isDirectPdf || (paperData.pdfUrl && paperData.pdfUrl.endsWith('.pdf'))),
-        isOpenAccess: Boolean(paperData.isOpenAccess ?? true),
+        isOpenAccess: paperData.isOpenAccess !== undefined && paperData.isOpenAccess !== null ? Boolean(paperData.isOpenAccess) : null,
         isPinned: true,
         status: 'approved',
-        catalogId: paperData.catalogId || `PINNED-${Date.now()}`,
+        catalogId: paperData.catalogId || undefined,
         submittedBy: req.user._id,
       });
 

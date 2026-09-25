@@ -1064,9 +1064,11 @@ export default function App() {
                           <span className="truncate max-w-[170px]" title={pub.name}>
                             {pub.name}
                           </span>
-                          <span className="font-mono-meta text-[10px] text-[#8C887E]">
-                            [{pub.count}]
-                          </span>
+                          {pub.count !== null && pub.count !== undefined && (
+                            <span className="font-mono-meta text-[10px] text-[#8C887E]">
+                              [{pub.count}]
+                            </span>
+                          )}
                         </button>
                       </li>
                     );

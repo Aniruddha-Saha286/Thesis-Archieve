@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 const thesisSchema = new mongoose.Schema({
   title: {
@@ -21,8 +22,8 @@ const thesisSchema = new mongoose.Schema({
     sparse: true,
     default: function () {
       const year = new Date().getFullYear();
-      const rand = Math.floor(1000 + Math.random() * 9000);
-      return `THESIS-${year}-${rand}`;
+      const randHex = crypto.randomBytes(4).toString('hex').toUpperCase();
+      return `THESIS-${year}-${randHex}`;
     },
   },
   degreeType: {
@@ -36,12 +37,16 @@ const thesisSchema = new mongoose.Schema({
   },
   university: {
     type: String,
-    required: true,
+    required: function () {
+      return ['thesis', 'dissertation'].includes(this.publicationType);
+    },
     trim: true,
   },
   department: {
     type: String,
-    required: true,
+    required: function () {
+      return ['thesis', 'dissertation'].includes(this.publicationType);
+    },
     trim: true,
   },
   author: {
@@ -84,7 +89,7 @@ const thesisSchema = new mongoose.Schema({
     sourceId: { type: String, default: null },
   }],
   citationMetrics: {
-    source: { type: String, default: 'OpenAlex' },
+    source: { type: String, default: null },
     count: { type: Number, default: null },
     retrievedAt: { type: Date, default: null },
     sourceId: { type: String, default: null },
@@ -105,7 +110,7 @@ const thesisSchema = new mongoose.Schema({
   },
   publishedYear: {
     type: Number,
-    default: () => new Date().getFullYear(),
+    default: null,
   },
   pdfUrl: {
     type: String,
@@ -118,7 +123,7 @@ const thesisSchema = new mongoose.Schema({
   },
   isOpenAccess: {
     type: Boolean,
-    default: true,
+    default: null,
   },
   license: {
     type: String,

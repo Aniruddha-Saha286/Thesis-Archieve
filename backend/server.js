@@ -20,6 +20,7 @@ const membershipRoutes = require('./routes/membership');
 const institutionsRoutes = require('./routes/institutions');
 const authorsRoutes = require('./routes/authors');
 const subjectsRoutes = require('./routes/subjects');
+const { apiLimiter } = require('./middleware/rateLimit');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,11 +35,47 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+// Explicit CORS origin validator (rejects wildcard credentialed CORS)
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim()) : []),
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map((o) => o.trim()) : []),
+]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // Allow same-origin / server-to-server / curl / test runners
+  return ALLOWED_ORIGINS.has(origin);
+}
+
+// HTTP Security Headers & Content Security Policy (compatible with Google sign-in and Vite)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' http://localhost:5000 http://localhost:5173 ws://localhost:5000 ws://localhost:5173 https://api.openalex.org https://api.crossref.org https://api.datacite.org https://zenodo.org https://accounts.google.com; frame-src https://accounts.google.com;"
+  );
+  next();
+});
+
 // Middleware
-app.use(cors({
-  origin: '*',
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('CORS: Origin not allowed by security policy.'));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
@@ -52,6 +89,9 @@ app.get('/api/health', (req, res) => {
     federatedProviders: ['OpenAlex', 'arXiv', 'Crossref', 'Europe PMC', 'HAL Open Science', 'DOAJ'],
   });
 });
+
+// Apply API baseline rate limiter to all API endpoints
+app.use('/api', apiLimiter);
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
@@ -120,4 +160,4 @@ async function startServer() {
 
 startServer();
 
-module.exports = { app, server };
+module.exports = { app, server, isAllowedOrigin };

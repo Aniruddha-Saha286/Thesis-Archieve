@@ -4,9 +4,11 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
+const AuditEvent = require('../models/AuditEvent');
+const { uploadLimiter } = require('../middleware/rateLimit');
 const { emitStudentProfileUpdated } = require('../socket');
 
-// Configure Cloudinary strictly from environment variables - NO HARDCODED FALLBACKS
+// Configure Cloudinary strictly from environment variables
 const hasCloudinary = Boolean(
   process.env.CLOUDINARY_CLOUD_NAME &&
   process.env.CLOUDINARY_API_KEY &&
@@ -35,25 +37,24 @@ function validateMagicBytes(buffer, claimedMime) {
   const isWebp =
     buffer.length >= 12 &&
     buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46;
-  // GIF: GIF
-  const isGif = buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
 
   if (claimedMime === 'image/jpeg' || claimedMime === 'image/jpg') return isJpeg;
   if (claimedMime === 'image/png') return isPng;
   if (claimedMime === 'application/pdf') return isPdf;
   if (claimedMime === 'image/webp') return isWebp;
-  if (claimedMime === 'image/gif') return isGif;
 
-  return isJpeg || isPng || isPdf || isWebp || isGif;
+  return false;
 }
+
+const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
-    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
-    if (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('image/')) {
+    // Strict MIME whitelist: reject unsupported image subtypes even if starting with image/
+    if (ALLOWED_MIMES.has(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file format. Only JPEG, PNG, WebP, and PDF documents are accepted.'));
@@ -62,11 +63,17 @@ const upload = multer({
 });
 
 // POST /api/upload/id-card
-// Secure student ID document upload with magic byte verification and access control
-router.post('/id-card', authenticateToken, upload.single('idCard'), async (req, res) => {
+// Secure student ID document upload with magic byte verification and private storage
+router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No student credential document was uploaded.' });
+    }
+
+    if (!ALLOWED_MIMES.has(req.file.mimetype)) {
+      return res.status(400).json({
+        message: 'Unsupported document format. Only JPEG, PNG, WebP, and PDF files are accepted.',
+      });
     }
 
     // Deep content verification: check file magic bytes
@@ -77,43 +84,45 @@ router.post('/id-card', authenticateToken, upload.single('idCard'), async (req, 
       });
     }
 
-    let resultUrl = '';
+    // Private Object Storage Handling - NO base64/data-URI database fallback
+    if (!hasCloudinary) {
+      return res.status(503).json({
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'Identity document secure storage service is temporarily unavailable. User record was not modified.',
+      });
+    }
+
     let documentRef = '';
+    try {
+      const uploadPromise = new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'thesis_vault/student_ids',
+            resource_type: req.file.mimetype === 'application/pdf' ? 'raw' : 'image',
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        );
+        uploadStream.end(req.file.buffer);
+      });
 
-    if (hasCloudinary) {
-      try {
-        const uploadPromise = new Promise((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              folder: 'thesis_vault/student_ids',
-              resource_type: req.file.mimetype === 'application/pdf' ? 'raw' : 'image',
-            },
-            (error, result) => {
-              if (error) return reject(error);
-              resolve(result);
-            }
-          );
-          uploadStream.end(req.file.buffer);
-        });
-
-        const result = await uploadPromise;
-        resultUrl = result.secure_url;
-        documentRef = result.public_id;
-      } catch (cloudErr) {
-        console.warn('Cloudinary upload warning, falling back to data URI:', cloudErr.message);
-      }
+      const result = await uploadPromise;
+      // Store private object key / reference, NOT public permanent URL
+      documentRef = result.public_id;
+    } catch (cloudErr) {
+      console.error('Private storage upload failed:', cloudErr.message);
+      return res.status(503).json({
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'Private storage upload encountered an error. User record was not modified.',
+      });
     }
 
-    // Fallback if Cloudinary is unavailable or encountered an issue
-    if (!resultUrl) {
-      resultUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-      documentRef = `local_doc_${req.user._id}_${Date.now()}`;
-    }
-
-    // Update student's record with the accessible reference
+    // Update student's record with the private object reference
     const updatedStudent = await User.findByIdAndUpdate(
       req.user._id,
-      { idCardProof: resultUrl },
+      { idCardProof: documentRef },
       { new: true }
     );
 
@@ -121,9 +130,18 @@ router.post('/id-card', authenticateToken, upload.single('idCard'), async (req, 
       emitStudentProfileUpdated(updatedStudent);
     }
 
+    // Audit event for document upload
+    await AuditEvent.create({
+      actor: req.user._id,
+      action: 'DOCUMENT_UPLOADED',
+      targetType: 'User',
+      targetId: String(req.user._id),
+      metadata: { documentRef, mimeType: req.file.mimetype, sizeBytes: req.file.size },
+      ipAddress: req.ip || '',
+    });
+
     return res.json({
-      message: 'Student document uploaded successfully for review.',
-      url: resultUrl,
+      message: 'Student credential document uploaded securely for administrative verification.',
       documentRef,
     });
   } catch (err) {
@@ -133,14 +151,33 @@ router.post('/id-card', authenticateToken, upload.single('idCard'), async (req, 
 });
 
 // DELETE /api/upload/id-card
-// Data deletion policy: Allow student or admin to permanently purge uploaded ID documents
+// Data deletion policy: permanently purge uploaded ID documents and create audit record
 router.delete('/id-card', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
+    const oldRef = user.idCardProof;
+    if (oldRef && hasCloudinary && !oldRef.startsWith('data:') && !oldRef.startsWith('http')) {
+      try {
+        await cloudinary.uploader.destroy(oldRef);
+      } catch (cloudErr) {
+        console.warn('Failed to delete Cloudinary asset:', cloudErr.message);
+      }
+    }
+
     user.idCardProof = '';
     await user.save();
+
+    // Audit the deletion
+    await AuditEvent.create({
+      actor: req.user._id,
+      action: 'DOCUMENT_DELETED',
+      targetType: 'User',
+      targetId: String(req.user._id),
+      metadata: { previousRef: oldRef },
+      ipAddress: req.ip || '',
+    });
 
     return res.json({ message: 'Uploaded student verification document permanently removed.' });
   } catch (err) {

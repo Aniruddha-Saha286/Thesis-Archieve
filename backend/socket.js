@@ -1,13 +1,33 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { getJwtSecret } = require('./middleware/auth');
+const User = require('./models/User');
 
 let io = null;
+
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim()) : []),
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map((o) => o.trim()) : []),
+]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  return ALLOWED_ORIGINS.has(origin);
+}
 
 function initSocket(httpServer) {
   io = new Server(httpServer, {
     cors: {
-      origin: '*',
+      origin: (origin, callback) => {
+        if (isAllowedOrigin(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error('Socket.IO CORS: Origin not allowed by security policy.'));
+      },
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
       credentials: true,
     },
@@ -15,8 +35,9 @@ function initSocket(httpServer) {
     pingInterval: 25000,
   });
 
-  // Socket middleware for authentication and room assignment
-  io.use((socket, next) => {
+  // Socket middleware: Verifies token AND loads current user from DB
+  // Requires current role and status from database, preventing stale token escalation
+  io.use(async (socket, next) => {
     try {
       const rawToken =
         socket.handshake.auth?.token ||
@@ -26,11 +47,23 @@ function initSocket(httpServer) {
         try {
           const secret = getJwtSecret();
           const decoded = jwt.verify(rawToken, secret);
-          socket.user = decoded;
+          if (decoded && decoded.id) {
+            const dbUser = await User.findById(decoded.id).select('role status name email');
+            if (dbUser && dbUser.status !== 'banned') {
+              socket.user = {
+                id: String(dbUser._id),
+                role: dbUser.role,
+                status: dbUser.status,
+              };
+            } else {
+              socket.user = null;
+            }
+          }
         } catch (tokenErr) {
-          // Allow connection even if token is invalid or guest, but without elevated rooms
           socket.user = null;
         }
+      } else {
+        socket.user = null;
       }
       return next();
     } catch (err) {
@@ -41,31 +74,47 @@ function initSocket(httpServer) {
   io.on('connection', (socket) => {
     // Join personal user room if authenticated
     if (socket.user?.id) {
-      const userRoom = `user:${socket.user.id}`;
-      socket.join(userRoom);
+      socket.join(`user:${socket.user.id}`);
     }
 
-    // Join admin room if administrator
-    if (socket.user?.role === 'admin') {
+    // Join admin room strictly if verified administrator in database
+    if (socket.user?.role === 'admin' && socket.user?.status === 'approved') {
       socket.join('role:admin');
     }
 
-    // Client can dynamically authenticate after login
-    socket.on('auth:authenticate', (token) => {
+    // Client can dynamically re-authenticate after login
+    socket.on('auth:authenticate', async (token) => {
       try {
         if (!token) return;
         const secret = getJwtSecret();
         const decoded = jwt.verify(token, secret);
-        socket.user = decoded;
+        if (!decoded || !decoded.id) return;
 
-        socket.join(`user:${decoded.id}`);
-        if (decoded.role === 'admin') {
+        const dbUser = await User.findById(decoded.id).select('role status name email');
+        if (!dbUser || dbUser.status === 'banned') {
+          socket.user = null;
+          socket.leave('role:admin');
+          socket.emit('auth:error', { message: 'Account suspended or invalid.' });
+          socket.disconnect(true);
+          return;
+        }
+
+        socket.user = {
+          id: String(dbUser._id),
+          role: dbUser.role,
+          status: dbUser.status,
+        };
+
+        socket.join(`user:${socket.user.id}`);
+        if (dbUser.role === 'admin' && dbUser.status === 'approved') {
           socket.join('role:admin');
+        } else {
+          socket.leave('role:admin');
         }
 
         socket.emit('auth:authenticated', {
-          userId: decoded.id,
-          role: decoded.role,
+          userId: socket.user.id,
+          role: socket.user.role,
         });
       } catch (err) {
         socket.emit('auth:error', { message: 'Invalid socket authentication token.' });
@@ -84,56 +133,114 @@ function getIO() {
   return io;
 }
 
+/**
+ * Remove privileged rooms and disconnect sockets when a user is banned, demoted, or logged out.
+ */
+function revokeUserSocketPrivileges(userId) {
+  if (!io || !userId) return;
+  const sId = String(userId);
+  const room = io.sockets.adapter.rooms.get(`user:${sId}`);
+  if (room) {
+    for (const socketId of room) {
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock) {
+        sock.leave('role:admin');
+        if (sock.user) {
+          sock.user.role = 'student';
+          sock.user.status = 'banned';
+        }
+        sock.emit('auth:revoked', { message: 'Privileges have been revoked or account status changed.' });
+        sock.disconnect(true);
+      }
+    }
+  }
+}
+
 // -------------------------------------------------------------
-// Realtime Broadcast Event Helpers
+// Realtime Minimal Broadcast Event Helpers
 // -------------------------------------------------------------
 
 /**
  * Broadcast when an admin approves, rejects, bans, or reinstates a student.
+ * Sends minimal sanitized payload only.
  */
 function emitStudentStatusChanged(studentId, payload) {
   if (!io) return;
   const sId = String(studentId);
-  // Send directly to the student's live session
-  io.to(`user:${sId}`).emit('user:status_changed', {
+  const sanitized = {
     studentId: sId,
-    ...payload,
-  });
-  // Notify all active administrators
-  io.to('role:admin').emit('admin:student_updated', {
-    studentId: sId,
-    ...payload,
-  });
+    status: payload.status,
+    reason: payload.reason || '',
+    verifiedAt: payload.verifiedAt || null,
+  };
+  io.to(`user:${sId}`).emit('user:status_changed', sanitized);
+  io.to('role:admin').emit('admin:student_updated', sanitized);
 }
 
 /**
  * Broadcast when a new student registers via Google OAuth.
+ * Delivered strictly to administrators; minimal registration notification only.
  */
 function emitNewStudentRegistered(student) {
   if (!io) return;
   io.to('role:admin').emit('admin:new_student_application', {
-    student,
+    studentId: String(student._id || student.id),
+    name: student.name,
+    email: student.email,
+    degreeProgram: student.degreeProgram,
     timestamp: new Date().toISOString(),
   });
 }
 
 /**
- * Broadcast when a student updates their academic profile or uploads an ID card.
+ * Broadcast when a student updates their academic profile.
+ * Sends sanitized profile data only.
  */
 function emitStudentProfileUpdated(student) {
   if (!io) return;
   const sId = String(student._id || student.id);
-  io.to(`user:${sId}`).emit('user:profile_updated', { student });
-  io.to('role:admin').emit('admin:student_profile_updated', { student });
+  const sanitized = {
+    id: sId,
+    name: student.name,
+    university: student.university,
+    degreeProgram: student.degreeProgram,
+    researchDomain: student.researchDomain,
+  };
+  io.to(`user:${sId}`).emit('user:profile_updated', { student: sanitized });
+  io.to('role:admin').emit('admin:student_profile_updated', { studentId: sId });
 }
 
 /**
- * Broadcast when a new thesis or research paper is proposed / published.
+ * Broadcast when a new thesis or research paper is proposed.
+ * SECURITY: If status is 'pending', emitted STRICTLY to administrators.
+ * Only approved publications are broadcast to research users.
  */
 function emitThesisCreated(thesis) {
   if (!io) return;
-  io.emit('thesis:created', thesis);
-  io.to('role:admin').emit('admin:thesis_submitted', thesis);
+  const minimalAdminPayload = {
+    id: String(thesis._id || thesis.id),
+    title: thesis.title,
+    publicationType: thesis.publicationType,
+    author: thesis.author,
+    status: thesis.status || 'pending',
+    submittedAt: thesis.createdAt || new Date(),
+  };
+
+  // Always notify administrators of new submission
+  io.to('role:admin').emit('admin:thesis_submitted', minimalAdminPayload);
+
+  // Broadcast to research users ONLY after formal approval
+  if (thesis.status === 'approved') {
+    io.emit('thesis:created', {
+      id: String(thesis._id || thesis.id),
+      title: thesis.title,
+      author: thesis.author,
+      publishedYear: thesis.publishedYear,
+      publicationType: thesis.publicationType,
+      isOpenAccess: thesis.isOpenAccess,
+      source: thesis.source || 'Local Repository',
+    });
+  }
 }
 
 /**
@@ -141,7 +248,12 @@ function emitThesisCreated(thesis) {
  */
 function emitThesisUpdated(thesis) {
   if (!io) return;
-  io.emit('thesis:updated', thesis);
+  io.emit('thesis:updated', {
+    id: String(thesis._id || thesis.id),
+    title: thesis.title,
+    isPinned: thesis.isPinned,
+    upvotes: thesis.upvotes || 0,
+  });
 }
 
 /**
@@ -157,7 +269,7 @@ function emitThesisDeleted(thesisId) {
  */
 function emitThesisPinned(thesisId, isPinned) {
   if (!io) return;
-  io.emit('thesis:pinned', { thesisId: String(thesisId), isPinned });
+  io.emit('thesis:pinned', { thesisId: String(thesisId), isPinned: Boolean(isPinned) });
 }
 
 /**
@@ -179,6 +291,7 @@ function emitToAdmins(event, payload) {
 module.exports = {
   initSocket,
   getIO,
+  revokeUserSocketPrivileges,
   emitStudentStatusChanged,
   emitNewStudentRegistered,
   emitStudentProfileUpdated,

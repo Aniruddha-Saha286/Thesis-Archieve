@@ -12,7 +12,22 @@ const Notification = require('../models/Notification');
 const { addDhakaCalendarMonths, formatDhakaDateTime } = require('../utils/dhakaDate');
 const { getPlan } = require('../services/planCatalog');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
-const { emitStudentStatusChanged, emitToUser, emitToAdmins } = require('../socket');
+const { emitStudentStatusChanged, emitToUser, emitToAdmins, revokeUserSocketPrivileges } = require('../socket');
+const cloudinary = require('cloudinary').v2;
+
+const hasCloudinary = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
+
+if (hasCloudinary) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
 
 // All routes here strictly require Admin role
 router.use(authenticateToken, requireAdmin);
@@ -58,9 +73,10 @@ router.get('/students', async (req, res) => {
       const t = trialMap.get(String(s._id));
 
       if (p) {
+        const planDef = getPlan(p.plan || 'premium_6m');
         sObj.membership = {
-          plan: 'premium',
-          label: 'Premium',
+          plan: planDef.id,
+          label: planDef.name,
           expiresAt: p.expiresAt,
           formattedExpiry: formatDhakaDateTime(p.expiresAt),
         };
@@ -86,6 +102,51 @@ router.get('/students', async (req, res) => {
   } catch (err) {
     console.error('Error fetching students:', err);
     return res.status(500).json({ message: 'Failed to retrieve students roster.' });
+  }
+});
+
+// GET /api/admin/students/:id/document
+// Authorized admin endpoint to inspect student verification document
+router.get('/students/:id/document', async (req, res) => {
+  try {
+    const student = await User.findById(req.params.id).select('name email idCardProof');
+    if (!student || !student.idCardProof) {
+      return res.status(404).json({ message: 'No verification document found for this student.' });
+    }
+
+    let documentUrl = student.idCardProof;
+    if (!documentUrl.startsWith('http://') && !documentUrl.startsWith('https://')) {
+      if (hasCloudinary) {
+        documentUrl = cloudinary.url(student.idCardProof, {
+          secure: true,
+          resource_type: 'auto',
+          sign_url: true,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        });
+      }
+    }
+
+    await AuditEvent.create({
+      actor: req.user._id,
+      action: 'ADMIN_VIEWED_STUDENT_DOCUMENT',
+      targetType: 'User',
+      targetId: String(student._id),
+      metadata: { studentEmail: student.email, documentRef: student.idCardProof },
+      ipAddress: req.ip || '',
+    });
+
+    if (req.query.redirect === 'true') {
+      return res.redirect(documentUrl);
+    }
+
+    return res.json({
+      studentId: student._id,
+      documentUrl,
+      documentRef: student.idCardProof,
+    });
+  } catch (err) {
+    console.error('Error fetching student document:', err);
+    return res.status(500).json({ message: 'Failed to retrieve student document.' });
   }
 });
 
@@ -138,6 +199,10 @@ router.post('/verify-student/:id', async (req, res) => {
     student.verifiedBy = req.user._id;
     await student.save();
 
+    if (decision === 'reject') {
+      revokeUserSocketPrivileges(student._id);
+    }
+
     // Broadcast real-time verification to student session & admin consoles
     emitStudentStatusChanged(student._id, {
       status: student.status,
@@ -181,6 +246,8 @@ router.post('/student/:id/ban', async (req, res) => {
     student.status = 'banned';
     student.banReason = reason || 'Administrative suspension';
     await student.save();
+
+    revokeUserSocketPrivileges(student._id);
 
     // Broadcast real-time suspension
     emitStudentStatusChanged(student._id, {
@@ -241,6 +308,8 @@ router.delete('/student/:id', async (req, res) => {
   try {
     const student = await User.findByIdAndDelete(req.params.id);
     if (!student) return res.status(404).json({ message: 'Student not found.' });
+
+    revokeUserSocketPrivileges(student._id);
 
     // Broadcast real-time deletion
     emitStudentStatusChanged(student._id, {

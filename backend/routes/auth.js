@@ -179,7 +179,7 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
     if (degreeProgram && typeof degreeProgram === 'string') user.degreeProgram = degreeProgram.trim();
     if (researchDomain && typeof researchDomain === 'string') user.researchDomain = researchDomain.trim();
     if (thesisGoal && typeof thesisGoal === 'string') user.thesisGoal = thesisGoal.trim();
-    if (idCardProof && typeof idCardProof === 'string') user.idCardProof = idCardProof.trim();
+    // SECURITY: idCardProof is strictly forbidden here; only the validated upload endpoint may set it.
 
     user.isProfileComplete = true;
     // Strict Admin Verification Policy:
@@ -228,11 +228,10 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     const cleanInput = String(email).trim().toLowerCase();
     const rawPassword = typeof password === 'string' ? password : String(password);
-    const cleanPassword = rawPassword.trim();
 
-    // Look up administrator account by email or username 'admin'
+    // Look up administrator account strictly by email or username 'admin'
     const queryEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput}@thesis.org`;
-    let user = await User.findOne({
+    const user = await User.findOne({
       $or: [
         { email: cleanInput },
         { email: queryEmail },
@@ -241,50 +240,13 @@ router.post('/login', loginLimiter, async (req, res) => {
       role: 'admin',
     });
 
-    // If no admin user exists in DB at all, auto-provision default editorial admin
-    if (!user && (cleanInput === 'admin' || cleanInput === 'admin@thesis.org')) {
-      const hashedPassword = await bcrypt.hash('admin1234', 12);
-      user = await User.create({
-        name: 'Editorial Board Administrator',
-        email: 'admin@thesis.org',
-        password: hashedPassword,
-        role: 'admin',
-        status: 'approved',
-        isProfileComplete: true,
-        verifiedAt: new Date(),
-      });
-    }
-
-    if (!user || user.role !== 'admin') {
+    if (!user || user.role !== 'admin' || !user.password) {
       // Use constant-time dummy comparison to mitigate timing attacks
-      await bcrypt.compare(cleanPassword, '$2a$12$e8r0.m0X5qR.G5Yy6Z3h.eZ9k2vQp6wRt8s7u4v1y0z1x2w3v4u5t');
+      await bcrypt.compare(rawPassword, '$2a$12$e8r0.m0X5qR.G5Yy6Z3h.eZ9k2vQp6wRt8s7u4v1y0z1x2w3v4u5t');
       return res.status(401).json({ message: 'Invalid administrative email or password.' });
     }
 
-    let isMatch = false;
-    if (user.password) {
-      isMatch = await bcrypt.compare(rawPassword, user.password);
-      if (!isMatch && cleanPassword !== rawPassword) {
-        isMatch = await bcrypt.compare(cleanPassword, user.password);
-      }
-    }
-
-    // Support standard editorial credentials and auto-upgrade to strong bcrypt hash
-    const bootstrapCandidates = [
-      'admin1234',
-      'admin',
-      'ThesisAdminPass2026!',
-      'admin1234!',
-      'admin12345',
-      'admin@1234',
-      'admin123',
-    ];
-    if (!isMatch && (bootstrapCandidates.includes(cleanPassword) || bootstrapCandidates.includes(rawPassword))) {
-      isMatch = true;
-      user.password = await bcrypt.hash('admin1234', 12);
-      await user.save();
-    }
-
+    const isMatch = await bcrypt.compare(rawPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid administrative email or password.' });
     }

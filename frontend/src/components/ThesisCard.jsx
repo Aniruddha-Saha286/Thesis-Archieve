@@ -62,6 +62,11 @@ export default function ThesisCard({
     };
   }, [showMoreMenu]);
 
+  const isLocalPaper = Boolean(
+    thesis._id &&
+    (thesis.source === 'Local Repository' || (!thesis.source && !thesis.isExternal))
+  );
+
   const handleUpvote = async () => {
     if (!isAuthenticated && onRequireAuth) {
       onRequireAuth('Sign in with your student account to endorse research papers.');
@@ -69,6 +74,10 @@ export default function ThesisCard({
     }
     try {
       const res = await axios.post(`/api/thesis/${thesis._id || thesis.id}/upvote`);
+      if (res.data?.code === 'EXTERNAL_PAPER_UPVOTE_UNSUPPORTED') {
+        alert(res.data.message || 'Endorsements are available for locally cataloged institutional records.');
+        return;
+      }
       setUpvotes(res.data.upvotes);
       setHasUpvoted(res.data.hasUpvoted);
     } catch (err) {
@@ -500,7 +509,7 @@ export default function ThesisCard({
                 ? 'bg-emerald-50 border-emerald-400 text-emerald-800 font-bold'
                 : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border-[#D5D1C7] text-[#1C1B18]'
             }`}
-            title="Endorse Research Publication"
+            title={isLocalPaper ? 'Endorse Research Publication' : 'Endorsements are available for locally cataloged institutional records'}
           >
             <ArrowBigUp className="w-4 h-4" />
             <span>{upvotes}</span>
