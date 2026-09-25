@@ -18,9 +18,13 @@ const {
   emitThesisDeleted,
   emitThesisPinned,
 } = require('../socket');
-
-// In-memory daily search usage tracker for guest sessions (resetting daily at midnight Dhaka)
-const guestSearchStore = new Map();
+const {
+  reserveUsage,
+  releaseReservedCredit,
+  createSearchContextId,
+  isAlreadyBilled,
+  guestSearchStore,
+} = require('../services/usageReservationService');
 
 // GET /api/thesis
 // Public discovery search endpoint with daily search quotas:
@@ -60,6 +64,8 @@ router.get('/', optionalAuth, async (req, res) => {
       minCitations,
       sort = 'relevance',
       sessionId,
+      searchContextId,
+      searchActionId,
     } = req.query;
 
     const searchTerm = (search || query || '').trim();
@@ -106,102 +112,82 @@ router.get('/', optionalAuth, async (req, res) => {
     const existingSessionValidation = validateAndGetSession(sessionId, scope, searchTerm, filters, sortOrder);
     const hasValidSession = existingSessionValidation.valid;
 
-    // Billable Action Rule: exactly one explicit committed query submission on page 1.
-    // If hasValidSession is true (user is navigating pages, back navigation, refresh), DO NOT bill!
-    const isBillableAction = Boolean(isSearchInquiry && !hasValidSession && parseInt(page || 1) === 1);
-
     const todayDhaka = getDhakaDateString(new Date());
     let entitlements = null;
-    let searchQuota = { limit: 'unlimited', used: 0, remaining: 'unlimited', plan: 'guest' };
     let canAccessDataset = false;
+    let searchLimit = 10;
 
     if (req.user) {
       entitlements = await getEffectiveEntitlements(req.user._id);
       canAccessDataset = Boolean(entitlements.quotas.canAccessPaperDatasets);
-      const isDailyLimited = entitlements.quotas.dailySearchLimit !== null;
+      searchLimit = entitlements.quotas.dailySearchLimit;
+    }
 
-      // Initialize or reset daily search usage for today
-      if (!req.user.dailySearchUsage || req.user.dailySearchUsage.date !== todayDhaka) {
-        req.user.dailySearchUsage = { date: todayDhaka, count: 0 };
-      }
+    // Context tracking for instant filter refinements
+    const effectiveContextId = searchContextId || searchActionId || (hasValidSession ? sessionId : createSearchContextId());
 
-      if (isDailyLimited) {
-        const searchLimit = entitlements.quotas.dailySearchLimit;
-        const currentUsed = req.user.dailySearchUsage.count || 0;
+    // Billable Action Rule:
+    // 1. Must be an active search inquiry on page 1.
+    // 2. Must not be a cached session page replay.
+    // 3. Must not have already been billed under this searchContextId today (instant filter refinements within the active inquiry do NOT consume quota).
+    const alreadyBilledForContext = isAlreadyBilled(scope, 'search', effectiveContextId, todayDhaka);
+    const isBillableAction = Boolean(isSearchInquiry && !hasValidSession && parseInt(page || 1) === 1 && !alreadyBilledForContext);
 
-        // Check if initiating search inquiry and already at quota limit
-        // Note: A spoofed sessionId cannot bypass this because hasValidSession would be false
-        if ((isBillableAction || !hasValidSession) && isSearchInquiry && currentUsed >= searchLimit) {
-          return res.status(403).json({
-            message: `Daily search limit reached. You have completed ${searchLimit}/${searchLimit} searches today on the ${entitlements.label}. Upgrade to Premium or activate your 7-day free trial for unlimited daily searches.`,
-            code: 'SEARCH_QUOTA_EXCEEDED',
-            limit: searchLimit,
-            used: currentUsed,
-            remaining: 0,
-            plan: entitlements.plan,
-            resetsAt: 'Midnight 00:00 (Asia/Dhaka)',
-          });
-        }
+    let searchQuota = { limit: 'unlimited', used: 0, remaining: 'unlimited', plan: 'guest' };
 
-        // Bill credit only when initiating a new committed search query session
-        if (isBillableAction) {
-          req.user.dailySearchUsage.count = currentUsed + 1;
-          await req.user.save();
-          reservedUserCredit = true;
-        }
+    if (isBillableAction) {
+      const reservation = await reserveUsage({
+        user: req.user,
+        scope,
+        metric: 'search',
+        idempotencyKey: effectiveContextId,
+        limit: searchLimit,
+        dateStr: todayDhaka,
+      });
 
-        const updatedCount = req.user.dailySearchUsage.count || 0;
-        searchQuota = {
-          limit: searchLimit,
-          used: updatedCount,
-          remaining: Math.max(0, searchLimit - updatedCount),
-          plan: entitlements.plan,
-          resetsAt: 'Midnight 00:00 (Asia/Dhaka)',
-        };
-      } else {
-        // Unlimited daily searches (Premium, Pro Max, Admin, Grandfathered Trial)
-        if (isBillableAction) {
-          req.user.dailySearchUsage.count = (req.user.dailySearchUsage?.count || 0) + 1;
-          await req.user.save();
-        }
-        searchQuota = {
-          limit: 'unlimited',
-          used: req.user.dailySearchUsage?.count || 0,
-          remaining: 'unlimited',
-          plan: entitlements.plan,
-        };
-      }
-    } else {
-      // Guest session (unauthenticated): capped at 10 daily searches
-      const clientIp = req.ip || req.connection?.remoteAddress || 'guest';
-      let guestUsage = guestSearchStore.get(clientIp);
-      if (!guestUsage || guestUsage.date !== todayDhaka) {
-        guestUsage = { date: todayDhaka, count: 0 };
-        guestSearchStore.set(clientIp, guestUsage);
-      }
-
-      if ((isBillableAction || !hasValidSession) && isSearchInquiry && guestUsage.count >= 10) {
+      if (!reservation.allowed) {
+        const planLabel = entitlements ? entitlements.label : 'Standard Free Plan';
         return res.status(403).json({
-          message: 'Daily search limit reached for guest session (10/10 searches completed today). Sign in with your university student account or upgrade to Premium for unlimited searches.',
+          message: `Daily search limit reached. You have completed ${searchLimit}/${searchLimit} searches today on the ${planLabel}. Upgrade to Premium or activate your 7-day free trial for unlimited daily searches.`,
           code: 'SEARCH_QUOTA_EXCEEDED',
-          limit: 10,
-          used: guestUsage.count,
+          limit: searchLimit,
+          used: reservation.used,
           remaining: 0,
-          plan: 'guest',
+          plan: entitlements ? entitlements.plan : 'guest',
           resetsAt: 'Midnight 00:00 (Asia/Dhaka)',
         });
       }
 
-      if (isBillableAction) {
-        guestUsage.count += 1;
-        reservedGuestCredit = true;
+      if (reservation.billed) {
+        reservedUserCredit = Boolean(req.user);
+        reservedGuestCredit = !req.user;
       }
 
       searchQuota = {
-        limit: 10,
-        used: guestUsage.count,
-        remaining: Math.max(0, 10 - guestUsage.count),
-        plan: 'guest',
+        limit: searchLimit === null ? 'unlimited' : searchLimit,
+        used: reservation.count,
+        remaining: reservation.remaining,
+        plan: entitlements ? entitlements.plan : 'guest',
+        resetsAt: 'Midnight 00:00 (Asia/Dhaka)',
+      };
+    } else {
+      let currentUsed = 0;
+      if (req.user) {
+        if (!req.user.dailySearchUsage || req.user.dailySearchUsage.date !== todayDhaka) {
+          currentUsed = 0;
+        } else {
+          currentUsed = req.user.dailySearchUsage.count || 0;
+        }
+      } else {
+        const gu = guestSearchStore.get(scope);
+        currentUsed = (gu && gu.date === todayDhaka) ? gu.count : 0;
+      }
+
+      searchQuota = {
+        limit: searchLimit === null ? 'unlimited' : searchLimit,
+        used: currentUsed,
+        remaining: searchLimit !== null ? Math.max(0, searchLimit - currentUsed) : 'unlimited',
+        plan: entitlements ? entitlements.plan : 'guest',
         resetsAt: 'Midnight 00:00 (Asia/Dhaka)',
       };
     }
@@ -218,15 +204,14 @@ router.get('/', optionalAuth, async (req, res) => {
         scope,
       });
     } catch (searchErr) {
-      // On total technical failure, release the reserved credit so user is not billed
-      if (reservedUserCredit && req.user) {
-        req.user.dailySearchUsage.count = Math.max(0, (req.user.dailySearchUsage.count || 1) - 1);
-        await req.user.save().catch(() => {});
-      }
-      if (reservedGuestCredit) {
-        const clientIp = req.ip || req.connection?.remoteAddress || 'guest';
-        const gu = guestSearchStore.get(clientIp);
-        if (gu) gu.count = Math.max(0, gu.count - 1);
+      if (reservedUserCredit || reservedGuestCredit) {
+        await releaseReservedCredit({
+          user: req.user,
+          scope,
+          metric: 'search',
+          idempotencyKey: effectiveContextId,
+          dateStr: todayDhaka,
+        });
       }
       throw searchErr;
     }
@@ -256,8 +241,9 @@ router.get('/', optionalAuth, async (req, res) => {
       }
     }
 
-    // Attach search quota telemetry
+    // Attach search quota telemetry and active inquiry context ID
     searchResult.searchQuota = searchQuota;
+    searchResult.searchContextId = effectiveContextId;
 
     return res.json(searchResult);
   } catch (err) {

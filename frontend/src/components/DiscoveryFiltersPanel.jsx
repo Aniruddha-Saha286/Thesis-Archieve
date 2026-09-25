@@ -54,52 +54,19 @@ export default function DiscoveryFiltersPanel({
   onResetAllFilters,
   className = '',
 }) {
-  // Draft filter states for multi-filter staging
-  const [draftInstitution, setDraftInstitution] = useState(selectedInstitution);
-  const [draftInstitutionMode, setDraftInstitutionMode] = useState(institutionMode);
-  const [draftAcademicOnly, setDraftAcademicOnly] = useState(academicOnly);
-  const [draftCountries, setDraftCountries] = useState(selectedCountries || []);
-  const [draftMinCitations, setDraftMinCitations] = useState(minCitations || '');
-  const [draftSortOrder, setDraftSortOrder] = useState(sortOrder || 'relevance');
+  const [localMinCitations, setLocalMinCitations] = useState(minCitations || '');
+  const citationsTimerRef = useRef(null);
 
   useEffect(() => {
-    setDraftInstitution(selectedInstitution);
-    setDraftInstitutionMode(institutionMode);
-    setDraftAcademicOnly(academicOnly);
-    setDraftCountries(selectedCountries || []);
-    setDraftMinCitations(minCitations || '');
-    setDraftSortOrder(sortOrder || 'relevance');
-  }, [selectedInstitution, institutionMode, academicOnly, selectedCountries, minCitations, sortOrder]);
+    setLocalMinCitations(minCitations || '');
+  }, [minCitations]);
 
-  const effectiveInstitution = onApplyFilters ? draftInstitution : selectedInstitution;
-  const effectiveInstitutionMode = onApplyFilters ? draftInstitutionMode : institutionMode;
-  const effectiveAcademicOnly = onApplyFilters ? draftAcademicOnly : academicOnly;
-  const effectiveCountries = onApplyFilters ? draftCountries : selectedCountries;
-  const effectiveMinCitations = onApplyFilters ? draftMinCitations : minCitations;
-  const effectiveSortOrder = onApplyFilters ? draftSortOrder : sortOrder;
-
-  const isDirty = Boolean(onApplyFilters) && (
-    (draftInstitution?.id || '') !== (selectedInstitution?.id || '') ||
-    draftInstitutionMode !== institutionMode ||
-    draftAcademicOnly !== academicOnly ||
-    draftMinCitations !== (minCitations || '') ||
-    draftSortOrder !== sortOrder ||
-    draftCountries.length !== (selectedCountries || []).length ||
-    draftCountries.some((c) => !(selectedCountries || []).includes(c))
-  );
-
-  const handleApply = () => {
-    if (onApplyFilters) {
-      onApplyFilters({
-        institution: draftInstitution,
-        institutionMode: draftInstitutionMode,
-        academicOnly: draftAcademicOnly,
-        countries: draftCountries,
-        minCitations: draftMinCitations,
-        sortOrder: draftSortOrder,
-      });
-    }
-  };
+  const effectiveInstitution = selectedInstitution;
+  const effectiveInstitutionMode = institutionMode;
+  const effectiveAcademicOnly = academicOnly;
+  const effectiveCountries = selectedCountries || [];
+  const effectiveMinCitations = localMinCitations;
+  const effectiveSortOrder = sortOrder || 'relevance';
 
   // Institution typeahead state
   const [instInput, setInstInput] = useState('');
@@ -153,9 +120,7 @@ export default function DiscoveryFiltersPanel({
   };
 
   const handleSelectInstItem = (inst) => {
-    if (onApplyFilters) {
-      setDraftInstitution(inst);
-    } else if (onSelectInstitution) {
+    if (onSelectInstitution) {
       onSelectInstitution(inst);
     }
     setInstInput('');
@@ -164,9 +129,7 @@ export default function DiscoveryFiltersPanel({
   };
 
   const handleClearInstitution = () => {
-    if (onApplyFilters) {
-      setDraftInstitution(null);
-    } else if (onSelectInstitution) {
+    if (onSelectInstitution) {
       onSelectInstitution(null);
     }
   };
@@ -175,9 +138,7 @@ export default function DiscoveryFiltersPanel({
     e.preventDefault();
     const code = customCountryInput.trim().toUpperCase();
     if (code && /^[A-Z]{2}$/.test(code)) {
-      if (onApplyFilters) {
-        setDraftCountries((prev) => (prev.includes(code) ? prev : [...prev, code]));
-      } else if (onToggleCountry) {
+      if (onToggleCountry) {
         onToggleCountry(code);
       }
       setCustomCountryInput('');
@@ -185,46 +146,43 @@ export default function DiscoveryFiltersPanel({
   };
 
   const handleToggleCountryCode = (code) => {
-    if (onApplyFilters) {
-      setDraftCountries((prev) =>
-        prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
-      );
-    } else if (onToggleCountry) {
+    if (onToggleCountry) {
       onToggleCountry(code);
     }
   };
 
   const handleClearCountriesList = () => {
-    if (onApplyFilters) {
-      setDraftCountries([]);
-    } else if (onClearCountries) {
+    if (onClearCountries) {
       onClearCountries();
     }
   };
 
   const handleMinCitationsChange = (val) => {
-    if (onApplyFilters) {
-      setDraftMinCitations(val);
-    } else if (onChangeMinCitations) {
+    setLocalMinCitations(val);
+    if (citationsTimerRef.current) clearTimeout(citationsTimerRef.current);
+    citationsTimerRef.current = setTimeout(() => {
+      if (onChangeMinCitations) {
+        onChangeMinCitations(val);
+      }
+    }, 400);
+  };
+
+  const handlePresetCitations = (val) => {
+    setLocalMinCitations(val);
+    if (citationsTimerRef.current) clearTimeout(citationsTimerRef.current);
+    if (onChangeMinCitations) {
       onChangeMinCitations(val);
     }
   };
 
   const handleSortOrderChange = (val) => {
-    if (onApplyFilters) {
-      setDraftSortOrder(val);
-    } else if (onChangeSortOrder) {
+    if (onChangeSortOrder) {
       onChangeSortOrder(val);
     }
   };
 
   const handleReset = () => {
-    setDraftInstitution(null);
-    setDraftInstitutionMode('affiliation');
-    setDraftAcademicOnly(true);
-    setDraftCountries([]);
-    setDraftMinCitations('');
-    setDraftSortOrder('relevance');
+    setLocalMinCitations('');
     if (onResetAllFilters) {
       onResetAllFilters();
     }
@@ -240,22 +198,6 @@ export default function DiscoveryFiltersPanel({
 
   return (
     <div className={`space-y-5 text-xs ${className}`}>
-      {/* Draft Apply Bar (Top) */}
-      {onApplyFilters && isDirty && (
-        <div className="p-2 bg-amber-50 border border-amber-300 rounded-sm flex items-center justify-between gap-2 animate-in fade-in">
-          <span className="font-mono-meta text-[11px] text-amber-900 font-bold">
-            Pending filter changes
-          </span>
-          <button
-            type="button"
-            onClick={handleApply}
-            className="bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-2.5 py-1 rounded-sm text-xs font-mono-meta font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
-          >
-            <Check className="w-3 h-3 text-emerald-400" />
-            <span>Apply Now</span>
-          </button>
-        </div>
-      )}
       {/* Active Author Filter Pill (if author search was activated) */}
       {selectedAuthor && (
         <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-sm flex items-center justify-between gap-2">
@@ -548,7 +490,7 @@ export default function DiscoveryFiltersPanel({
                 <button
                   key={p.label}
                   type="button"
-                  onClick={() => handleMinCitationsChange(p.value)}
+                  onClick={() => handlePresetCitations(p.value)}
                   className={`px-2 py-0.5 rounded-2xs text-[10px] font-mono-meta border transition cursor-pointer ${
                     active
                       ? 'bg-[#1C1B18] text-white border-[#1C1B18] font-bold'
@@ -579,31 +521,22 @@ export default function DiscoveryFiltersPanel({
         </div>
       </div>
 
-      {/* Action Footer: Apply & Reset */}
+      {/* Action Footer: Auto-Apply Indicator & Reset */}
       <div className="pt-2 border-t border-[#E2DFD8] space-y-2">
-        {onApplyFilters && (
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={!isDirty}
-            className={`w-full py-2 rounded-sm text-xs font-mono-meta font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
-              isDirty
-                ? 'bg-[#1C1B18] hover:bg-[#2E2C28] text-white animate-pulse'
-                : 'bg-[#FAF9F5] border border-[#D5D1C7] text-[#737067] cursor-not-allowed opacity-80'
-            }`}
-          >
-            <Check className="w-3.5 h-3.5" />
-            <span>{isDirty ? 'Apply Discovery Filters' : 'Filters Up to Date'}</span>
-          </button>
-        )}
-
+        <div className="flex items-center justify-between text-[11px] font-mono-meta text-[#737067]">
+          <span>Filters apply instantly</span>
+          <span className="text-[#2C6B3F] font-bold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2C6B3F] inline-block"></span>
+            Active
+          </span>
+        </div>
         <button
           type="button"
           onClick={handleReset}
-          className="w-full bg-white hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#524F47] hover:text-[#1C1B18] py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center justify-center gap-1.5 cursor-pointer"
+          className="w-full bg-white hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#524F47] hover:text-[#1C1B18] py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset All Discovery Filters</span>
+          <span>Reset All Filters</span>
         </button>
       </div>
     </div>

@@ -70,6 +70,7 @@ export default function App() {
   const [searchMode, setSearchMode] = useState('publications'); // 'publications' | 'authors'
   const [searchQuery, setSearchQuery] = useState('');
   const [sessionId, setSessionId] = useState(null);
+  const [searchContextId, setSearchContextId] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('All Disciplines');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [subjectsList, setSubjectsList] = useState(DEFAULT_CATEGORIES);
@@ -100,6 +101,7 @@ export default function App() {
   const [providerTelemetry, setProviderTelemetry] = useState({});
   const [loadingTheses, setLoadingTheses] = useState(false);
   const currentRequestIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
   // Research Workspace State
   const [savedPapersCount, setSavedPapersCount] = useState(0);
@@ -267,6 +269,12 @@ export default function App() {
   }, [socket, isApproved, isAdmin]);
 
   const fetchTheses = async (pageOverride) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     const requestId = ++currentRequestIdRef.current;
     try {
       setLoadingTheses(true);
@@ -317,8 +325,15 @@ export default function App() {
       if (sessionId) {
         params.sessionId = sessionId;
       }
+      if (searchContextId) {
+        params.searchContextId = searchContextId;
+      }
 
-      const res = await axios.get('/api/thesis', { params });
+      const res = await axios.get('/api/thesis', {
+        params,
+        signal: abortController.signal,
+      });
+
       if (requestId === currentRequestIdRef.current) {
         if (Array.isArray(res.data)) {
           setTheses(res.data);
@@ -332,6 +347,9 @@ export default function App() {
           if (res.data.sessionId) {
             setSessionId(res.data.sessionId);
           }
+          if (res.data.searchContextId) {
+            setSearchContextId(res.data.searchContextId);
+          }
           if (res.data.searchQuota) {
             setSearchQuota(res.data.searchQuota);
           }
@@ -339,6 +357,9 @@ export default function App() {
         setSearchQuotaError(null);
       }
     } catch (err) {
+      if (axios.isCancel(err) || err.name === 'CanceledError' || err.name === 'AbortError') {
+        return;
+      }
       if (requestId === currentRequestIdRef.current) {
         console.error('Error fetching theses:', err);
         if (err.response?.data?.code === 'SEARCH_QUOTA_EXCEEDED') {
@@ -490,6 +511,7 @@ export default function App() {
     setYearMin('');
     setYearMax('');
     setSessionId(null);
+    setSearchContextId(null);
     setCurrentPage(1);
   };
 
@@ -595,6 +617,7 @@ export default function App() {
           searchQuery={searchQuery}
           onSearch={(q) => {
             setSessionId(null);
+            setSearchContextId(null);
             setSearchQuery(q);
             setCurrentPage(1);
           }}
@@ -947,16 +970,6 @@ export default function App() {
                   setSessionId(null);
                   setCurrentPage(1);
                 }}
-                onApplyFilters={(draft) => {
-                  setSelectedInstitution(draft.institution || null);
-                  setInstitutionMode(draft.institutionMode || 'affiliation');
-                  setAcademicOnly(draft.academicOnly !== false);
-                  setSelectedCountries(draft.countries || []);
-                  setMinCitations(draft.minCitations || '');
-                  setSortOrder(draft.sortOrder || 'relevance');
-                  setSessionId(null);
-                  setCurrentPage(1);
-                }}
                 onResetAllFilters={resetAllFilters}
               />
             </div>
@@ -1151,7 +1164,11 @@ export default function App() {
                           ? 'bg-rose-50 text-rose-900 border-rose-300 font-bold'
                           : 'bg-[#F2EFE8] text-[#524F47] border-[#D5D1C7]'
                       }`}
-                      title="Standard Academic plan includes 10 daily searches, resetting at midnight (Asia/Dhaka)"
+                      title={`${
+                        searchQuota.plan === 'trial_v2' || searchQuota.plan === 'trial'
+                          ? '7-Day Research Trial'
+                          : 'Standard Academic'
+                      } plan includes ${searchQuota.limit} daily searches, resetting at midnight (Asia/Dhaka)`}
                     >
                       <Search className="w-3 h-3 text-[#737067]" />
                       <span>Daily Searches: {searchQuota.used}/{searchQuota.limit} ({searchQuota.remaining} left)</span>
@@ -1177,14 +1194,16 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-bold text-amber-950">
                     <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-                    <span className="font-serif-title text-sm">Daily Search Limit Reached (10/10 Searches Completed)</span>
+                    <span className="font-serif-title text-sm">
+                      Daily Search Limit Reached ({searchQuotaError.used || searchQuotaError.limit}/{searchQuotaError.limit} Searches Completed)
+                    </span>
                   </div>
                   <span className="bg-amber-200 text-amber-900 text-[10px] font-mono-meta font-bold px-2 py-0.5 rounded-xs uppercase">
-                    Free Tier Quota
+                    {searchQuotaError.plan === 'trial_v2' || searchQuotaError.plan === 'trial' ? 'Trial Quota' : 'Free Tier Quota'}
                   </span>
                 </div>
                 <p className="text-amber-900 text-[11px] leading-relaxed">
-                  You have completed your 10 free daily searches for today on the Standard Academic plan. On the Premium plan, you get <strong>unlimited daily searches</strong> and full dataset access. Your search counter will automatically reset at midnight (Asia/Dhaka time).
+                  You have completed your {searchQuotaError.limit} daily searches for today on the {searchQuotaError.plan === 'trial_v2' || searchQuotaError.plan === 'trial' ? '7-Day Research Trial' : 'Standard Academic plan'}. On the Premium plan, you get <strong>unlimited daily searches</strong> and full dataset access. Your search counter will automatically reset at midnight (Asia/Dhaka time).
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <button
