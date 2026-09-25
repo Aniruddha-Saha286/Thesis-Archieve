@@ -119,11 +119,18 @@ function evaluateDataCiteRelation(attrs, doi, isLinked) {
 
     if (match) {
       const relType = (match.relationType || '').toLowerCase().replace(/[^a-z]/g, '');
-      if (relType === 'issupplementto' || relType === 'issupplementedby') {
+      if (relType === 'issupplementto') {
         return {
           relationType: 'Direct Supplemental Dataset',
           relationshipDirection: 'supplemental',
-          relationEvidence: `DataCite relation '${match.relationType}': Verified supplemental dataset for publication.`,
+          relationEvidence: `DataCite relation 'IsSupplementTo': Verified dataset directly supplements publication.`,
+        };
+      }
+      if (relType === 'issupplementedby') {
+        return {
+          relationType: 'Direct Supplemental Dataset',
+          relationshipDirection: 'supplemental',
+          relationEvidence: `DataCite relation 'IsSupplementedBy': Publication documents supplemental relationship with this dataset.`,
         };
       }
       if (
@@ -243,11 +250,18 @@ function evaluateZenodoRelation(meta, doi, isLinked) {
 
     if (match) {
       const relType = (match.relation || '').toLowerCase().replace(/[^a-z]/g, '');
-      if (relType === 'issupplementto' || relType === 'issupplementedby') {
+      if (relType === 'issupplementto') {
         return {
           relationType: 'Direct Supplemental Dataset',
           relationshipDirection: 'supplemental',
-          relationEvidence: `Zenodo relation '${match.relation}': Declared supplemental dataset for publication.`,
+          relationEvidence: `Zenodo relation 'isSupplementTo': Verified dataset directly supplements publication.`,
+        };
+      }
+      if (relType === 'issupplementedby') {
+        return {
+          relationType: 'Direct Supplemental Dataset',
+          relationshipDirection: 'supplemental',
+          relationEvidence: `Zenodo relation 'isSupplementedBy': Publication documents supplemental relationship with this dataset.`,
         };
       }
       if (

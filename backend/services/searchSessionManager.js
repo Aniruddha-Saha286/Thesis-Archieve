@@ -508,6 +508,38 @@ async function executeSearchSessionLocked(session, {
             }
           }
 
+          // Strict PDF constraint validation: buffer only records with authentic PDF access
+          if (filters.hasPdf) {
+            const hasValidPdf = Boolean(
+              record.isDirectPdf ||
+              (record.pdfUrl && (
+                record.pdfUrl.endsWith('.pdf') ||
+                record.pdfUrl.includes('/pdf/') ||
+                record.pdfUrl.includes('pmc.ncbi.nlm.nih.gov') ||
+                record.pdfUrl.includes('/servlets/purl')
+              ))
+            );
+            if (!hasValidPdf) {
+              continue;
+            }
+          }
+
+          // Open access constraint validation
+          if (filters.isOpenAccess) {
+            if (record.isOpenAccess === false) {
+              continue;
+            }
+          }
+
+          // Publication type constraint validation
+          if (filters.publicationType && filters.publicationType !== 'all') {
+            const normType = normalizePublicationType(filters.publicationType);
+            const recType = normalizePublicationType(record.publicationType);
+            if (normType !== 'all' && recType !== 'all' && recType !== normType) {
+              continue;
+            }
+          }
+
           const recordId = record._id || record.id;
           const doiKey = record.doi ? record.doi.toLowerCase().trim() : null;
           const cleanTitle = cleanTitleForMatching(record.title);
