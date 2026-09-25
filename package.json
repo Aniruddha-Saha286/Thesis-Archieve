@@ -1,0 +1,14 @@
+{
+  "name": "project-panther-thesis-vault",
+  "version": "1.0.0",
+  "description": "The Thesis Archive - Open Scholarly Repository & Dataset Vault",
+  "scripts": {
+    "dev:backend": "cd backend && node server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "seed": "cd backend && node seed.js",
+    "build": "cd frontend && npm run build"
+  },
+  "keywords": ["thesis", "research", "mern", "tailwind"],
+  "author": "",
+  "license": "ISC"
+}
