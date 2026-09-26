@@ -20,6 +20,7 @@ import {
   Sparkles,
   Building2,
   Award,
+  Globe,
 } from 'lucide-react';
 
 export default function Header({
