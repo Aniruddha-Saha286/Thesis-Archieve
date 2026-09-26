@@ -1813,17 +1813,42 @@ export default function PublicationDetailModal({
                   )}
 
                   {/* Limitations Card */}
-                  <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                    <span className="text-[11px] font-mono-meta text-amber-900 uppercase tracking-wider font-bold block">
-                      ⚠️ Author-Stated Limitations:
-                    </span>
-                    <p className="text-sm text-[#524F47] leading-relaxed">
-                      {summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations}
-                    </p>
-                    {(summaryState.data.summary.cautiousInferredLimitations || summaryState.data.summary.inferredLimitations) && (
-                      <p className="text-xs text-[#737067] italic pt-1 border-t border-[#F0ECE1]">
-                        Cautious Inferred Scope: {summaryState.data.summary.cautiousInferredLimitations || summaryState.data.summary.inferredLimitations}
+                  <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-3 shadow-2xs">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-[#F0ECE1]">
+                        <span className="text-[11px] font-mono-meta text-amber-900 uppercase tracking-wider font-bold flex items-center gap-1.5">
+                          ⚠️ Author-Stated Limitations:
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono-meta font-bold uppercase ${
+                          (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) &&
+                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).toLowerCase().includes('none explicitly') &&
+                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).includes('সুনির্দিষ্ট সীমাবদ্ধতা') &&
+                          (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) !== 'Not reported'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-slate-100 text-slate-700 border border-slate-300'
+                        }`}>
+                          {(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) &&
+                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).toLowerCase().includes('none explicitly') &&
+                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).includes('সুনির্দিষ্ট সীমাবদ্ধতা') &&
+                          (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) !== 'Not reported'
+                            ? '✓ Stated by Authors'
+                            : 'Unstated in Abstract'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-[#524F47] leading-relaxed mt-2">
+                        {summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations}
                       </p>
+                    </div>
+
+                    {(summaryState.data.summary.cautiousInferredLimitations || summaryState.data.summary.inferredLimitations) && (
+                      <div className="pt-2.5 border-t border-[#F0ECE1] bg-[#FAF9F5] p-3.5 rounded-sm space-y-1">
+                        <span className="text-[10px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block mb-1">
+                          🔍 Cautious Methodological Bounds & Inferred Scope:
+                        </span>
+                        <p className="text-xs text-[#524F47] leading-relaxed">
+                          {summaryState.data.summary.cautiousInferredLimitations || summaryState.data.summary.inferredLimitations}
+                        </p>
+                      </div>
                     )}
                   </div>
 

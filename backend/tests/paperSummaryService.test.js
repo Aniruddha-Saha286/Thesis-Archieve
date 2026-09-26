@@ -319,7 +319,113 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary);
   });
 
-  // 7. SSRF Protection & URL Validation
+  // 10. Contrastive Author-Stated Limitation Extraction
+  await test('Author limitation extraction: detects contrastive "however" and "challenges remain" markers accurately', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+
+    const abstract =
+      'Perovskite solar cells (PSCs) have emerged as one of the most promising photovoltaic technologies. ' +
+      'However, challenges regarding stability, toxicity, and commercial scalability remain. ' +
+      'Machine learning offers powerful tools for accelerating material discovery and predicting device degradation under operating conditions. ' +
+      'This review surveys computational pipelines and feature engineering techniques.';
+
+    const dummyUser = {
+      _id: 'usr_mock_lim_1',
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 0 },
+      save: async () => {},
+    };
+
+    const res = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'paper_lim_contrastive',
+        title: 'Machine Learning for Perovskite Solar Cells',
+        abstract,
+      },
+      user: dummyUser,
+      entitlements: {
+        plan: 'trial_v2',
+        quotas: { canUsePaperSummarizer: true, dailySummaryGenerationLimit: 3 },
+      },
+    });
+
+    assert.strictEqual(res.enabled, true);
+    assert.ok(res.summary.authorStatedLimitations.toLowerCase().includes('challenges'));
+    assert.ok(res.summary.authorStatedLimitations.toLowerCase().includes('stability'));
+    assert.ok(res.summary.cautiousInferredLimitations.length > 20);
+  });
+
+  // 11. Contextual Inferred Scope when Unstated in Abstract
+  await test('Contextual inferred limitations: generates substantive domain and sample bounds when author unstated in abstract', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+
+    const abstract =
+      'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. ' +
+      'We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. ' +
+      'Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable.';
+
+    const dummyUser = {
+      _id: 'usr_mock_lim_2',
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 0 },
+      save: async () => {},
+    };
+
+    const res = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'paper_transformer_lim',
+        title: 'Attention Is All You Need',
+        abstract,
+      },
+      user: dummyUser,
+      entitlements: {
+        plan: 'trial_v2',
+        quotas: { canUsePaperSummarizer: true, dailySummaryGenerationLimit: 3 },
+      },
+    });
+
+    assert.strictEqual(res.enabled, true);
+    assert.strictEqual(res.summary.authorStatedLimitations, 'None explicitly stated by the authors in the abstract text.');
+    assert.ok(res.summary.cautiousInferredLimitations.includes('Evaluation Scope'));
+    assert.ok(res.summary.cautiousInferredLimitations.includes('Methodological Assumptions'));
+    assert.ok(res.summary.cautiousInferredLimitations.toLowerCase().includes('computational complexity'));
+  });
+
+  // 12. Full-Text Limitation Section Extraction
+  await test('Full-text limitation section extraction: pulls directly from verified fullTextSections', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+
+    const abstract =
+      'We present a neural architecture for audio processing evaluated on standard speech benchmarks with improved accuracy.';
+
+    const dummyUser = {
+      _id: 'usr_mock_lim_3',
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 0 },
+      save: async () => {},
+    };
+
+    const res = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'paper_fulltext_lim',
+        title: 'Audio Neural Architecture',
+        abstract,
+        fullTextExtracted: 'Full content...',
+        fullTextSections: [
+          { title: 'Introduction', content: 'Audio models are important.' },
+          { title: 'Limitations', content: 'Our approach requires 8 A100 GPUs during training and exhibits latency degradation on noisy audio streams.' },
+        ],
+      },
+      user: dummyUser,
+      entitlements: {
+        plan: 'premium_6m',
+        quotas: { canUsePaperSummarizer: true, dailySummaryGenerationLimit: null, canAccessFullTextSummary: true },
+      },
+    });
+
+    assert.strictEqual(res.enabled, true);
+    assert.ok(res.summary.authorStatedLimitations.toLowerCase().includes('gpus'));
+    assert.ok(res.summary.authorStatedLimitations.toLowerCase().includes('latency degradation'));
+  });
+
+  // 13. SSRF Protection & URL Validation
   await test('SSRF protection: rejects loopback, RFC1918 private IPs, AWS/GCP metadata, and invalid protocols', () => {
     assert.strictEqual(isPrivateIpOrHost('localhost'), true);
     assert.strictEqual(isPrivateIpOrHost('127.0.0.1'), true);
