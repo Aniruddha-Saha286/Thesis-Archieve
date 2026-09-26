@@ -34,7 +34,19 @@ const paperSummarySchema = new mongoose.Schema(
         type: String,
         default: '',
       },
+      oneSentenceTakeaway: {
+        type: String,
+        default: '',
+      },
+      plainLanguageOverview: {
+        type: String,
+        default: '',
+      },
       researchObjective: {
+        type: String,
+        default: '',
+      },
+      researchQuestion: {
         type: String,
         default: '',
       },
@@ -42,7 +54,15 @@ const paperSummarySchema = new mongoose.Schema(
         type: String,
         default: '',
       },
+      studyDesignAndMethods: {
+        type: String,
+        default: '',
+      },
       datasetSample: {
+        type: String,
+        default: 'Not reported',
+      },
+      dataOrSample: {
         type: String,
         default: 'Not reported',
       },
@@ -50,7 +70,19 @@ const paperSummarySchema = new mongoose.Schema(
         type: String,
         default: '',
       },
+      keyFindings: {
+        type: String,
+        default: '',
+      },
+      mainContributions: {
+        type: String,
+        default: '',
+      },
       limitations: {
+        type: String,
+        default: 'Not reported',
+      },
+      authorStatedLimitations: {
         type: String,
         default: 'Not reported',
       },
@@ -58,9 +90,43 @@ const paperSummarySchema = new mongoose.Schema(
         type: String,
         default: null,
       },
+      cautiousInferredLimitations: {
+        type: String,
+        default: null,
+      },
+      futureWork: {
+        type: String,
+        default: '',
+      },
+      relevanceForThesisResearch: {
+        type: String,
+        default: '',
+      },
+      missingInformation: {
+        type: String,
+        default: '',
+      },
+      confidence: {
+        type: String,
+        default: 'moderate',
+      },
+      isAiGenerated: {
+        type: Boolean,
+        default: false,
+      },
+      generationType: {
+        type: String,
+        default: 'grounded_extractive',
+      },
       keyTerms: [
         {
           type: String,
+        },
+      ],
+      evidence: [
+        {
+          sectionOrPage: { type: String, default: '' },
+          quote: { type: String, default: '' },
         },
       ],
       evidenceReferences: [

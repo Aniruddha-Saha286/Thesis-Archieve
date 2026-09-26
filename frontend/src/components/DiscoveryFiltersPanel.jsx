@@ -348,8 +348,7 @@ export default function DiscoveryFiltersPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (onApplyFilters) setDraftInstitutionMode('affiliation');
-                  else if (onChangeInstitutionMode) onChangeInstitutionMode('affiliation');
+                  if (onChangeInstitutionMode) onChangeInstitutionMode('affiliation');
                 }}
                 className={`px-1.5 py-0.5 rounded-2xs text-[10px] cursor-pointer transition ${
                   effectiveInstitutionMode === 'affiliation'
@@ -363,8 +362,7 @@ export default function DiscoveryFiltersPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (onApplyFilters) setDraftInstitutionMode('awarding');
-                  else if (onChangeInstitutionMode) onChangeInstitutionMode('awarding');
+                  if (onChangeInstitutionMode) onChangeInstitutionMode('awarding');
                 }}
                 className={`px-1.5 py-0.5 rounded-2xs text-[10px] cursor-pointer transition ${
                   effectiveInstitutionMode === 'awarding'
@@ -383,8 +381,7 @@ export default function DiscoveryFiltersPanel({
               type="checkbox"
               checked={effectiveAcademicOnly}
               onChange={(e) => {
-                if (onApplyFilters) setDraftAcademicOnly(e.target.checked);
-                else if (onChangeAcademicOnly) onChangeAcademicOnly(e.target.checked);
+                if (onChangeAcademicOnly) onChangeAcademicOnly(e.target.checked);
               }}
               className="rounded-none border-[#D5D1C7] text-[#1C1B18] focus:ring-0 cursor-pointer"
             />

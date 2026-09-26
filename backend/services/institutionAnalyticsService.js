@@ -308,38 +308,66 @@ async function getInstitutionResearchLandscape({
             ),
           ]);
 
-          if (instRes.ok) {
-            const instData = await instRes.json();
-            institutionMeta = {
-              id: cleanId,
-              name: instData.display_name || 'Academic Institution',
-              countryCode: (instData.country_code || '').toUpperCase() || null,
-              countryName: instData.geo?.country || null,
-              ror: instData.ror || null,
-              homepageUrl: instData.homepage_url || null,
-              worksCount: instData.works_count || 0,
-              citedByCount: instData.cited_by_count || 0,
+          if (instRes.status === 429 || fieldsRes.status === 429 || yearsRes.status === 429) {
+            return {
+              enabled: true,
+              error: true,
+              statusCode: 429,
+              code: 'ANALYTICS_RATE_LIMITED',
+              message: 'OpenAlex rate limit encountered while aggregating institution analytics. Please retry in a few moments.',
             };
-          } else if (fixture) {
-            institutionMeta = fixture.institution;
           }
 
-          if (fieldsRes.ok) {
-            const fData = await fieldsRes.json();
-            rawFieldGroups = fData.group_by || [];
-          } else if (fixture) {
-            rawFieldGroups = fixture.fields;
+          if (!instRes.ok) {
+            if (instRes.status === 404) {
+              return {
+                enabled: true,
+                error: true,
+                statusCode: 404,
+                code: 'INSTITUTION_NOT_FOUND',
+                message: `Institution ${cleanId} was not found in OpenAlex registry.`,
+              };
+            }
+            return {
+              enabled: true,
+              error: true,
+              statusCode: instRes.status >= 500 ? 502 : instRes.status,
+              code: 'ANALYTICS_UPSTREAM_ERROR',
+              message: `Failed to retrieve institution metadata from OpenAlex (HTTP ${instRes.status}).`,
+            };
           }
 
-          if (yearsRes.ok) {
-            const yData = await yearsRes.json();
-            rawYearGroups = yData.group_by || [];
-          } else if (fixture) {
-            rawYearGroups = fixture.years;
+          const instData = await instRes.json();
+          institutionMeta = {
+            id: cleanId,
+            name: instData.display_name || 'Academic Institution',
+            countryCode: (instData.country_code || '').toUpperCase() || null,
+            countryName: instData.geo?.country || null,
+            ror: instData.ror || null,
+            homepageUrl: instData.homepage_url || null,
+            worksCount: instData.works_count || 0,
+            citedByCount: instData.cited_by_count || 0,
+          };
+
+          if (!fieldsRes.ok || !yearsRes.ok) {
+            const errStatus = !fieldsRes.ok ? fieldsRes.status : yearsRes.status;
+            return {
+              enabled: true,
+              error: true,
+              statusCode: errStatus >= 500 ? 502 : errStatus,
+              code: 'ANALYTICS_UPSTREAM_ERROR',
+              message: `OpenAlex returned an error while aggregating research landscape data (HTTP ${errStatus}).`,
+            };
           }
+
+          const fData = await fieldsRes.json();
+          rawFieldGroups = fData.group_by || [];
+
+          const yData = await yearsRes.json();
+          rawYearGroups = yData.group_by || [];
         } catch (fetchErr) {
-          // If network failed and fixture is available, use fixture as fallback
-          if (fixture) {
+          // If network failed and in test/offline mode with fixture available, use fixture as fallback
+          if (fixture && (process.env.NODE_ENV === 'test' || process.env.OFFLINE_MODE === 'true')) {
             institutionMeta = fixture.institution;
             rawFieldGroups = fixture.fields;
             rawYearGroups = fixture.years;

@@ -97,12 +97,17 @@ async function runLiveSmokeTests() {
         title: 'Attention Is All You Need',
         abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable.',
       },
-      user: null,
-      scope: 'live_smoke_guest',
+      user: {
+        _id: 'smoke_user_trial',
+        dailySummaryUsage: { date: '2026-09-26', count: 0 },
+        save: async () => {},
+      },
+      scope: 'live_smoke_trial',
       entitlements: {
-        plan: 'guest',
+        plan: 'trial_v2',
         quotas: {
-          dailySummaryGenerationLimit: 2,
+          canUsePaperSummarizer: true,
+          dailySummaryGenerationLimit: 3,
           canAccessFullTextSummary: false,
         },
       },
@@ -115,6 +120,14 @@ async function runLiveSmokeTests() {
     assert(summaryResult.summary?.researchObjective, 'Summary should have research objective');
     assert(Array.isArray(summaryResult.summary?.keyTerms), 'Key terms should be an array');
     console.log(`    Generated grounded summary with ${summaryResult.summary.keyTerms.length} key domain terms.`);
+
+    // Verify unauthenticated guest is strictly blocked
+    const guestResult = await getOrGeneratePaperSummary({
+      paper: { id: 'smoke_guest_check', title: 'Test', abstract: 'Substantial abstract for testing that guest is blocked.' },
+      user: null,
+      entitlements: { plan: 'guest' },
+    });
+    assert.strictEqual(guestResult.code, 'FEATURE_LOCKED');
   });
 
   console.log(`\n===============================================================`);

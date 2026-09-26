@@ -74,6 +74,7 @@ export default function App() {
   const [searchContextId, setSearchContextId] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('All Disciplines');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const [selectedFieldId, setSelectedFieldId] = useState('');
   const [subjectsList, setSubjectsList] = useState(DEFAULT_CATEGORIES);
   const [selectedInstitution, setSelectedInstitution] = useState(null);
   const [institutionMode, setInstitutionMode] = useState('affiliation');
@@ -166,6 +167,7 @@ export default function App() {
     isApproved,
     selectedCategory,
     selectedSubjectId,
+    selectedFieldId,
     selectedInstitution,
     institutionMode,
     academicOnly,
@@ -308,8 +310,12 @@ export default function App() {
       if (selectedSubjectId) {
         params.subjectId = selectedSubjectId;
       }
+      if (selectedFieldId) {
+        params.fieldId = selectedFieldId;
+      }
       if (selectedInstitution?.id) {
         params.institutionId = selectedInstitution.id;
+        params.institutionName = selectedInstitution.name;
         params.institutionMode = institutionMode;
       }
       if (selectedCountries.length > 0) {
@@ -470,6 +476,7 @@ export default function App() {
     searchQuery ||
     selectedCategory !== 'All Disciplines' ||
     selectedSubjectId ||
+    selectedFieldId ||
     selectedPublicationType !== 'all' ||
     selectedPublisher ||
     selectedInstitution ||
@@ -484,24 +491,34 @@ export default function App() {
   );
 
   const activeFilterCount = [
-    selectedCategory !== 'All Disciplines',
-    selectedSubjectId,
-    selectedInstitution,
+    Boolean(selectedCategory !== 'All Disciplines' || selectedSubjectId || selectedFieldId),
+    Boolean(selectedInstitution),
     selectedCountries.length > 0,
-    selectedAuthorFilter,
-    minCitations,
+    Boolean(selectedAuthorFilter),
+    Boolean(minCitations),
     sortOrder !== 'relevance',
     selectedPublicationType !== 'all',
     hasPdfOnly,
     isOpenAccessOnly,
-    (yearMin || yearMax),
-    selectedPublisher,
+    Boolean(yearMin || yearMax),
+    Boolean(selectedPublisher),
+    Boolean(searchQuery),
   ].filter(Boolean).length;
+
+  const clearCategoryFilter = () => {
+    setSelectedCategory('All Disciplines');
+    setSelectedSubjectId('');
+    setSelectedFieldId('');
+    setSessionId(null);
+    setCurrentPage(1);
+  };
 
   const resetAllFilters = () => {
     setSelectedCategory('All Disciplines');
     setSelectedSubjectId('');
+    setSelectedFieldId('');
     setSelectedInstitution(null);
+    setInstitutionMode('affiliation');
     setSelectedCountries([]);
     setSelectedAuthorFilter(null);
     setMinCitations('');
@@ -1260,43 +1277,43 @@ export default function App() {
                 {searchQuery && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Query: "{searchQuery}"</span>
-                    <button onClick={() => { setSearchQuery(''); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSearchQuery(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedCategory !== 'All Disciplines' && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Domain: {selectedCategory}</span>
-                    <button onClick={() => { setSelectedCategory('All Disciplines'); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={clearCategoryFilter} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer" title="Remove domain filter">✕</button>
                   </span>
                 )}
                 {selectedPublicationType !== 'all' && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Type: {selectedPublicationType}</span>
-                    <button onClick={() => { setSelectedPublicationType('all'); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSelectedPublicationType('all'); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedPublisher && (
                   <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-xs text-amber-950 font-medium">
                     <span>Venue: {selectedPublisher}</span>
-                    <button onClick={() => { setSelectedPublisher(''); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSelectedPublisher(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {(yearMin || yearMax) && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Years: {yearMin || 'Any'} – {yearMax || 'Any'}</span>
-                    <button onClick={() => { setYearMin(''); setYearMax(''); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setYearMin(''); setYearMax(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {hasPdfOnly && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>PDF Only</span>
-                    <button onClick={() => { setHasPdfOnly(false); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setHasPdfOnly(false); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {isOpenAccessOnly && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Open Access Only</span>
-                    <button onClick={() => { setIsOpenAccessOnly(false); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setIsOpenAccessOnly(false); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedInstitution && (
@@ -1554,20 +1571,34 @@ export default function App() {
           isOpen={!!inspectingLandscapeInst}
           institution={inspectingLandscapeInst}
           onClose={() => setInspectingLandscapeInst(null)}
-          onFilterByField={(fieldName) => {
-            const matched = subjectsList.find(
-              (s) =>
-                s.label.toLowerCase() === fieldName.toLowerCase() ||
-                (s.shortLabel && s.shortLabel.toLowerCase() === fieldName.toLowerCase())
-            );
+          onFilterByField={(param) => {
+            const fieldId = typeof param === 'object' && param ? param.fieldId : null;
+            const fieldName = typeof param === 'object' && param ? (param.fieldName || param.name) : param;
+
+            let matched = null;
+            if (fieldId) {
+              matched = subjectsList.find(
+                (s) => s.openAlexFieldId === fieldId || s.id === fieldId
+              );
+            }
+            if (!matched && fieldName) {
+              matched = subjectsList.find(
+                (s) =>
+                  s.label?.toLowerCase() === fieldName.toLowerCase() ||
+                  (s.shortLabel && s.shortLabel.toLowerCase() === fieldName.toLowerCase())
+              );
+            }
+
             if (matched) {
               setSelectedSubjectId(matched.id);
               setSelectedCategory(matched.label);
-            } else {
+            } else if (fieldName) {
               setSelectedCategory(fieldName);
             }
+            setSelectedFieldId(fieldId || (matched?.openAlexFieldId) || null);
             setSessionId(null);
             setCurrentPage(1);
+            setInspectingLandscapeInst(null);
           }}
         />
       )}

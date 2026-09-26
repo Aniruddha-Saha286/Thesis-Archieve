@@ -147,8 +147,10 @@ export default function InstitutionLandscapeModal({
         const serverMsg = err.response?.data?.message;
         if (err.response?.status === 404) {
           setError('Institution records were not found in the OpenAlex knowledge graph.');
-        } else if (err.response?.status === 503) {
-          setError('The authoritative analytics service is temporarily unavailable. Please retry in a few moments.');
+        } else if (err.response?.status === 429) {
+          setError(serverMsg || 'Upstream analytics rate limit reached. Please retry in a few moments.');
+        } else if (err.response?.status === 502 || err.response?.status === 503) {
+          setError(serverMsg || 'The authoritative analytics service is temporarily unavailable. Please retry in a few moments.');
         } else {
           setError(serverMsg || 'An unexpected error occurred while loading institution analytics.');
         }
@@ -541,7 +543,17 @@ export default function InstitutionLandscapeModal({
                   </span>
                 </div>
 
-                {distributionView === 'chart' ? (
+                {slices.length === 0 ? (
+                  <div className="p-8 text-center bg-[#FAF9F5] border border-dashed border-[#D5D1C7] rounded-sm space-y-2">
+                    <PieChartIcon className="w-8 h-8 text-[#8C887E] mx-auto" />
+                    <p className="text-sm font-semibold text-[#1C1B18]">
+                      No classified works found for this institution within the selected year range.
+                    </p>
+                    <p className="text-xs text-[#737067]">
+                      Try expanding the year range above or searching across all active years.
+                    </p>
+                  </div>
+                ) : distributionView === 'chart' ? (
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                     {/* SVG Donut Chart */}
                     <div className="md:col-span-5 flex flex-col items-center justify-center relative">
@@ -583,7 +595,7 @@ export default function InstitutionLandscapeModal({
                               onFocus={() => setActiveHoveredSlice(slice)}
                               onClick={() => {
                                 if (onFilterByField && !slice.isOther) {
-                                  onFilterByField(slice.name || slice.fieldName);
+                                  onFilterByField({ fieldId: slice.fieldId, fieldName: slice.name || slice.fieldName });
                                   onClose();
                                 }
                               }}
@@ -649,7 +661,7 @@ export default function InstitutionLandscapeModal({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    onFilterByField(sliceDisplayName);
+                                    onFilterByField({ fieldId: slice.fieldId, fieldName: sliceDisplayName });
                                     onClose();
                                   }}
                                   title={`Filter papers by ${sliceDisplayName}`}
@@ -700,7 +712,7 @@ export default function InstitutionLandscapeModal({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      onFilterByField(sliceDisplayName);
+                                      onFilterByField({ fieldId: slice.fieldId, fieldName: sliceDisplayName });
                                       onClose();
                                     }}
                                     className="min-h-[44px] px-3 py-1 text-2xs font-mono-meta uppercase font-bold text-[#1C1B18] hover:bg-[#FAF9F5] border border-[#D5D1C7] rounded-xs transition inline-flex items-center gap-1 cursor-pointer"

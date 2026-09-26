@@ -20,9 +20,10 @@ const PLAN_CATALOG = {
       canExportBulk: false,
       canSaveComparisons: false,
       canAccessPaperDatasets: false, // Paper-specific dataset discovery locked
+      canUsePaperSummarizer: false,  // Paper summary locked for free plan
       dailySearchLimit: 10,          // 10 committed searches per Asia/Dhaka day
       dailyDatasetLookupLimit: 0,
-      dailySummaryGenerationLimit: 1, // 1 grounded summary per day (abstract-only)
+      dailySummaryGenerationLimit: 0, // 0 paper summaries for free plan
       canAccessFullTextSummary: false,
     },
     features: [
@@ -55,6 +56,7 @@ const PLAN_CATALOG = {
       canSaveComparisons: true,
       maxComparisons: 1,
       canAccessPaperDatasets: true,   // Paper-specific dataset discovery enabled
+      canUsePaperSummarizer: true,
       dailySearchLimit: 20,           // 20 committed paper searches per Asia/Dhaka day
       dailyDatasetLookupLimit: 5,     // Up to 5 paper dataset lookups per day
       dailySummaryGenerationLimit: 3, // Up to 3 grounded summaries per day
@@ -91,6 +93,7 @@ const PLAN_CATALOG = {
       canExportBulk: true,
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
+      canUsePaperSummarizer: true,
       dailySearchLimit: null,        // Unlimited
       dailyDatasetLookupLimit: null, // Unlimited
       dailySummaryGenerationLimit: 5,
@@ -122,14 +125,16 @@ const PLAN_CATALOG = {
       canExportBulk: true,
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
+      canUsePaperSummarizer: true,
       dailySearchLimit: null,        // Unlimited
       dailyDatasetLookupLimit: null, // Unlimited
-      dailySummaryGenerationLimit: 15,
+      dailySummaryGenerationLimit: null, // Unlimited daily summaries for Premium
       canAccessFullTextSummary: true,
     },
     features: [
       'Unlimited daily scholarly searches',
       'Unlimited paper-specific dataset discovery',
+      'Unlimited grounded paper summaries',
       'Up to 1,000 saved papers in personal library',
       'Up to 50 research project collections',
       'Bulk BibTeX & RIS bibliography exports',
@@ -159,9 +164,10 @@ const PLAN_CATALOG = {
       canExportBulk: true,
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
+      canUsePaperSummarizer: true,
       dailySearchLimit: null,        // Unlimited
       dailyDatasetLookupLimit: null, // Unlimited
-      dailySummaryGenerationLimit: 30,
+      dailySummaryGenerationLimit: null, // Unlimited daily summaries for Pro Max
       canAccessFullTextSummary: true,
     },
     features: [
@@ -169,6 +175,7 @@ const PLAN_CATALOG = {
       'Save BDT 150 (15%) versus two 6-month memberships',
       'Unlimited daily scholarly searches',
       'Unlimited paper-specific dataset discovery',
+      'Unlimited grounded paper summaries',
       'Up to 1,000 saved papers in personal library',
       'Up to 50 research collections',
       'Bulk BibTeX & RIS exports',
@@ -196,6 +203,7 @@ const PLAN_CATALOG = {
       canExportBulk: true,
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
+      canUsePaperSummarizer: true,
       dailySearchLimit: null,
       dailyDatasetLookupLimit: null,
       dailySummaryGenerationLimit: null,

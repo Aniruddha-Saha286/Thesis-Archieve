@@ -71,12 +71,16 @@ function extractGroundedAbstractSummary(abstractText, language = 'en') {
   let dataset = '';
   let findings = '';
   let limitations = '';
+  let contributions = '';
+  let future = '';
 
   const objKeywords = ['objective', 'aim', 'propose', 'investigate', 'study examines', 'we present', 'this paper', 'this work', 'addresses', 'focuses on'];
   const methKeywords = ['method', 'approach', 'model', 'algorithm', 'framework', 'technique', 'architecture', 'pipeline', 'trained', 'implemented'];
   const dataKeywords = ['dataset', 'corpus', 'sample', 'participants', 'benchmark', 'survey', 'collected', 'interviews', 'records'];
   const findKeywords = ['results show', 'found that', 'demonstrate', 'achieves', 'outperforms', 'findings indicate', 'conclude', 'shows that', 'reveal', 'accuracy', 'improved'];
-  const limKeywords = ['limitation', 'drawback', 'future work', 'remains', 'challenge', 'restricted to', 'scope is limited'];
+  const limKeywords = ['limitation', 'drawback', 'remains', 'challenge', 'restricted to', 'scope is limited'];
+  const contribKeywords = ['contribution', 'introduce', 'present a novel', 'we developed', 'key advance', 'first study to'];
+  const futureKeywords = ['future work', 'future research', 'further investigation', 'plans to', 'next step'];
 
   for (const s of sentences) {
     const sLower = s.toLowerCase();
@@ -96,6 +100,12 @@ function extractGroundedAbstractSummary(abstractText, language = 'en') {
     if (!limitations && limKeywords.some((k) => sLower.includes(k))) {
       limitations = s;
     }
+    if (!contributions && contribKeywords.some((k) => sLower.includes(k))) {
+      contributions = s;
+    }
+    if (!future && futureKeywords.some((k) => sLower.includes(k))) {
+      future = s;
+    }
   }
 
   // Fallbacks if distinct keywords were not segregated
@@ -112,16 +122,50 @@ function extractGroundedAbstractSummary(abstractText, language = 'en') {
   const tldrSentences = sentences.slice(0, Math.min(3, sentences.length)).join(' ');
   const keyTerms = extractKeyTerms(abstractText);
 
+  // Determine cautious inferred limitations based on available text
+  let inferredScope = null;
+  if (!limitations) {
+    if (dataset) {
+      inferredScope = `Findings reflect reported evaluation sample/benchmark (${dataset}). Broader cross-domain generalizability is not verified in the abstract.`;
+    } else {
+      inferredScope = 'Primary evaluation data or cohort size is not detailed in the available abstract text.';
+    }
+  }
+
+  // Missing information detection
+  const missing = [];
+  if (!dataset) missing.push('Specific benchmark dataset or cohort size not stated in abstract');
+  if (!limitations) missing.push('Author-stated limitations not detailed in abstract');
+  if (!future) missing.push('Future research directions not explicitly outlined in abstract');
+
+  const confidenceRating = (objective && methodology && findings) ? 'high' : (objective || methodology ? 'moderate' : 'cautious');
+
   if (language === 'bn') {
     return {
       tldr: `[সারাংশ] ${tldrSentences}`,
+      oneSentenceTakeaway: `[সারাংশ] ${tldrSentences}`,
+      plainLanguageOverview: tldrSentences,
       researchObjective: objective || 'নির্দিষ্ট লক্ষ্য উল্লিখিত হয়নি',
+      researchQuestion: objective || 'নির্দিষ্ট লক্ষ্য উল্লিখিত হয়নি',
       methodology: methodology || 'পদ্ধতি উল্লিখিত হয়নি',
+      studyDesignAndMethods: methodology || 'পদ্ধতি উল্লিখিত হয়নি',
       datasetSample: dataset || 'তথ্যসেট বা নমুনা উল্লিখিত নেই',
+      dataOrSample: dataset || 'তথ্যসেট বা নমুনা উল্লিখিত নেই',
       mainFindings: findings || 'প্রধান ফলাফল উল্লিখিত নেই',
+      keyFindings: findings || 'প্রধান ফলাফল উল্লিখিত নেই',
+      mainContributions: contributions || objective || 'প্রধান অবদান উল্লিখিত নেই',
       limitations: limitations || 'কোনো সীমাবদ্ধতা সরাসরি উল্লেখ করা হয়নি',
-      inferredLimitations: null,
+      authorStatedLimitations: limitations || 'কোনো সীমাবদ্ধতা সরাসরি উল্লেখ করা হয়নি',
+      inferredLimitations: inferredScope,
+      cautiousInferredLimitations: inferredScope,
+      futureWork: future || 'ভবিষ্যৎ কাজের দিকনির্দেশ উল্লিখিত নেই',
+      relevanceForThesisResearch: 'সম্পর্কিত বিষয়ে সাহিত্য পর্যালোচনা এবং পদ্ধতিগত রেফারেন্স হিসেবে উপযোগী।',
+      missingInformation: missing.join('; '),
+      confidence: confidenceRating,
+      isAiGenerated: false,
+      generationType: 'grounded_extractive',
       keyTerms,
+      evidence: [],
       evidenceReferences: [],
       disclaimer: 'কৃত্রিম বুদ্ধিমত্তা দ্বারা সংক্ষিপ্তকৃত; মূল গবেষণাপত্রের সাথে মিলিয়ে নিন।',
     };
@@ -129,13 +173,29 @@ function extractGroundedAbstractSummary(abstractText, language = 'en') {
 
   return {
     tldr: tldrSentences,
+    oneSentenceTakeaway: tldrSentences,
+    plainLanguageOverview: tldrSentences,
     researchObjective: objective || 'Objective not explicitly distinguished in abstract text.',
+    researchQuestion: objective || 'Objective not explicitly distinguished in abstract text.',
     methodology: methodology || 'Methodology details not separated in available abstract text.',
+    studyDesignAndMethods: methodology || 'Methodology details not separated in available abstract text.',
     datasetSample: dataset || 'Not reported',
+    dataOrSample: dataset || 'Not reported',
     mainFindings: findings || 'Findings not explicitly segregated in abstract text.',
+    keyFindings: findings || 'Findings not explicitly segregated in abstract text.',
+    mainContributions: contributions || objective || 'Core contribution presented in the reported methodology.',
     limitations: limitations || 'Not reported',
-    inferredLimitations: null,
+    authorStatedLimitations: limitations || 'Not reported',
+    inferredLimitations: inferredScope,
+    cautiousInferredLimitations: inferredScope,
+    futureWork: future || 'Not detailed in available abstract text.',
+    relevanceForThesisResearch: 'Useful as a methodological benchmark, background citation, or comparative baseline in related thesis inquiries.',
+    missingInformation: missing.join('; '),
+    confidence: confidenceRating,
+    isAiGenerated: false,
+    generationType: 'grounded_extractive',
     keyTerms,
+    evidence: [],
     evidenceReferences: [],
     disclaimer: 'AI-generated; verify against the original paper',
   };
@@ -164,6 +224,18 @@ async function getOrGeneratePaperSummary({
     return {
       enabled: false,
       message: 'Quick Summary is currently disabled by administrator configuration.',
+    };
+  }
+
+  // Security entitlement check: Free tier and unauthenticated guests must receive no summary benefit
+  if (entitlements && (entitlements.plan === 'free' || entitlements.plan === 'guest' || entitlements.quotas?.canUsePaperSummarizer === false || entitlements.quotas?.dailySummaryGenerationLimit === 0)) {
+    return {
+      enabled: true,
+      error: true,
+      statusCode: 403,
+      code: 'FEATURE_LOCKED',
+      feature: 'paper_summary',
+      message: 'Quick Summary is an exclusive benefit for 7-Day Trial and Premium members. Please activate your trial or upgrade to Premium.',
     };
   }
 

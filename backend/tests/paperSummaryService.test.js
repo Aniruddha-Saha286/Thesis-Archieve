@@ -169,9 +169,10 @@ async function runPaperSummaryTests() {
     };
 
     const entitlements = {
-      plan: 'free',
+      plan: 'trial_v2',
       quotas: {
-        dailySummaryGenerationLimit: 1,
+        canUsePaperSummarizer: true,
+        dailySummaryGenerationLimit: 3,
         canAccessFullTextSummary: false,
       },
     };
@@ -199,14 +200,15 @@ async function runPaperSummaryTests() {
 
     const dummyUser = {
       _id: 'usr_mock_quota',
-      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 1 }, // Already at limit of 1
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 3 }, // Already at limit of 3
       save: async () => {},
     };
 
     const entitlements = {
-      plan: 'free',
+      plan: 'trial_v2',
       quotas: {
-        dailySummaryGenerationLimit: 1,
+        canUsePaperSummarizer: true,
+        dailySummaryGenerationLimit: 3,
       },
     };
 
@@ -222,6 +224,99 @@ async function runPaperSummaryTests() {
 
     assert.strictEqual(blocked.quotaExceeded, true);
     assert.strictEqual(blocked.code, 'DAILY_SUMMARY_LIMIT_REACHED');
+  });
+
+  // 7. Security Guard: Free Plan Block & Zero Cached Summaries
+  await test('Security guard: Free plan user receives FEATURE_LOCKED (403) and cannot read cached summary', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+
+    const dummyUser = {
+      _id: 'usr_mock_free',
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 0 },
+      save: async () => {},
+    };
+
+    const entitlements = {
+      plan: 'free',
+      quotas: {
+        canUsePaperSummarizer: false,
+        dailySummaryGenerationLimit: 0,
+      },
+    };
+
+    // Even on paper_solar_99 which is already cached in memorySummaryCache!
+    const res = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'paper_solar_99',
+        title: 'Perovskite Cells',
+        abstract: 'This study examines perovskite photovoltaic durability under humid climatic conditions.',
+      },
+      user: dummyUser,
+      entitlements,
+    });
+
+    assert.strictEqual(res.error, true);
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(res.code, 'FEATURE_LOCKED');
+    assert.strictEqual(res.feature, 'paper_summary');
+  });
+
+  // 8. Security Guard: Guest / Unauthenticated Rejection
+  await test('Security guard: Unauthenticated guest receives FEATURE_LOCKED (403)', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+
+    const res = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'paper_guest_test',
+        title: 'Quantum Optics',
+        abstract: 'A very detailed abstract about quantum optics and photon entanglement properties in nonlinear media.',
+      },
+      user: null,
+      entitlements: {
+        plan: 'guest',
+        quotas: {
+          canUsePaperSummarizer: false,
+          dailySummaryGenerationLimit: 0,
+        },
+      },
+    });
+
+    assert.strictEqual(res.error, true);
+    assert.strictEqual(res.statusCode, 403);
+    assert.strictEqual(res.code, 'FEATURE_LOCKED');
+  });
+
+  // 9. Paid Tier Entitlement: Unlimited Daily Summaries
+  await test('Paid tier entitlement: Premium and Pro Max have unlimited daily summaries', async () => {
+    process.env.PAPER_SUMMARIZER_ENABLED = 'true';
+
+    const dummyUser = {
+      _id: 'usr_mock_premium',
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 42 }, // High usage
+      save: async () => {},
+    };
+
+    const entitlements = {
+      plan: 'premium_6m',
+      quotas: {
+        canUsePaperSummarizer: true,
+        dailySummaryGenerationLimit: null, // Unlimited!
+      },
+    };
+
+    const res = await getOrGeneratePaperSummary({
+      paper: {
+        id: 'paper_unlimited_test',
+        title: 'High Performance Neural Synthesis',
+        abstract: 'This study examines neural synthesis architectures with extensive evaluation across multiple benchmark domains. Findings demonstrate sustained 99% accuracy across test splits.',
+      },
+      user: dummyUser,
+      entitlements,
+    });
+
+    assert.strictEqual(res.enabled, true);
+    assert.strictEqual(res.quotaExceeded, undefined);
+    assert.ok(res.summary);
   });
 
   // 7. SSRF Protection & URL Validation

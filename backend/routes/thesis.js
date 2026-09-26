@@ -502,20 +502,25 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
       });
     }
 
-    let entitlements = null;
-    if (req.user) {
-      entitlements = await getEffectiveEntitlements(req.user._id);
-    } else {
-      entitlements = {
-        plan: 'guest',
-        label: 'Guest Access',
-        quotas: {
-          dailySearchLimit: 10,
-          dailyDatasetLookupLimit: 0,
-          dailySummaryGenerationLimit: 2,
-          canAccessFullTextSummary: false,
-        },
-      };
+    if (!req.user) {
+      return res.status(403).json({
+        enabled: true,
+        error: true,
+        code: 'FEATURE_LOCKED',
+        feature: 'paper_summary',
+        message: 'Sign in to Project Panther and activate your 7-Day Trial or Premium membership to access grounded Quick Summaries.',
+      });
+    }
+
+    const entitlements = await getEffectiveEntitlements(req.user._id);
+    if (!entitlements || !entitlements.quotas || entitlements.quotas.canUsePaperSummarizer === false || entitlements.quotas.dailySummaryGenerationLimit === 0 || entitlements.plan === 'free') {
+      return res.status(403).json({
+        enabled: true,
+        error: true,
+        code: 'FEATURE_LOCKED',
+        feature: 'paper_summary',
+        message: 'Quick Summary is a Premium research benefit. Please activate your 7-Day Trial or upgrade to Premium for grounded paper summaries.',
+      });
     }
 
     const { id } = req.params;
@@ -543,7 +548,7 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
       };
     }
 
-    const scope = req.user ? String(req.user._id) : (req.ip || 'guest');
+    const scope = String(req.user._id);
     const summaryResult = await getOrGeneratePaperSummary({
       paper,
       user: req.user,
@@ -552,6 +557,10 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
       language: language === 'bn' ? 'bn' : 'en',
       forceRefresh: Boolean(forceRefresh),
     });
+
+    if (summaryResult.error) {
+      return res.status(summaryResult.statusCode || 500).json(summaryResult);
+    }
 
     if (summaryResult.quotaExceeded) {
       return res.status(429).json(summaryResult);
@@ -578,20 +587,25 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
       });
     }
 
-    let entitlements = null;
-    if (req.user) {
-      entitlements = await getEffectiveEntitlements(req.user._id);
-    } else {
-      entitlements = {
-        plan: 'guest',
-        label: 'Guest Access',
-        quotas: {
-          dailySearchLimit: 10,
-          dailyDatasetLookupLimit: 0,
-          dailySummaryGenerationLimit: 2,
-          canAccessFullTextSummary: false,
-        },
-      };
+    if (!req.user) {
+      return res.status(403).json({
+        enabled: true,
+        error: true,
+        code: 'FEATURE_LOCKED',
+        feature: 'paper_summary',
+        message: 'Sign in to Project Panther and activate your 7-Day Trial or Premium membership to access grounded Quick Summaries.',
+      });
+    }
+
+    const entitlements = await getEffectiveEntitlements(req.user._id);
+    if (!entitlements || !entitlements.quotas || entitlements.quotas.canUsePaperSummarizer === false || entitlements.quotas.dailySummaryGenerationLimit === 0 || entitlements.plan === 'free') {
+      return res.status(403).json({
+        enabled: true,
+        error: true,
+        code: 'FEATURE_LOCKED',
+        feature: 'paper_summary',
+        message: 'Quick Summary is a Premium research benefit. Please activate your 7-Day Trial or upgrade to Premium for grounded paper summaries.',
+      });
     }
 
     const { id } = req.params;
@@ -614,7 +628,7 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
       };
     }
 
-    const scope = req.user ? String(req.user._id) : (req.ip || 'guest');
+    const scope = String(req.user._id);
     const summaryResult = await getOrGeneratePaperSummary({
       paper,
       user: req.user,
@@ -623,6 +637,10 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
       language,
       forceRefresh,
     });
+
+    if (summaryResult.error) {
+      return res.status(summaryResult.statusCode || 500).json(summaryResult);
+    }
 
     if (summaryResult.quotaExceeded) {
       return res.status(429).json(summaryResult);

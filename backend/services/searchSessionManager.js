@@ -8,6 +8,51 @@ const { searchHal } = require('./providers/hal');
 const { searchDoaj } = require('./providers/doaj');
 const { mergeTwoRecords, cleanTitleForMatching, getFirstAuthorSurname } = require('./deduplicator');
 const { mapToCanonicalSubject } = require('./subjectCatalog');
+const { CURATED_INSTITUTIONS } = require('./institutionService');
+
+const PROVIDER_NAMES = {
+  local: 'Local Archive',
+  openalex: 'OpenAlex',
+  arxiv: 'arXiv',
+  crossref: 'Crossref',
+  europepmc: 'Europe PMC',
+  hal: 'HAL Open Science',
+  doaj: 'DOAJ',
+};
+
+const CURATED_BY_ID = new Map(
+  CURATED_INSTITUTIONS.map((c) => [c.id.toLowerCase(), c])
+);
+
+function instMatchesTarget(candidateId, candidateName, targetInstId, targetInstName) {
+  const cId = candidateId ? String(candidateId).split('/').pop().toLowerCase() : '';
+  const cName = (candidateName || '').toLowerCase().trim();
+  const tId = targetInstId ? String(targetInstId).split('/').pop().toLowerCase() : '';
+  const tName = (targetInstName || '').toLowerCase().trim();
+
+  // 1. Direct ID match
+  if (tId && cId && tId === cId) return true;
+
+  // 2. Direct name match (substring)
+  if (tName && cName && (cName.includes(tName) || tName.includes(cName))) return true;
+
+  // 3. Curated institution resolution (match against name or aliases)
+  if (tId && CURATED_BY_ID.has(tId)) {
+    const cur = CURATED_BY_ID.get(tId);
+    const curName = cur.name.toLowerCase();
+    if (cName.includes(curName) || curName.includes(cName)) return true;
+    if (Array.isArray(cur.aliases)) {
+      for (const al of cur.aliases) {
+        if (cName.includes(al.toLowerCase())) return true;
+      }
+    }
+  }
+
+  // 4. If targetInstId was passed as a name
+  if (tId && cName && (cName.includes(tId) || tId.includes(cName))) return true;
+
+  return false;
+}
 
 // Bounded in-memory search session cache (30-minute TTL, max 200 active sessions)
 const sessions = new Map();
@@ -46,11 +91,13 @@ function normalizeSessionFilterKey(filters = {}) {
     isOpenAccess: Boolean(filters.isOpenAccess),
     category: filters.category || 'All Disciplines',
     subjectId: filters.subjectId ? String(filters.subjectId).trim().toLowerCase() : '',
+    fieldId: filters.fieldId ? String(filters.fieldId).trim().toLowerCase() : '',
     yearMin: filters.yearMin ? String(filters.yearMin) : '',
     yearMax: filters.yearMax ? String(filters.yearMax) : '',
     publisher: filters.publisher ? filters.publisher.trim().toLowerCase() : '',
     source: filters.source ? filters.source.trim().toLowerCase() : '',
     institutionId: filters.institutionId ? String(filters.institutionId).trim().split('/').pop() : '',
+    institutionName: filters.institutionName ? String(filters.institutionName).trim().toLowerCase() : '',
     institutionMode: filters.institutionMode === 'awarding' ? 'awarding' : 'affiliation',
     countryCodes: normalizeCountryCodes(filters.countryCodes),
     authorId: filters.authorId ? String(filters.authorId).trim().split('/').pop() : '',
@@ -118,6 +165,7 @@ function sortRecords(records, sort, query, pageNum) {
  */
 function matchesInstitutionalAndAuthorFilters(record, filters) {
   const instId = filters.institutionId ? String(filters.institutionId).trim().split('/').pop().toLowerCase() : null;
+  const instName = filters.institutionName ? String(filters.institutionName).trim().toLowerCase() : null;
   const instMode = filters.institutionMode === 'awarding' ? 'awarding' : 'affiliation';
   const authorId = filters.authorId ? String(filters.authorId).trim().split('/').pop().toLowerCase() : null;
 
@@ -142,13 +190,11 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     }
 
     // Coauthor isolation: If BOTH author and institution are specified, the author must be affiliated with that institution!
-    if (instId) {
+    if (instId || instName) {
       const authorAtInst = matchingAuthorships.some((a) =>
-        (a.institutions || []).some((inst) => {
-          const iId = inst.id ? String(inst.id).split('/').pop().toLowerCase() : '';
-          const iName = (inst.name || '').toLowerCase();
-          return iId === instId || iName.includes(instId);
-        })
+        (a.institutions || []).some((inst) =>
+          instMatchesTarget(inst.id, inst.name, instId, instName)
+        )
       );
       if (!authorAtInst) {
         return false;
@@ -167,11 +213,11 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
   }
 
   // 2. Institution Filter Constraint (when author not specified or already passed)
-  if (instId) {
+  if (instId || instName) {
     if (instMode === 'awarding') {
       const awardId = record.awardingInstitution?.id ? String(record.awardingInstitution.id).split('/').pop().toLowerCase() : '';
       const awardName = (record.awardingInstitution?.name || (record.publicationType === 'thesis' ? record.university : '') || '').toLowerCase();
-      const matchAward = Boolean((awardId && awardId === instId) || (awardName && awardName.includes(instId)));
+      const matchAward = instMatchesTarget(awardId, awardName, instId, instName);
       if (!matchAward) return false;
 
       if (targetCountries.length > 0) {
@@ -184,9 +230,7 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
       const matchingInsts = [];
       for (const a of record.authorships || []) {
         for (const inst of a.institutions || []) {
-          const iId = inst.id ? String(inst.id).split('/').pop().toLowerCase() : '';
-          const iName = (inst.name || '').toLowerCase();
-          if (iId === instId || iName.includes(instId)) {
+          if (instMatchesTarget(inst.id, inst.name, instId, instName)) {
             matchingInsts.push(inst);
           }
         }
@@ -194,7 +238,7 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
 
       if (matchingInsts.length === 0) {
         const uniName = (record.university || '').toLowerCase();
-        if (!uniName.includes(instId)) {
+        if (!instMatchesTarget(null, uniName, instId, instName)) {
           return false;
         }
       }
@@ -288,6 +332,26 @@ function isProviderEligible(pKey, filters = {}) {
 
   if (pKey === 'doaj') {
     if (pubType === 'thesis' || pubType === 'preprint') {
+      return false;
+    }
+  }
+
+  // Structured academic filter constraints
+  const hasInst = Boolean(filters.institutionId || filters.institutionName);
+  const hasCountry = Boolean(filters.countryCodes && filters.countryCodes.length > 0);
+  const hasAuthorId = Boolean(filters.authorId);
+  const hasSubject = Boolean(filters.subjectId || filters.fieldId);
+  const hasMinCitations = Boolean(filters.minCitations && parseInt(filters.minCitations, 10) > 0);
+  const isAwarding = filters.institutionMode === 'awarding';
+
+  // In awarding institution mode, only Local Archive holds verified degree-awarding metadata
+  if (isAwarding && hasInst) {
+    return pKey === 'local';
+  }
+
+  // arXiv, Crossref, Europe PMC, HAL, and DOAJ cannot filter by structured institution, country, author ID, subject, or citations
+  if (hasInst || hasCountry || hasAuthorId || hasSubject || hasMinCitations) {
+    if (pKey !== 'local' && pKey !== 'openalex') {
       return false;
     }
   }
@@ -609,6 +673,22 @@ async function executeSearchSessionLocked(session, {
   // Freeze served boundary: records up to endIndex must never be re-ordered
   if (endIndex > (session.frozenIndex || 0)) {
     session.frozenIndex = Math.min(endIndex, session.buffer.length);
+  }
+
+  // Ensure honest provider telemetry status for all known federated providers
+  for (const [pKey, pName] of Object.entries(PROVIDER_NAMES)) {
+    if (!session.providerStatus[pName]) {
+      const eligible = isProviderEligible(pKey, filters);
+      session.providerStatus[pName] = {
+        status: eligible ? 'idle' : 'unsupported_filter',
+        count: 0,
+        returnedCount: 0,
+        total: 0,
+        totalAvailable: 0,
+        hasMore: false,
+        error: null,
+      };
+    }
   }
 
   return {

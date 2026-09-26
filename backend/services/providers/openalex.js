@@ -8,7 +8,7 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       params.append('search', query.trim());
     }
 
-    params.append('per-page', String(Math.min(limit, 50)));
+    params.append('per_page', String(Math.min(limit, 50)));
     params.append('page', String(page));
 
     // Build OpenAlex filters
@@ -73,13 +73,23 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       }
     }
 
-    // Subject / Category filter
-    if (filters.subjectId) {
+    // OpenAlex Field ID filter (e.g. from Institution Landscape chart click)
+    if (filters.fieldId) {
+      const fId = String(filters.fieldId).trim().split('/').pop();
+      filterParts.push(`primary_topic.field.id:${fId}`);
+    } else if (filters.subjectId) {
+      // Canonical Subject / Discipline filter
       const sub = getSubjectById(filters.subjectId);
-      if (sub && sub.openAlexConceptIds && sub.openAlexConceptIds.length > 0) {
-        filterParts.push(`concepts.id:${sub.openAlexConceptIds.join('|')}`);
-      } else if (sub && sub.keywords && sub.keywords.length > 0 && !query) {
-        params.append('search', sub.keywords[0]);
+      if (sub) {
+        if (sub.openAlexTopicIds && sub.openAlexTopicIds.length > 0) {
+          filterParts.push(`topics.id:${sub.openAlexTopicIds.join('|')}`);
+        } else if (sub.openAlexFieldId) {
+          filterParts.push(`primary_topic.field.id:${sub.openAlexFieldId}`);
+        } else if (sub.openAlexConceptIds && sub.openAlexConceptIds.length > 0) {
+          filterParts.push(`concepts.id:${sub.openAlexConceptIds.join('|')}`);
+        } else if (sub.keywords && sub.keywords.length > 0 && !query) {
+          params.append('search', sub.keywords[0]);
+        }
       }
     }
 
@@ -87,13 +97,17 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       params.append('filter', filterParts.join(','));
     }
 
-    // Sort order
+    // Sort order: OpenAlex only allows relevance_score:desc if a search query is present
+    const hasQuery = Boolean(query && query.trim());
     if (sort === 'citations') {
       params.append('sort', 'cited_by_count:desc');
     } else if (sort === 'newest') {
       params.append('sort', 'publication_date:desc');
-    } else {
+    } else if (hasQuery) {
       params.append('sort', 'relevance_score:desc');
+    } else {
+      // Without search query, sort by publication date descending as natural default
+      params.append('sort', 'publication_date:desc');
     }
 
     const url = `https://api.openalex.org/works?${params.toString()}`;

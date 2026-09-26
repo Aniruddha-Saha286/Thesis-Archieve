@@ -11,6 +11,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Cybersecurity',
     description: 'Cryptography, network defense, vulnerability assessment, threat intelligence, and zero-trust systems.',
     keywords: ['cybersecurity', 'information security', 'cryptography', 'malware', 'network security', 'penetration testing', 'zero trust'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10041', 'T10129'],
     openAlexConceptIds: ['C38652104', 'C115903868'], // Computer security, Cryptography
   },
   {
@@ -19,6 +21,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Data Science',
     description: 'Statistical modeling, big data architectures, data mining, predictive analytics, and visualization.',
     keywords: ['data science', 'data analytics', 'big data', 'data mining', 'predictive modeling', 'business intelligence'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10129', 'T11550'],
     openAlexConceptIds: ['C2522767166', 'C124101348'], // Data science, Data mining
   },
   {
@@ -27,6 +31,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'AI & Machine Learning',
     description: 'Deep learning, reinforcement learning, neural networks, foundation models, and algorithmic reasoning.',
     keywords: ['artificial intelligence', 'machine learning', 'deep learning', 'neural network', 'reinforcement learning'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10028', 'T10320', 'T10036'],
     openAlexConceptIds: ['C154945302', 'C119857082'], // Artificial intelligence, Machine learning
   },
   {
@@ -35,6 +41,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'NLP',
     description: 'Computational linguistics, large language models, sentiment analysis, translation, and text generation.',
     keywords: ['natural language processing', 'nlp', 'large language model', 'computational linguistics', 'speech recognition', 'sentiment analysis'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10028', 'T10181'],
     openAlexConceptIds: ['C204321447'], // Natural language processing
   },
   {
@@ -43,6 +51,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Computer Vision',
     description: 'Object detection, image segmentation, facial recognition, generative vision models, and 3D reconstruction.',
     keywords: ['computer vision', 'image processing', 'object detection', 'segmentation', 'facial recognition', 'scene reconstruction'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10036', 'T10812'],
     openAlexConceptIds: ['C31972630'], // Computer vision
   },
   {
@@ -51,6 +61,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Software Engineering',
     description: 'Software architecture, automated testing, DevOps, refactoring, program synthesis, and verification.',
     keywords: ['software engineering', 'software architecture', 'refactoring', 'continuous integration', 'program synthesis', 'code quality'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10260', 'T10486'],
     openAlexConceptIds: ['C52917350'], // Software engineering
   },
   {
@@ -59,6 +71,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Networks & Distributed',
     description: 'Distributed consensus, cloud computing, 5G/6G protocols, edge computing, and microservices.',
     keywords: ['distributed systems', 'computer networks', 'cloud computing', 'edge computing', 'consensus', 'microservices', 'tcp/ip'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10317', 'T10467'],
     openAlexConceptIds: ['C31258907', 'C120314980'], // Computer network, Distributed computing
   },
   {
@@ -67,6 +81,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Databases',
     description: 'Relational query engines, NoSQL stores, vector indexing, distributed transactions, and data warehousing.',
     keywords: ['databases', 'database management', 'sql', 'nosql', 'vector database', 'query optimization', 'data warehouse'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10531', 'T10787'],
     openAlexConceptIds: ['C77088390', 'C199360897'], // Database, Data management
   },
   {
@@ -75,6 +91,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'HCI',
     description: 'User experience design, accessibility, interaction paradigms, usability evaluation, and augmented reality.',
     keywords: ['human-computer interaction', 'hci', 'user experience', 'interaction design', 'accessibility', 'usability'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10565', 'T11005'],
     openAlexConceptIds: ['C107457646'], // Human–computer interaction
   },
   {
@@ -83,6 +101,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'IoT & Embedded',
     description: 'Smart sensors, microcontroller firmware, edge telemetry, robotics hardware, and cyber-physical systems.',
     keywords: ['internet of things', 'iot', 'embedded systems', 'sensors', 'microcontroller', 'robotics', 'cyber-physical'],
+    openAlexFieldId: '17',
+    openAlexTopicIds: ['T10344', 'T10467'],
     openAlexConceptIds: ['C108827148', 'C118552586'], // Internet of things, Embedded system
   },
   {
@@ -91,6 +111,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Renewable Energy',
     description: 'Photovoltaics, battery storage, grid modernization, sustainable materials, and bioenergy.',
     keywords: ['renewable energy', 'solar energy', 'battery storage', 'photovoltaic', 'wind power', 'materials science'],
+    openAlexFieldId: '21',
+    openAlexTopicIds: ['T10077', 'T10271'],
     openAlexConceptIds: ['C143120270'], // Renewable energy
   },
   {
@@ -99,6 +121,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Biomedical Science',
     description: 'Genomics, translational medicine, clinical diagnostics, epidemiology, and healthcare informatics.',
     keywords: ['biomedical', 'clinical science', 'medicine', 'genomics', 'epidemiology', 'healthcare informatics'],
+    openAlexFieldId: '27',
+    openAlexTopicIds: ['T10051', 'T10080'],
     openAlexConceptIds: ['C71924100'], // Medicine
   },
   {
@@ -107,6 +131,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Agricultural Science',
     description: 'Crop pathology, precision agriculture, soil microbiology, sustainable farming, and water conservation.',
     keywords: ['agriculture', 'soil science', 'crop pathology', 'precision farming', 'agronomy'],
+    openAlexFieldId: '11',
+    openAlexTopicIds: ['T10006', 'T10098'],
     openAlexConceptIds: ['C144133560'], // Agriculture
   },
   {
@@ -115,6 +141,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Development Economics',
     description: 'Microfinance, poverty alleviation, trade policy, labor economics, and developing nation growth.',
     keywords: ['development economics', 'economics', 'microfinance', 'trade policy', 'poverty alleviation', 'labor market'],
+    openAlexFieldId: '20',
+    openAlexTopicIds: ['T10154', 'T10243'],
     openAlexConceptIds: ['C162324750'], // Economics
   },
   {
@@ -123,6 +151,8 @@ const SUBJECT_CATALOG = [
     shortLabel: 'Other Disciplines',
     description: 'Interdisciplinary, humanities, general science, or unclassified scholarly manuscripts.',
     keywords: ['interdisciplinary', 'general science', 'humanities'],
+    openAlexFieldId: null,
+    openAlexTopicIds: [],
     openAlexConceptIds: [],
   },
 ];
