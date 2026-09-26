@@ -528,21 +528,13 @@ async function executeSearchSessionLocked(session, {
       const isErr = Boolean(res.error);
       const provStatus = isErr ? 'degraded' : 'fulfilled';
 
-      session.providerStatus[res.name] = {
-        status: provStatus,
-        count: (session.providerStatus[res.name]?.count || 0) + (res.records?.length || 0),
-        returnedCount: (session.providerStatus[res.name]?.returnedCount || 0) + (res.records?.length || 0),
-        total: res.totalCount || 0,
-        totalAvailable: res.totalCount || 0,
-        hasMore: Boolean(res.hasMore),
-        error: res.error || null,
-      };
-
       provState.hasMore = Boolean(res.hasMore);
       provState.status = provStatus;
       if (res.nextPage !== undefined) provState.page = res.nextPage;
       if (res.nextOffset !== undefined) provState.offset = res.nextOffset;
       session.providerStates[pKey] = provState;
+
+      let acceptedFromProvider = 0;
 
       // Deduplicate and fuse newly arrived records into session buffer
       if (Array.isArray(res.records)) {
@@ -631,6 +623,7 @@ async function executeSearchSessionLocked(session, {
             // Complementary merge into existing buffer record without shifting position
             const merged = mergeTwoRecords(existing, record);
             Object.assign(existing, merged);
+            acceptedFromProvider++;
 
             // Index newly discovered identifiers
             if (doiKey) session.recordsByDoi.set(doiKey, existing);
@@ -640,6 +633,7 @@ async function executeSearchSessionLocked(session, {
             // Brand new record
             session.buffer.push(record);
             newlyAddedCount++;
+            acceptedFromProvider++;
 
             if (doiKey) session.recordsByDoi.set(doiKey, record);
             if (recordId) session.recordsById.set(String(recordId), record);
@@ -647,6 +641,17 @@ async function executeSearchSessionLocked(session, {
           }
         }
       }
+
+      session.providerStatus[res.name] = {
+        status: provStatus,
+        count: (session.providerStatus[res.name]?.count || 0) + acceptedFromProvider,
+        returnedCount: (session.providerStatus[res.name]?.returnedCount || 0) + acceptedFromProvider,
+        rawCount: (session.providerStatus[res.name]?.rawCount || 0) + (res.records?.length || 0),
+        total: res.totalCount || 0,
+        totalAvailable: res.totalCount || 0,
+        hasMore: Boolean(res.hasMore),
+        error: res.error || null,
+      };
     }
 
     // Sort only unfrozen buffer records (records on already served pages are never moved)

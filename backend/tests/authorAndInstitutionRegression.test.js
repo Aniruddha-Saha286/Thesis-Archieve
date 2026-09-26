@@ -30,6 +30,21 @@ async function runAuthorAndInstitutionRegressionTests() {
     assert.ok(Array.isArray(extracted) && extracted.length > 0, 'Extracted subjects must be non-empty');
     assert.strictEqual(extracted[0].id, 'ai-ml', 'Extracted subject must correctly map to canonical ai-ml');
 
+    // Test Cybersecurity OpenAlex topic mappings & extraction
+    const cyber = subjectCatalog.getSubjectById('cybersecurity');
+    assert.ok(cyber, 'cybersecurity subject discipline must exist');
+    assert.ok(cyber.openAlexTopicIds.includes('T10400'), 'cybersecurity must include verified topic T10400');
+    assert.ok(!cyber.openAlexTopicIds.includes('T10041'), 'cybersecurity must never contain COVID-19 topic T10041');
+    const cyberExtracted = subjectCatalog.extractSubjectsFromOpenAlex([], [{ display_name: 'Network Security and Intrusion Detection' }]);
+    assert.strictEqual(cyberExtracted[0]?.id, 'cybersecurity', 'Network security topic must map to canonical cybersecurity');
+
+    // Test Data Science OpenAlex topic mappings & extraction
+    const ds = subjectCatalog.getSubjectById('data-science');
+    assert.ok(ds, 'data-science subject discipline must exist');
+    assert.ok(ds.openAlexTopicIds.includes('T10538'), 'data-science must include verified topic T10538');
+    const dsExtracted = subjectCatalog.extractSubjectsFromOpenAlex([], [{ display_name: 'Data Mining Algorithms and Applications' }]);
+    assert.strictEqual(dsExtracted[0]?.id, 'data-science', 'Data mining topic must map to canonical data-science');
+
     console.log('  ✓ [PASS] Subject catalog contains 15 canonical disciplines with verified OpenAlex concept mappings');
   }
 

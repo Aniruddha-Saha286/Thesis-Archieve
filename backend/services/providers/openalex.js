@@ -174,7 +174,8 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       }
 
       // Extract canonical subjects
-      const canonicalSubjects = extractSubjectsFromOpenAlex(w.concepts, w.topics);
+      const combinedTopics = [w.primary_topic, ...(Array.isArray(w.topics) ? w.topics : [])].filter(Boolean);
+      const canonicalSubjects = extractSubjectsFromOpenAlex(w.concepts, combinedTopics, filters?.subjectId);
 
       // Reconstruct abstract from inverted index if present
       let cleanAbstract = null;
