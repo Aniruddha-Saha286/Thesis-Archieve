@@ -492,10 +492,12 @@ function isProviderEligible(pKey, filters = {}) {
   if (hasInst && !caps.supportsInstitution) return false;
   if (hasCountry && !caps.supportsCountry) return false;
   if (hasAuthorId && !caps.supportsAuthor) return false;
-  if (hasSubject && !caps.supportsSubject) return false;
-  if (hasField && !caps.supportsField) return false;
-  if (hasPublisher && !caps.supportsPublisher) return false;
   if (hasMinCitations && !caps.supportsMinCitations) return false;
+
+  // NOTE: subject, field, and publisher filters are intentionally NOT checked here.
+  // They are applied as post-filters on returned records in the buffer dedup loop.
+  // Skipping providers for these filters caused false "0 results" when only
+  // Local + OpenAlex supported them natively.
 
   return true;
 }
