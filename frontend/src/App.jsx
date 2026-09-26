@@ -22,6 +22,7 @@ import ReportIssueModal from './components/ReportIssueModal';
 import MembershipModal from './components/MembershipModal';
 import AuthorProfileModal from './components/AuthorProfileModal';
 import InstitutionLandscapeModal from './components/InstitutionLandscapeModal';
+import CoverageModal from './components/CoverageModal';
 import DiscoveryFiltersPanel from './components/DiscoveryFiltersPanel';
 import {
   Filter,
@@ -75,6 +76,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('All Disciplines');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedFieldId, setSelectedFieldId] = useState('');
+  const [selectedFieldName, setSelectedFieldName] = useState('');
   const [subjectsList, setSubjectsList] = useState(DEFAULT_CATEGORIES);
   const [selectedInstitution, setSelectedInstitution] = useState(null);
   const [institutionMode, setInstitutionMode] = useState('affiliation');
@@ -90,6 +92,11 @@ export default function App() {
   const [isOpenAccessOnly, setIsOpenAccessOnly] = useState(false);
   const [yearMin, setYearMin] = useState('');
   const [yearMax, setYearMax] = useState('');
+  const [draftYearMin, setDraftYearMin] = useState('');
+  const [draftYearMax, setDraftYearMax] = useState('');
+  const [totalTechnicalFailure, setTotalTechnicalFailure] = useState(false);
+  const [partialResults, setPartialResults] = useState(false);
+  const [isCoverageOpen, setIsCoverageOpen] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -157,6 +164,44 @@ export default function App() {
     };
     loadSubjects();
   }, []);
+
+  useEffect(() => {
+    setDraftYearMin(yearMin);
+  }, [yearMin]);
+
+  useEffect(() => {
+    setDraftYearMax(yearMax);
+  }, [yearMax]);
+
+  const commitYearMin = (val) => {
+    const trimmed = String(val || '').trim();
+    if (!trimmed) {
+      if (yearMin !== '') {
+        setYearMin('');
+        setCurrentPage(1);
+      }
+    } else if (/^\d{4}$/.test(trimmed)) {
+      if (yearMin !== trimmed) {
+        setYearMin(trimmed);
+        setCurrentPage(1);
+      }
+    }
+  };
+
+  const commitYearMax = (val) => {
+    const trimmed = String(val || '').trim();
+    if (!trimmed) {
+      if (yearMax !== '') {
+        setYearMax('');
+        setCurrentPage(1);
+      }
+    } else if (/^\d{4}$/.test(trimmed)) {
+      if (yearMax !== trimmed) {
+        setYearMax(trimmed);
+        setCurrentPage(1);
+      }
+    }
+  };
 
   // Fetch theses whenever user is approved and search criteria changes
   useEffect(() => {
@@ -313,9 +358,9 @@ export default function App() {
       if (selectedFieldId) {
         params.fieldId = selectedFieldId;
       }
-      if (selectedInstitution?.id) {
-        params.institutionId = selectedInstitution.id;
-        params.institutionName = selectedInstitution.name;
+      if (selectedInstitution) {
+        if (selectedInstitution.id) params.institutionId = selectedInstitution.id;
+        if (selectedInstitution.name) params.institutionName = selectedInstitution.name;
         params.institutionMode = institutionMode;
       }
       if (selectedCountries.length > 0) {
@@ -348,11 +393,15 @@ export default function App() {
           setTheses(res.data);
           setTotalReturned(res.data.length);
           setHasMore(res.data.length >= paperLimit);
+          setTotalTechnicalFailure(false);
+          setPartialResults(false);
         } else {
           setTheses(res.data.records || []);
           setTotalReturned(res.data.records?.length || 0);
           setHasMore(Boolean(res.data.pagination?.hasMore));
           setProviderTelemetry(res.data.providerStatus || {});
+          setTotalTechnicalFailure(Boolean(res.data.totalTechnicalFailure));
+          setPartialResults(Boolean(res.data.partialResults));
           if (res.data.sessionId) {
             setSessionId(res.data.sessionId);
           }
@@ -509,6 +558,7 @@ export default function App() {
     setSelectedCategory('All Disciplines');
     setSelectedSubjectId('');
     setSelectedFieldId('');
+    setSelectedFieldName('');
     setSessionId(null);
     setCurrentPage(1);
   };
@@ -517,6 +567,7 @@ export default function App() {
     setSelectedCategory('All Disciplines');
     setSelectedSubjectId('');
     setSelectedFieldId('');
+    setSelectedFieldName('');
     setSelectedInstitution(null);
     setInstitutionMode('affiliation');
     setSelectedCountries([]);
@@ -530,6 +581,10 @@ export default function App() {
     setIsOpenAccessOnly(false);
     setYearMin('');
     setYearMax('');
+    setDraftYearMin('');
+    setDraftYearMax('');
+    setTotalTechnicalFailure(false);
+    setPartialResults(false);
     setSessionId(null);
     setSearchContextId(null);
     setCurrentPage(1);
@@ -675,6 +730,7 @@ export default function App() {
           onSelectAuthor={(auth) => setInspectingAuthor(auth)}
           onToggleFilterDrawer={() => setMobileFilterOpen((v) => !v)}
           activeFilterCount={activeFilterCount}
+          onOpenCoverage={() => setIsCoverageOpen(true)}
         />
 
         {/* Admin Quick Action Desk Banner */}
@@ -1023,30 +1079,60 @@ export default function App() {
               </span>
               <div className="grid grid-cols-2 gap-2 text-xs font-mono-meta">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
                   placeholder="From (e.g. 2018)"
-                  value={yearMin}
+                  value={draftYearMin}
                   onChange={(e) => {
-                    setYearMin(e.target.value);
-                    setCurrentPage(1);
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setDraftYearMin(v);
+                    if (v.length === 4) {
+                      commitYearMin(v);
+                    }
                   }}
+                  onBlur={() => commitYearMin(draftYearMin)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitYearMin(draftYearMin);
+                    }
+                  }}
+                  aria-label="Filter from publication year"
                   className="bg-[#FAF9F5] border border-[#D5D1C7] px-2 py-1 rounded-sm text-xs focus:outline-none focus:border-[#1C1B18]"
                 />
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
                   placeholder="To (e.g. 2026)"
-                  value={yearMax}
+                  value={draftYearMax}
                   onChange={(e) => {
-                    setYearMax(e.target.value);
-                    setCurrentPage(1);
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setDraftYearMax(v);
+                    if (v.length === 4) {
+                      commitYearMax(v);
+                    }
                   }}
+                  onBlur={() => commitYearMax(draftYearMax)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitYearMax(draftYearMax);
+                    }
+                  }}
+                  aria-label="Filter to publication year"
                   className="bg-[#FAF9F5] border border-[#D5D1C7] px-2 py-1 rounded-sm text-xs focus:outline-none focus:border-[#1C1B18]"
                 />
               </div>
-              {(yearMin || yearMax) && (
+              {(yearMin || yearMax || draftYearMin || draftYearMax) && (
                 <button
                   type="button"
                   onClick={() => {
+                    setDraftYearMin('');
+                    setDraftYearMax('');
                     setYearMin('');
                     setYearMax('');
                     setCurrentPage(1);
@@ -1155,8 +1241,15 @@ export default function App() {
                 <span>Scholarly Coverage</span>
               </div>
               <p className="text-[11px] text-[#605D55] leading-relaxed font-light">
-                Connected to <strong>250M+</strong> peer-reviewed records across <strong>OpenAlex</strong>, <strong>arXiv</strong>, <strong>Europe PMC</strong>, <strong>Crossref</strong>, <strong>HAL</strong>, and <strong>DOAJ</strong>.
+                Federated discovery connecting to <strong>OpenAlex</strong>, <strong>arXiv</strong>, <strong>Europe PMC</strong>, <strong>Crossref</strong>, <strong>HAL</strong>, <strong>DOAJ</strong>, and <strong>The Thesis Archive</strong>.
               </p>
+              <button
+                type="button"
+                onClick={() => setIsCoverageOpen(true)}
+                className="text-[10px] font-mono-meta text-[#1C1B18] underline hover:text-black block pt-1 cursor-pointer"
+              >
+                View Sources & Disclosures &rarr;
+              </button>
             </div>
           </aside>
 
@@ -1169,6 +1262,7 @@ export default function App() {
                   Showing page <strong className="text-[#1C1B18]">{currentPage}</strong> •{' '}
                   <strong className="text-[#1C1B18]">{theses.length}</strong> publications retrieved
                   {selectedCategory !== 'All Disciplines' && ` in ${selectedCategory}`}
+                  {selectedFieldName && ` in Field: ${selectedFieldName}`}
                 </span>
 
                 {/* Daily Search Quota Indicator */}
@@ -1270,6 +1364,36 @@ export default function App() {
               </div>
             )}
 
+            {/* Federated Outage Alert */}
+            {totalTechnicalFailure && (
+              <div className="bg-rose-50 border border-rose-300 p-4 rounded-sm flex items-start justify-between gap-3 text-xs text-rose-900">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-bold block">Federated Academic Sources Outage</strong>
+                    <span>Upstream providers encountered temporary connection issues. Your search quota was not charged.</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchTheses(currentPage)}
+                  className="min-h-[44px] px-3 font-mono-meta font-bold underline hover:text-rose-950 cursor-pointer"
+                >
+                  Retry Search
+                </button>
+              </div>
+            )}
+
+            {/* Partial Results Banner */}
+            {partialResults && !totalTechnicalFailure && (
+              <div className="bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-sm flex items-center justify-between text-xs text-amber-900">
+                <div className="flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Partial federated results: one or more upstream providers experienced latency or were skipped per filter capability.</span>
+                </div>
+              </div>
+            )}
+
             {/* Active Filter Chips */}
             {hasAnyActiveFilter && (
               <div className="p-2.5 bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm text-xs font-mono-meta flex items-center gap-1.5 flex-wrap">
@@ -1277,73 +1401,110 @@ export default function App() {
                 {searchQuery && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Query: "{searchQuery}"</span>
-                    <button onClick={() => { setSearchQuery(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSearchQuery(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove search query filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedCategory !== 'All Disciplines' && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
-                    <span>Domain: {selectedCategory}</span>
-                    <button onClick={clearCategoryFilter} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer" title="Remove domain filter">✕</button>
+                    <span>Discipline: {selectedCategory}</span>
+                    <button onClick={clearCategoryFilter} aria-label="Remove discipline filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer" title="Remove discipline filter">✕</button>
+                  </span>
+                )}
+                {selectedFieldId && (
+                  <span className="inline-flex items-center gap-1 bg-sky-50 border border-sky-300 px-2 py-0.5 rounded-xs text-sky-950 font-medium">
+                    <span>Field: {selectedFieldName || selectedFieldId}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFieldId('');
+                        setSelectedFieldName('');
+                        setSessionId(null);
+                        setCurrentPage(1);
+                      }}
+                      className="hover:text-red-700 font-bold ml-0.5 cursor-pointer"
+                      title="Remove field filter"
+                      aria-label="Remove field filter"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+                {selectedSubjectId && selectedCategory === 'All Disciplines' && (
+                  <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
+                    <span>Subject: {subjectsList.find((s) => s.id === selectedSubjectId)?.shortLabel || selectedSubjectId}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSubjectId('');
+                        setSessionId(null);
+                        setCurrentPage(1);
+                      }}
+                      className="hover:text-red-700 font-bold ml-0.5 cursor-pointer"
+                      title="Remove subject filter"
+                      aria-label="Remove subject filter"
+                    >
+                      ✕
+                    </button>
                   </span>
                 )}
                 {selectedPublicationType !== 'all' && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Type: {selectedPublicationType}</span>
-                    <button onClick={() => { setSelectedPublicationType('all'); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSelectedPublicationType('all'); setSessionId(null); setCurrentPage(1); }} aria-label="Remove publication type filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedPublisher && (
                   <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-xs text-amber-950 font-medium">
-                    <span>Venue: {selectedPublisher}</span>
-                    <button onClick={() => { setSelectedPublisher(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <span>Publisher: {selectedPublisher}</span>
+                    <button onClick={() => { setSelectedPublisher(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove publisher filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {(yearMin || yearMax) && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Years: {yearMin || 'Any'} – {yearMax || 'Any'}</span>
-                    <button onClick={() => { setYearMin(''); setYearMax(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setYearMin(''); setYearMax(''); setDraftYearMin(''); setDraftYearMax(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove year range filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {hasPdfOnly && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>PDF Only</span>
-                    <button onClick={() => { setHasPdfOnly(false); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setHasPdfOnly(false); setSessionId(null); setCurrentPage(1); }} aria-label="Remove PDF filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {isOpenAccessOnly && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Open Access Only</span>
-                    <button onClick={() => { setIsOpenAccessOnly(false); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setIsOpenAccessOnly(false); setSessionId(null); setCurrentPage(1); }} aria-label="Remove Open Access filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedInstitution && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Inst ({institutionMode}): {selectedInstitution.name}</span>
-                    <button onClick={() => { setSelectedInstitution(null); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSelectedInstitution(null); setSessionId(null); setCurrentPage(1); }} aria-label="Remove institution filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {selectedCountries.map((cCode) => (
                   <span key={cCode} className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Country: {cCode}</span>
-                    <button onClick={() => { setSelectedCountries(prev => prev.filter(c => c !== cCode)); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSelectedCountries(prev => prev.filter(c => c !== cCode)); setSessionId(null); setCurrentPage(1); }} aria-label={`Remove country ${cCode} filter`} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 ))}
                 {selectedAuthorFilter && (
                   <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-xs text-amber-950 font-medium">
                     <span>Author: {selectedAuthorFilter.name}</span>
-                    <button onClick={() => { setSelectedAuthorFilter(null); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSelectedAuthorFilter(null); setSessionId(null); setCurrentPage(1); }} aria-label="Remove author filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {minCitations && (
                   <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-xs text-emerald-950 font-medium">
                     <span>Citations: ≥{minCitations}</span>
-                    <button onClick={() => { setMinCitations(''); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setMinCitations(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove minimum citations filter" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 {sortOrder !== 'relevance' && (
                   <span className="inline-flex items-center gap-1 bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-xs text-[#1C1B18]">
                     <span>Sort: {sortOrder === 'citations' ? 'Most Cited' : sortOrder === 'newest' ? 'Newest' : sortOrder}</span>
-                    <button onClick={() => { setSortOrder('relevance'); setSessionId(null); setCurrentPage(1); }} className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
+                    <button onClick={() => { setSortOrder('relevance'); setSessionId(null); setCurrentPage(1); }} aria-label="Reset sort order" className="hover:text-red-700 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
                 <button
@@ -1365,28 +1526,33 @@ export default function App() {
             ) : theses.length === 0 ? (
               <div className="bg-white border border-[#E2DFD8] p-12 text-center rounded-sm space-y-4">
                 <p className="text-sm font-medium text-[#1C1B18]">
-                  No scholarly publications found matching your query criteria.
+                  {totalTechnicalFailure
+                    ? 'Upstream scholarly sources were temporarily unavailable.'
+                    : 'No scholarly publications found matching your query criteria.'}
                 </p>
                 <p className="text-xs text-[#737067] max-w-md mx-auto">
-                  Try broadening your search terms or clearing specific publisher / year filters.
+                  {totalTechnicalFailure
+                    ? 'Please retry in a moment. No search quota was consumed for this inquiry.'
+                    : 'Try broadening your search terms or clearing specific publisher, year, or discipline filters.'}
                 </p>
                 <div>
-                  <button
-                    onClick={() => {
-                      setSelectedCategory('All Disciplines');
-                      setSelectedPublisher('');
-                      setSelectedPublicationType('all');
-                      setSearchQuery('');
-                      setHasPdfOnly(false);
-                      setIsOpenAccessOnly(false);
-                      setYearMin('');
-                      setYearMax('');
-                      setCurrentPage(1);
-                    }}
-                    className="text-xs font-mono-meta text-[#1C1B18] underline cursor-pointer"
-                  >
-                    Reset all filters & view all publications
-                  </button>
+                  {totalTechnicalFailure ? (
+                    <button
+                      type="button"
+                      onClick={() => fetchTheses(currentPage)}
+                      className="px-4 py-2 bg-[#1C1B18] text-white hover:bg-black text-xs font-mono-meta rounded-sm cursor-pointer shadow-2xs"
+                    >
+                      Retry Federated Search
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={resetAllFilters}
+                      className="text-xs font-mono-meta text-[#1C1B18] underline hover:text-black cursor-pointer"
+                    >
+                      Reset all filters & view all publications
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1572,36 +1738,25 @@ export default function App() {
           institution={inspectingLandscapeInst}
           onClose={() => setInspectingLandscapeInst(null)}
           onFilterByField={(param) => {
-            const fieldId = typeof param === 'object' && param ? param.fieldId : null;
-            const fieldName = typeof param === 'object' && param ? (param.fieldName || param.name) : param;
+            const fId = typeof param === 'object' && param ? param.fieldId : null;
+            const fName = typeof param === 'object' && param ? (param.fieldName || param.name) : param;
 
-            let matched = null;
-            if (fieldId) {
-              matched = subjectsList.find(
-                (s) => s.openAlexFieldId === fieldId || s.id === fieldId
-              );
-            }
-            if (!matched && fieldName) {
-              matched = subjectsList.find(
-                (s) =>
-                  s.label?.toLowerCase() === fieldName.toLowerCase() ||
-                  (s.shortLabel && s.shortLabel.toLowerCase() === fieldName.toLowerCase())
-              );
-            }
-
-            if (matched) {
-              setSelectedSubjectId(matched.id);
-              setSelectedCategory(matched.label);
-            } else if (fieldName) {
-              setSelectedCategory(fieldName);
-            }
-            setSelectedFieldId(fieldId || (matched?.openAlexFieldId) || null);
+            setSelectedFieldId(fId || '');
+            setSelectedFieldName(fName || '');
+            setSelectedSubjectId('');
+            setSelectedCategory('All Disciplines');
+            setInspectingLandscapeInst(null);
             setSessionId(null);
             setCurrentPage(1);
-            setInspectingLandscapeInst(null);
           }}
         />
       )}
+
+      {/* Coverage & Limitations Disclosure Modal */}
+      <CoverageModal
+        isOpen={isCoverageOpen}
+        onClose={() => setIsCoverageOpen(false)}
+      />
 
       {/* 9. Student Management Modal (Admin) */}
       <StudentManagementModal

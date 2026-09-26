@@ -1,6 +1,34 @@
 const { createNormalizedRecord } = require('../scholarlyRecord');
 const { getSubjectById, extractSubjectsFromOpenAlex } = require('../subjectCatalog');
 
+async function fetchOpenAlexWithRetry(url, options = {}, maxRetries = 2) {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000;
+          console.warn(`[OpenAlex] Status ${res.status}. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          attempt++;
+          continue;
+        }
+      }
+      return res;
+    } catch (err) {
+      if (attempt < maxRetries && (err.name === 'TimeoutError' || err.name === 'AbortError' || err.code === 'ECONNRESET')) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.warn(`[OpenAlex] Network error: ${err.message}. Retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, sort = 'relevance' }) {
   try {
     const params = new URLSearchParams();
@@ -111,7 +139,7 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
     }
 
     const url = `https://api.openalex.org/works?${params.toString()}`;
-    const res = await fetch(url, {
+    const res = await fetchOpenAlexWithRetry(url, {
       signal: AbortSignal.timeout(6500),
       headers: {
         'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
@@ -222,6 +250,8 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       }
 
       const venueName = w.primary_location?.source?.display_name || w.host_venue?.display_name || null;
+      const hostOrganization = w.primary_location?.source?.host_organization_name || w.host_venue?.publisher || null;
+      const primaryFieldId = w.primary_topic?.field?.id ? String(w.primary_topic.field.id).split('/').pop() : null;
 
       let pubType = 'journal-article';
       if (w.type === 'dissertation') pubType = 'thesis';
@@ -246,13 +276,14 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
         authorships: authorships,
         awardingInstitution: awardingInstitution,
         subjects: canonicalSubjects,
+        fieldId: primaryFieldId,
         citationMetrics: citationMetrics,
         abstract: cleanAbstract,
         publicationType: pubType,
         publicationDate: w.publication_date,
         publishedYear: w.publication_year,
         venue: venueName,
-        publisher: venueName,
+        publisher: hostOrganization,
         isOpenAccess: Boolean(w.open_access?.is_oa),
         license: w.primary_location?.license || w.best_oa_location?.license || null,
         pdfUrl: isDirectPdf ? candidatePdf : null,

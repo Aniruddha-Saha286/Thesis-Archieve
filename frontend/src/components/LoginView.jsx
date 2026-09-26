@@ -161,7 +161,7 @@ export default function LoginView() {
                     Academic Repository Access:
                   </div>
                   <p className="text-[11px] text-[#737067] leading-relaxed">
-                    Sign in to search 250M+ scholarly records, open verified full-text PDFs, annotate private notes, build comparison matrices, and export citations.
+                    Sign in to search federated scholarly records, open verified full-text PDFs, annotate private notes, build comparison matrices, and export citations.
                   </p>
                 </div>
               </div>

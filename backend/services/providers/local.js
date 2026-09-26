@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Thesis = require('../../models/Thesis');
 const { createNormalizedRecord } = require('../scholarlyRecord');
-const { getSubjectById, mapToCanonicalSubject } = require('../subjectCatalog');
+const { SUBJECT_CATALOG, getSubjectById, mapToCanonicalSubject } = require('../subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('../institutionService');
 
 async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitOffset = null, filters = {}, sort = 'relevance' }) {
@@ -40,6 +40,20 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         }
       }
       andClauses.push({ $or: subOrs });
+    } else if (filters.fieldId) {
+      const targetFieldId = String(filters.fieldId).trim().split('/').pop();
+      const matchingSubs = SUBJECT_CATALOG.filter((s) => s.openAlexFieldId === targetFieldId);
+      const fieldOrs = [
+        { 'subjects.fieldId': targetFieldId },
+      ];
+      for (const sub of matchingSubs) {
+        fieldOrs.push({ 'subjects.id': sub.id });
+        fieldOrs.push({ category: sub.label });
+        if (sub.shortLabel && sub.shortLabel !== sub.label) {
+          fieldOrs.push({ category: new RegExp(sub.shortLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+        }
+      }
+      andClauses.push({ $or: fieldOrs });
     } else if (filters.category && filters.category !== 'All Disciplines') {
       andClauses.push({ category: filters.category });
     }
@@ -186,7 +200,7 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
                       id: null,
                       ror: null,
                       name: doc.university,
-                      countryCode: doc.countryCode || 'BD',
+                      countryCode: doc.countryCode || null,
                       type: 'education',
                     },
                   ]
@@ -204,7 +218,7 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
           id: null,
           ror: null,
           name: doc.university,
-          countryCode: doc.countryCode || 'BD',
+          countryCode: doc.countryCode || null,
           type: 'education',
           evidence: 'local_archive_thesis_metadata',
         };

@@ -42,6 +42,12 @@ const thesisSchema = new mongoose.Schema({
     },
     trim: true,
   },
+  countryCode: {
+    type: String,
+    default: null,
+    trim: true,
+    uppercase: true,
+  },
   department: {
     type: String,
     required: function () {

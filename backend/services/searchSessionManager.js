@@ -7,8 +7,9 @@ const { searchEuropePmc } = require('./providers/europePmc');
 const { searchHal } = require('./providers/hal');
 const { searchDoaj } = require('./providers/doaj');
 const { mergeTwoRecords, cleanTitleForMatching, getFirstAuthorSurname } = require('./deduplicator');
-const { mapToCanonicalSubject } = require('./subjectCatalog');
+const { mapToCanonicalSubject, getSubjectById } = require('./subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('./institutionService');
+const sessionStore = require('./sessionStore');
 
 const PROVIDER_NAMES = {
   local: 'Local Archive',
@@ -18,6 +19,114 @@ const PROVIDER_NAMES = {
   europepmc: 'Europe PMC',
   hal: 'HAL Open Science',
   doaj: 'DOAJ',
+};
+
+const PROVIDER_CAPABILITIES = {
+  local: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: true,
+    supportsCountry: true,
+    supportsAuthor: true,
+    supportsSubject: true,
+    supportsField: true,
+    supportsPublisher: true,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: true,
+  },
+  openalex: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: true,
+    supportsCountry: true,
+    supportsAuthor: true,
+    supportsSubject: true,
+    supportsField: true,
+    supportsPublisher: true,
+    supportsMinCitations: true,
+    supportsAwardingInstitution: false,
+  },
+  arxiv: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
+  crossref: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: true,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
+  europepmc: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
+  hal: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
+  doaj: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
 };
 
 const CURATED_BY_ID = new Map(
@@ -54,18 +163,44 @@ function instMatchesTarget(candidateId, candidateName, targetInstId, targetInstN
   return false;
 }
 
-// Bounded in-memory search session cache (30-minute TTL, max 200 active sessions)
-const sessions = new Map();
-const SESSION_TTL_MS = 30 * 60 * 1000;
-const MAX_SESSIONS = 200;
+function cleanPublisherForMatching(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .toLowerCase()
+    .replace(/b\.v\./gi, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\b(inc|incorporated|ltd|limited|llc|co|corp|corporation|press|publishing|publishers?|group|bv|academic)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchesPublisherFilter(record, filterPublisher) {
+  if (!filterPublisher || !filterPublisher.trim()) return true;
+  if (!record || !record.publisher) return false;
+
+  const targetClean = cleanPublisherForMatching(filterPublisher);
+  const candClean = cleanPublisherForMatching(record.publisher);
+
+  if (!targetClean || !candClean) return false;
+
+  if (candClean === targetClean) return true;
+  if (candClean.includes(targetClean) || targetClean.includes(candClean)) return true;
+
+  const targetTokens = targetClean.split(' ').filter((w) => w.length > 2);
+  if (targetTokens.length > 0 && targetTokens.every((t) => candClean.includes(t))) {
+    return true;
+  }
+
+  return false;
+}
+
+// Bounded in-memory search session cache (30-minute TTL, linked to sessionStore)
+const sessions = sessionStore.inMemorySessions;
+const SESSION_TTL_MS = sessionStore.SESSION_TTL_MS;
+const MAX_SESSIONS = 250;
 
 function cleanupExpiredSessions() {
-  const now = Date.now();
-  for (const [key, session] of sessions.entries()) {
-    if (now - session.lastAccessedAt > SESSION_TTL_MS) {
-      sessions.delete(key);
-    }
-  }
+  sessionStore.cleanupExpiredInMemory();
 }
 
 function normalizePublicationType(type) {
@@ -311,6 +446,9 @@ function sortUnfrozenBuffer(session, sort, query, pageNum) {
 }
 
 function isProviderEligible(pKey, filters = {}) {
+  const caps = PROVIDER_CAPABILITIES[pKey];
+  if (!caps) return false;
+
   if (filters.source) {
     const s = filters.source.toLowerCase().trim();
     if (pKey === 'local') {
@@ -340,21 +478,24 @@ function isProviderEligible(pKey, filters = {}) {
   const hasInst = Boolean(filters.institutionId || filters.institutionName);
   const hasCountry = Boolean(filters.countryCodes && filters.countryCodes.length > 0);
   const hasAuthorId = Boolean(filters.authorId);
-  const hasSubject = Boolean(filters.subjectId || filters.fieldId);
+  const hasSubject = Boolean(filters.subjectId);
+  const hasField = Boolean(filters.fieldId);
+  const hasPublisher = Boolean(filters.publisher && filters.publisher.trim());
   const hasMinCitations = Boolean(filters.minCitations && parseInt(filters.minCitations, 10) > 0);
   const isAwarding = filters.institutionMode === 'awarding';
 
   // In awarding institution mode, only Local Archive holds verified degree-awarding metadata
-  if (isAwarding && hasInst) {
-    return pKey === 'local';
+  if (isAwarding && hasInst && !caps.supportsAwardingInstitution) {
+    return false;
   }
 
-  // arXiv, Crossref, Europe PMC, HAL, and DOAJ cannot filter by structured institution, country, author ID, subject, or citations
-  if (hasInst || hasCountry || hasAuthorId || hasSubject || hasMinCitations) {
-    if (pKey !== 'local' && pKey !== 'openalex') {
-      return false;
-    }
-  }
+  if (hasInst && !caps.supportsInstitution) return false;
+  if (hasCountry && !caps.supportsCountry) return false;
+  if (hasAuthorId && !caps.supportsAuthor) return false;
+  if (hasSubject && !caps.supportsSubject) return false;
+  if (hasField && !caps.supportsField) return false;
+  if (hasPublisher && !caps.supportsPublisher) return false;
+  if (hasMinCitations && !caps.supportsMinCitations) return false;
 
   return true;
 }
@@ -596,6 +737,26 @@ async function executeSearchSessionLocked(session, {
             }
           }
 
+          // Publisher constraint validation
+          if (filters.publisher && !matchesPublisherFilter(record, filters.publisher)) {
+            continue;
+          }
+
+          // Broad Field constraint validation
+          if (filters.fieldId) {
+            const targetFieldId = String(filters.fieldId).trim().split('/').pop();
+            const hasField = (record.subjects || []).some((s) => {
+              if (s.fieldId && String(s.fieldId).split('/').pop() === targetFieldId) return true;
+              const catSub = getSubjectById(s.id);
+              return catSub && String(catSub.openAlexFieldId) === targetFieldId;
+            }) || (record.fieldId && String(record.fieldId).split('/').pop() === targetFieldId);
+            const mappedSub = mapToCanonicalSubject(record.category);
+            const mappedMatch = mappedSub && String(mappedSub.openAlexFieldId) === targetFieldId;
+            if (!hasField && !mappedMatch) {
+              continue;
+            }
+          }
+
           const recordId = record._id || record.id;
           const doiKey = record.doi ? record.doi.toLowerCase().trim() : null;
           const cleanTitle = cleanTitleForMatching(record.title);
@@ -685,7 +846,7 @@ async function executeSearchSessionLocked(session, {
     if (!session.providerStatus[pName]) {
       const eligible = isProviderEligible(pKey, filters);
       session.providerStatus[pName] = {
-        status: eligible ? 'idle' : 'unsupported_filter',
+        status: eligible ? 'idle' : 'skipped_unsupported_filter',
         count: 0,
         returnedCount: 0,
         total: 0,
@@ -695,6 +856,20 @@ async function executeSearchSessionLocked(session, {
       };
     }
   }
+
+  // Assess federated execution health: total technical failure vs partial results
+  const queriedProviders = Object.entries(session.providerStatus).filter(
+    ([_, st]) => st.status !== 'skipped_unsupported_filter' && st.status !== 'idle'
+  );
+  const allQueriedFailed = queriedProviders.length > 0 && queriedProviders.every(
+    ([_, st]) => Boolean(st.error) || st.status === 'degraded' || st.status === 'error'
+  );
+  const totalTechnicalFailure = allQueriedFailed && session.buffer.length === 0;
+
+  const anyQueriedFailed = queriedProviders.some(
+    ([_, st]) => Boolean(st.error) || st.status === 'degraded' || st.status === 'error'
+  );
+  const partialResults = anyQueriedFailed && session.buffer.length > 0;
 
   return {
     records: pageRecords,
@@ -707,25 +882,58 @@ async function executeSearchSessionLocked(session, {
     },
     providerStatus: session.providerStatus,
     sessionId: session.id,
+    totalTechnicalFailure,
+    partialResults,
     retrievedAt: new Date().toISOString(),
   };
 }
 
 /**
- * Validates whether an incoming sessionId represents a currently valid, unexpired
- * session strictly matching the requested query contract and scope.
+ * Synchronous session validation from local memory cache
  */
-function validateAndGetSession(sessionId, scope, query, filters, sort) {
+function validateAndGetSessionSync(sessionId, scope, query, filters, sort) {
   cleanupExpiredSessions();
   if (!sessionId || typeof sessionId !== 'string') {
     return { valid: false, session: null };
   }
-  const session = sessions.get(sessionId.trim());
+  const cleanId = sessionId.trim();
+  const session = sessions.get(cleanId);
   if (!session) {
     return { valid: false, session: null };
   }
   if (Date.now() - session.lastAccessedAt > SESSION_TTL_MS) {
-    sessions.delete(sessionId.trim());
+    sessions.delete(cleanId);
+    return { valid: false, session: null };
+  }
+  const expectedHash = computeSessionHash(query, filters, sort);
+  if (session.sessionHash !== expectedHash) {
+    return { valid: false, session: null };
+  }
+  if (session.scope && scope && session.scope !== scope) {
+    return { valid: false, session: null };
+  }
+  return { valid: true, session };
+}
+
+/**
+ * Asynchronous session validation supporting both in-memory cache and L2 MongoDB persistence
+ */
+async function validateAndGetSession(sessionId, scope, query, filters, sort) {
+  cleanupExpiredSessions();
+  if (!sessionId || typeof sessionId !== 'string') {
+    return { valid: false, session: null };
+  }
+  const cleanId = sessionId.trim();
+  let session = sessions.get(cleanId);
+  if (!session) {
+    session = await sessionStore.getSession(cleanId);
+  }
+  if (!session) {
+    return { valid: false, session: null };
+  }
+  if (Date.now() - session.lastAccessedAt > SESSION_TTL_MS) {
+    sessions.delete(cleanId);
+    await sessionStore.deleteSession(cleanId);
     return { valid: false, session: null };
   }
   const expectedHash = computeSessionHash(query, filters, sort);
@@ -740,14 +948,6 @@ function validateAndGetSession(sessionId, scope, query, filters, sort) {
 
 /**
  * Executes a session-buffered federated search
- * Guarantees that:
- * 1. Undisplayed papers are kept in the session buffer and never discarded.
- * 2. Deduplication is maintained across the entire search session with complementary fusion.
- * 3. Page boundaries are frozen so Page 1 order never shifts when Page 2 is refilled.
- * 4. Upstream provider cursors advance by raw count returned, not filtered count.
- * 5. Provider eligibility and hasMore are strictly calculated per active filters.
- * 6. Concurrent requests for the same session are queued safely via mutex.
- * 7. Server-issued session IDs are strictly validated without compound double-hashing.
  */
 async function executeSearchSession(params) {
   cleanupExpiredSessions();
@@ -762,15 +962,14 @@ async function executeSearchSession(params) {
 
   let session = null;
   if (explicitSessionId) {
-    if (sessions.has(explicitSessionId)) {
-      const validated = validateAndGetSession(explicitSessionId, scope, query, filters, sort);
-      if (validated.valid) {
-        session = validated.session;
-      }
+    const validated = await validateAndGetSession(explicitSessionId, scope, query, filters, sort);
+    if (validated.valid) {
+      session = validated.session;
     } else {
       // First request initializing this session ID
       const sessionHash = computeSessionHash(query, filters, sort);
       session = createNewSession(explicitSessionId, scope, query, filters, sort, sessionHash);
+      await sessionStore.saveSession(session);
     }
   }
 
@@ -778,13 +977,16 @@ async function executeSearchSession(params) {
     const sessionHash = computeSessionHash(query, filters, sort);
     const newSessionId = `sess_${crypto.randomBytes(12).toString('hex')}`;
     session = createNewSession(newSessionId, scope, query, filters, sort, sessionHash);
+    await sessionStore.saveSession(session);
   }
 
   session.lastAccessedAt = Date.now();
 
   const releaseLock = await acquireSessionLock(session);
   try {
-    return await executeSearchSessionLocked(session, params);
+    const searchResult = await executeSearchSessionLocked(session, params);
+    await sessionStore.saveSession(session);
+    return searchResult;
   } finally {
     releaseLock();
   }
@@ -794,8 +996,13 @@ module.exports = {
   executeSearchSession,
   computeSessionHash,
   validateAndGetSession,
+  validateAndGetSessionSync,
   normalizePublicationType,
   cleanupExpiredSessions,
   normalizeSessionFilterKey,
   matchesInstitutionalAndAuthorFilters,
+  matchesPublisherFilter,
+  cleanPublisherForMatching,
+  PROVIDER_CAPABILITIES,
+  PROVIDER_NAMES,
 };

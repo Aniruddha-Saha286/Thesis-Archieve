@@ -8,6 +8,7 @@ const { runMembershipAndBkashTests } = require('./membershipAndBkash.test');
 const { runAuthorAndInstitutionRegressionTests } = require('./authorAndInstitutionRegression.test');
 const { runPaperSummaryTests } = require('./paperSummaryService.test');
 const { runInstitutionAnalyticsTests } = require('./institutionAnalytics.test');
+const { runSearchHardeningRegressionTests } = require('./searchHardeningRegression.test');
 const { runE2EVerification } = require('./integrationE2E.test');
 
 console.log('===============================================================');
@@ -40,10 +41,12 @@ async function main() {
     console.log('');
     await runInstitutionAnalyticsTests();
     console.log('');
+    await runSearchHardeningRegressionTests();
+    console.log('');
     await runE2EVerification();
     
     console.log('\n===============================================================');
-    console.log('  ALL 11 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 12 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

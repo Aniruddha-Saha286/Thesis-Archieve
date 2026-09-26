@@ -7,6 +7,7 @@ const TrialGrant = require('../models/TrialGrant');
 const { authenticateToken, optionalAuth, requireAdmin } = require('../middleware/auth');
 const { orchestrateScholarlySearch } = require('../services/searchOrchestrator');
 const { validateAndGetSession, normalizePublicationType } = require('../services/searchSessionManager');
+const { parseAndValidateThesisQuery } = require('../services/queryParser');
 const { generateApaCitation, generateBibtex, generateRis } = require('../services/citationGenerator');
 const { createNormalizedRecord } = require('../services/scholarlyRecord');
 const { enrichPaperDatasets, searchGlobalDatasets } = require('../services/datasetDiscoveryService');
@@ -48,75 +49,27 @@ router.get('/', optionalAuth, async (req, res) => {
   let reservedGuestCredit = false;
 
   try {
-    const {
-      search,
-      query,
-      page = 1,
-      limit = 20,
-      category,
-      subjectId,
-      publicationType,
-      yearMin,
-      yearMax,
-      hasPdf,
-      isOpenAccess,
-      source,
-      publisher,
-      institutionId,
-      institutionMode,
-      countryCodes,
-      countryCode,
-      countries,
-      authorId,
-      minCitations,
-      sort = 'relevance',
-      sessionId,
-      searchContextId,
-      searchActionId,
-    } = req.query;
-
-    const searchTerm = (search || query || '').trim();
-    const sortOrder = sort || 'relevance';
-
-    const filters = {};
-    if (category && category !== 'All Disciplines') filters.category = category;
-    if (subjectId && subjectId.trim()) filters.subjectId = subjectId.trim();
-    if (publicationType && publicationType !== 'all') {
-      filters.publicationType = normalizePublicationType(publicationType);
+    const queryValidation = parseAndValidateThesisQuery(req.query);
+    if (!queryValidation.valid) {
+      return res.status(queryValidation.status).json({
+        message: queryValidation.message,
+        code: queryValidation.code,
+      });
     }
-    if (yearMin) filters.yearMin = yearMin;
-    if (yearMax) filters.yearMax = yearMax;
-    if (hasPdf === 'true' || hasPdf === true) filters.hasPdf = true;
-    if (isOpenAccess === 'true' || isOpenAccess === true) filters.isOpenAccess = true;
-    if (source && source.trim()) filters.source = source.trim();
-    if (publisher && publisher.trim()) filters.publisher = publisher.trim();
-    if (institutionId && institutionId.trim()) filters.institutionId = institutionId.trim();
-    if (institutionMode) filters.institutionMode = institutionMode;
-    const rawCountry = countryCodes || countryCode || countries;
-    if (rawCountry) filters.countryCodes = rawCountry;
-    if (authorId && authorId.trim()) filters.authorId = authorId.trim();
-    if (minCitations && !isNaN(parseInt(minCitations))) filters.minCitations = parseInt(minCitations);
 
-    // Determine if this request is an active search or filter query
-    const isSearchInquiry = Boolean(
-      searchTerm ||
-      (category && category !== 'All Disciplines') ||
-      (subjectId && subjectId.trim()) ||
-      (publicationType && publicationType !== 'all') ||
-      yearMin ||
-      yearMax ||
-      hasPdf ||
-      isOpenAccess ||
-      source ||
-      publisher ||
-      institutionId ||
-      rawCountry ||
-      authorId ||
-      minCitations
-    );
+    const {
+      searchTerm,
+      sortOrder,
+      page: cleanPage,
+      limit: cleanLimit,
+      filters,
+      sessionId: cleanSessionId,
+      searchContextId: cleanContextId,
+      isSearchInquiry,
+    } = queryValidation;
 
     const scope = req.user ? String(req.user._id) : (req.ip || 'guest');
-    const existingSessionValidation = validateAndGetSession(sessionId, scope, searchTerm, filters, sortOrder);
+    const existingSessionValidation = await validateAndGetSession(cleanSessionId, scope, searchTerm, filters, sortOrder);
     const hasValidSession = existingSessionValidation.valid;
 
     const todayDhaka = getDhakaDateString(new Date());
@@ -131,14 +84,14 @@ router.get('/', optionalAuth, async (req, res) => {
     }
 
     // Context tracking for instant filter refinements
-    const effectiveContextId = searchContextId || searchActionId || (hasValidSession ? sessionId : createSearchContextId());
+    const effectiveContextId = cleanContextId || (hasValidSession ? cleanSessionId : createSearchContextId());
 
     // Billable Action Rule:
     // 1. Must be an active search inquiry on page 1.
     // 2. Must not be a cached session page replay.
     // 3. Must not have already been billed under this searchContextId today (instant filter refinements within the active inquiry do NOT consume quota).
     const alreadyBilledForContext = isAlreadyBilled(scope, 'search', effectiveContextId, todayDhaka);
-    const isBillableAction = Boolean(isSearchInquiry && !hasValidSession && parseInt(page || 1) === 1 && !alreadyBilledForContext);
+    const isBillableAction = Boolean(isSearchInquiry && !hasValidSession && cleanPage === 1 && !alreadyBilledForContext);
 
     let searchQuota = { limit: 'unlimited', used: 0, remaining: 'unlimited', plan: 'guest' };
 
@@ -203,11 +156,11 @@ router.get('/', optionalAuth, async (req, res) => {
     try {
       searchResult = await orchestrateScholarlySearch({
         query: searchTerm,
-        page: parseInt(page) || 1,
-        limit: parseInt(limit) || 20,
+        page: cleanPage,
+        limit: cleanLimit,
         filters,
         sort: sortOrder,
-        sessionId: hasValidSession ? sessionId : null,
+        sessionId: hasValidSession ? cleanSessionId : null,
         scope,
       });
     } catch (searchErr) {
@@ -221,6 +174,23 @@ router.get('/', optionalAuth, async (req, res) => {
         });
       }
       throw searchErr;
+    }
+
+    // Auto-release reserved credit on total technical failure
+    if (searchResult && searchResult.totalTechnicalFailure && (reservedUserCredit || reservedGuestCredit)) {
+      await releaseReservedCredit({
+        user: req.user,
+        scope,
+        metric: 'search',
+        idempotencyKey: effectiveContextId,
+        dateStr: todayDhaka,
+      });
+      reservedUserCredit = false;
+      reservedGuestCredit = false;
+      searchQuota.used = Math.max(0, searchQuota.used - 1);
+      if (searchQuota.remaining !== 'unlimited') {
+        searchQuota.remaining = Math.min(searchLimit, searchQuota.remaining + 1);
+      }
     }
 
     // Enforce dataset access rule: Free tier cannot access datasets of each file

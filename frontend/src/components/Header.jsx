@@ -38,6 +38,7 @@ export default function Header({
   onOpenMembership,
   membershipPlan = 'free',
   onOpenLogin,
+  onOpenCoverage,
   // Publication type and filters
   selectedPublicationType = 'all',
   onChangePublicationType,
@@ -216,7 +217,7 @@ export default function Header({
                   placeholder={
                     searchMode === 'authors'
                       ? 'Search researchers: e.g. Yoshua Bengio, Hinton, ORCID...'
-                      : 'Search 250M+ scholarly works: title, author, DOI, domain...'
+                      : 'Search federated scholarly works: title, author, DOI, topic, publisher...'
                   }
                   className="w-full bg-[#FAF9F5] border border-[#D5D1C7] hover:border-[#8C887E] focus:border-[#1C1B18] px-3.5 py-1.5 pl-8 pr-16 text-xs text-[#1C1B18] placeholder-[#8C887E] focus:outline-none rounded-sm transition font-sans"
                 />
@@ -524,6 +525,21 @@ export default function Header({
                 </span>
               )}
             </button>
+
+            {onOpenCoverage && (
+              <>
+                <span className="text-[#D5D1C7]">•</span>
+                <button
+                  type="button"
+                  onClick={onOpenCoverage}
+                  className="px-2 py-0.5 rounded-xs bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#524F47] hover:text-[#1C1B18] transition flex items-center gap-1 cursor-pointer font-medium"
+                  title="View federated coverage and source disclosures"
+                >
+                  <Globe className="w-3 h-3 text-[#737067]" />
+                  <span>Coverage & Sources</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
