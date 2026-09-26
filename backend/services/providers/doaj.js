@@ -73,6 +73,8 @@ async function searchDoaj({ query = '', page = 1, limit = 20, filters = {}, sort
 
       const journalTitle = bib.journal?.title || null;
       const publisher = bib.journal?.publisher || journalTitle || 'DOAJ Open Access Publishing';
+      const rawCategory = (Array.isArray(bib.subject) ? bib.subject.map((s) => s.term).join(' ') : '') ||
+        (Array.isArray(bib.keywords) ? bib.keywords.join(' ') : null);
 
       return createNormalizedRecord({
         id: `doaj_${item.id}`,
@@ -80,6 +82,7 @@ async function searchDoaj({ query = '', page = 1, limit = 20, filters = {}, sort
         title: title,
         authors: authors,
         abstract: bib.abstract || null,
+        category: rawCategory,
         publicationType: 'journal-article',
         isPeerReviewed: true, // All DOAJ articles are peer-reviewed
         publishedYear: pubYear,

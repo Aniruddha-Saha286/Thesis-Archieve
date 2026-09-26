@@ -174,9 +174,9 @@ function createNormalizedRecord(data) {
       provenance: s.provenance || 'curated',
       sourceId: s.sourceId || null,
     }));
-  } else if (data.category) {
+  } else if (data.category && data.category !== 'Other Disciplines') {
     const matched = mapToCanonicalSubject(data.category);
-    if (matched) {
+    if (matched && matched.id !== 'other') {
       subjects.push({
         id: matched.id,
         label: matched.label,
@@ -184,6 +184,32 @@ function createNormalizedRecord(data) {
         provenance: 'curated',
         sourceId: null,
       });
+    }
+  }
+
+  // If still unclassified (e.g. arXiv, Crossref, Europe PMC, HAL, DOAJ without explicit taxonomy),
+  // infer discipline from title or abstract via canonical subject catalog
+  if (subjects.length === 0 || subjects.every((s) => s.id === 'other')) {
+    const titleMatch = data.title ? mapToCanonicalSubject(data.title) : null;
+    if (titleMatch && titleMatch.id !== 'other') {
+      subjects = [{
+        id: titleMatch.id,
+        label: titleMatch.label,
+        shortLabel: titleMatch.shortLabel,
+        provenance: 'inferred_title',
+        sourceId: null,
+      }];
+    } else if (data.abstract) {
+      const abstractMatch = mapToCanonicalSubject(data.abstract.slice(0, 1000));
+      if (abstractMatch && abstractMatch.id !== 'other') {
+        subjects = [{
+          id: abstractMatch.id,
+          label: abstractMatch.label,
+          shortLabel: abstractMatch.shortLabel,
+          provenance: 'inferred_abstract',
+          sourceId: null,
+        }];
+      }
     }
   }
 

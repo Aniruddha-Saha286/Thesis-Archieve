@@ -418,7 +418,7 @@ async function getOrGeneratePaperSummary({
       enabled: true,
       coverage: 'unavailable',
       message:
-        'Insufficient abstract or authorized full-text content available for grounded summarization. مشروع Panther strictly avoids hallucinating paper findings.',
+        'Insufficient abstract or authorized full-text content available for grounded summarization. Project Panther strictly avoids hallucinating paper findings.',
     };
   }
 

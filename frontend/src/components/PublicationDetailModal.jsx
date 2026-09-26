@@ -1819,21 +1819,24 @@ export default function PublicationDetailModal({
                         <span className="text-[11px] font-mono-meta text-amber-900 uppercase tracking-wider font-bold flex items-center gap-1.5">
                           ⚠️ Author-Stated Limitations:
                         </span>
-                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono-meta font-bold uppercase ${
-                          (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) &&
-                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).toLowerCase().includes('none explicitly') &&
-                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).includes('সুনির্দিষ্ট সীমাবদ্ধতা') &&
-                          (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) !== 'Not reported'
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-slate-100 text-slate-700 border border-slate-300'
-                        }`}>
-                          {(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) &&
-                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).toLowerCase().includes('none explicitly') &&
-                          !(summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations).includes('সুনির্দিষ্ট সীমাবদ্ধতা') &&
-                          (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations) !== 'Not reported'
-                            ? '✓ Stated by Authors'
-                            : 'Unstated in Abstract'}
-                        </span>
+                        {(() => {
+                          const lim = (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations || '').toLowerCase();
+                          const hasStated = lim &&
+                            !lim.includes('none explicitly') &&
+                            !lim.includes('সুনির্দিষ্ট সীমাবদ্ধতা') &&
+                            !lim.includes('সুস্পষ্ট সীমাবদ্ধতা') &&
+                            !lim.includes('সরাসরি উল্লেখ করা হয়নি') &&
+                            lim !== 'not reported';
+                          return (
+                            <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono-meta font-bold uppercase ${
+                              hasStated
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-slate-100 text-slate-700 border border-slate-300'
+                            }`}>
+                              {hasStated ? '✓ Stated by Authors' : 'Unstated in Abstract'}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <p className="text-sm text-[#524F47] leading-relaxed mt-2">
                         {summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations}

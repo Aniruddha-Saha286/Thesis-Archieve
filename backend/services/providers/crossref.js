@@ -125,12 +125,15 @@ async function searchCrossref({ query = '', page = 1, limit = 20, offset: explic
       else if (it.type === 'posted-content') pubType = 'preprint';
       else if (it.type === 'book' || it.type === 'monograph' || it.type === 'edited-book') pubType = 'book';
 
+      const rawCategory = Array.isArray(it.subject) ? it.subject.join(' ') : (it.subject || null);
+
       return createNormalizedRecord({
         id: `crossref_${doi ? doi.replace(/[^a-zA-Z0-9]/g, '_') : Math.random().toString(36).substring(7)}`,
         doi: doi,
         title: title,
         authors: authors,
         abstract: it.abstract ? it.abstract.replace(/<[^>]*>/g, '').trim() : null,
+        category: rawCategory,
         publicationType: pubType,
         isPeerReviewed: pubType === 'journal-article' || pubType === 'conference-paper',
         publishedYear: publishedYear,

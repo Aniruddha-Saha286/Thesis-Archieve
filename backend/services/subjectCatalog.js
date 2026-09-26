@@ -187,6 +187,19 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_LABEL.get(str);
   }
 
+  // 2.5 arXiv and taxonomic category code mappings
+  if (str === 'cs.cr' || str.startsWith('cs.cr')) return SUBJECTS_BY_ID.get('cybersecurity');
+  if (str === 'cs.ai' || str === 'cs.lg' || str === 'stat.ml' || str.startsWith('cs.ai') || str.startsWith('cs.lg') || str.startsWith('stat.ml')) return SUBJECTS_BY_ID.get('ai-ml');
+  if (str === 'cs.cv' || str.startsWith('cs.cv')) return SUBJECTS_BY_ID.get('computer-vision');
+  if (str === 'cs.cl' || str.startsWith('cs.cl')) return SUBJECTS_BY_ID.get('nlp');
+  if (str === 'cs.se' || str.startsWith('cs.se')) return SUBJECTS_BY_ID.get('software-engineering');
+  if (str === 'cs.ni' || str === 'cs.dc' || str.startsWith('cs.ni') || str.startsWith('cs.dc')) return SUBJECTS_BY_ID.get('networks-distributed');
+  if (str === 'cs.db' || str.startsWith('cs.db')) return SUBJECTS_BY_ID.get('databases');
+  if (str === 'cs.hc' || str.startsWith('cs.hc')) return SUBJECTS_BY_ID.get('hci');
+  if (str === 'cs.ro' || str === 'cs.ar' || str === 'cs.sy' || str === 'eess.sp' || str.startsWith('cs.ro')) return SUBJECTS_BY_ID.get('iot-embedded');
+  if (str.startsWith('q-bio')) return SUBJECTS_BY_ID.get('biomedical');
+  if (str.startsWith('econ') || str.startsWith('q-fin')) return SUBJECTS_BY_ID.get('development-economics');
+
   // 3. Legacy category bridges and disambiguation
   if (str.includes('computer science') && (str.includes('nlp') || str.includes('natural language'))) {
     return SUBJECTS_BY_ID.get('nlp');
@@ -213,8 +226,9 @@ function mapToCanonicalSubject(input) {
   if (
     str.includes('cyber') ||
     str.includes('crypt') ||
-    /\b(infosec|malware|ransomware|penetration testing|vulnerability|intrusion detection)\b/.test(str) ||
-    /\b(computer|network|information|software)\s+security\b/.test(str)
+    /\b(infosec|malware|ransomware|penetration testing|vulnerability|vulnerabilities|intrusion detection|zero trust|threat intelligence|phishing|firewall|exploit|access control|authentication)\b/i.test(str) ||
+    /\b(computer|network|information|software|system|data|cloud|iot|web)\s+security\b/i.test(str) ||
+    /\bsecurity\s+(information|protocol|protocols|measure|measures|threat|threats|incident|incidents|policy|policies|framework|frameworks|assessment|evaluation|management|audit)\b/i.test(str)
   ) {
     return SUBJECTS_BY_ID.get('cybersecurity');
   }

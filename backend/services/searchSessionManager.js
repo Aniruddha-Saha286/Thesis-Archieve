@@ -422,12 +422,22 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
   }
 
   // 5. Subject Category Constraint
-  if (filters.subjectId) {
-    const targetSubId = String(filters.subjectId).trim().toLowerCase();
+  const targetSubId = filters.subjectId
+    ? String(filters.subjectId).trim().toLowerCase()
+    : (filters.category && filters.category !== 'All Disciplines' ? mapToCanonicalSubject(filters.category)?.id : null);
+
+  if (targetSubId) {
     const hasSub = (record.subjects || []).some((s) => s.id && s.id.toLowerCase() === targetSubId);
-    const mappedSub = mapToCanonicalSubject(record.category);
-    if (!hasSub && (!mappedSub || mappedSub.id !== targetSubId)) {
-      return false;
+    if (!hasSub) {
+      const mappedSub = mapToCanonicalSubject(record.category);
+      const mappedTitle = record.title ? mapToCanonicalSubject(record.title) : null;
+      const mappedAbstract = record.abstract ? mapToCanonicalSubject(record.abstract.slice(0, 1000)) : null;
+      const matchesCategory = mappedSub && mappedSub.id === targetSubId;
+      const matchesTitle = mappedTitle && mappedTitle.id === targetSubId;
+      const matchesAbstract = mappedAbstract && mappedAbstract.id === targetSubId;
+      if (!matchesCategory && !matchesTitle && !matchesAbstract) {
+        return false;
+      }
     }
   }
 
@@ -573,6 +583,22 @@ async function executeSearchSessionLocked(session, {
   let refillAttempts = 0;
   const MAX_REFILL_ATTEMPTS = 5;
 
+  // When a discipline filter is active but no user query was typed, build a
+  // keyword-based query for providers that lack native subject/field filtering.
+  // This replaces their generic "research" fallback with discipline-specific terms,
+  // dramatically improving the yield of the post-filter.
+  let subjectAugmentedQuery = query;
+  if (!query || !query.trim()) {
+    const sub = filters.subjectId ? getSubjectById(filters.subjectId) : null;
+    if (sub && sub.keywords && sub.keywords.length > 0) {
+      // Use the first two keywords for breadth without over-narrowing
+      subjectAugmentedQuery = sub.keywords.slice(0, 2).join(' ');
+    } else if (filters.category && filters.category !== 'All Disciplines') {
+      // Fallback: use the raw category label as a search term
+      subjectAugmentedQuery = filters.category;
+    }
+  }
+
   while (session.buffer.length < endIndex && !session.allProvidersExhausted && refillAttempts < MAX_REFILL_ATTEMPTS) {
     refillAttempts++;
     const fetchPromises = [];
@@ -604,7 +630,7 @@ async function executeSearchSessionLocked(session, {
       const curOffset = session.providerStates.arxiv.offset || 0;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
-        searchArxiv({ query, offset: curOffset, limit: batchSize, filters, sort })
+        searchArxiv({ query: subjectAugmentedQuery, offset: curOffset, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'arXiv', key: 'arxiv', ...res, nextOffset: curOffset + (res.rawCount ?? res.records?.length ?? 0) }))
           .catch((err) => ({ name: 'arXiv', key: 'arxiv', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
@@ -615,7 +641,7 @@ async function executeSearchSessionLocked(session, {
       const curOffset = session.providerStates.crossref.offset || 0;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
-        searchCrossref({ query, offset: curOffset, limit: batchSize, filters, sort })
+        searchCrossref({ query: subjectAugmentedQuery, offset: curOffset, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'Crossref', key: 'crossref', ...res, nextOffset: curOffset + (res.rawCount ?? res.records?.length ?? 0) }))
           .catch((err) => ({ name: 'Crossref', key: 'crossref', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
@@ -626,7 +652,7 @@ async function executeSearchSessionLocked(session, {
       const curPage = session.providerStates.europepmc.page || 1;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
-        searchEuropePmc({ query, page: curPage, limit: batchSize, filters, sort })
+        searchEuropePmc({ query: subjectAugmentedQuery, page: curPage, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'Europe PMC', key: 'europepmc', ...res, nextPage: curPage + 1 }))
           .catch((err) => ({ name: 'Europe PMC', key: 'europepmc', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
@@ -637,7 +663,7 @@ async function executeSearchSessionLocked(session, {
       const curOffset = session.providerStates.hal.offset || 0;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
-        searchHal({ query, offset: curOffset, limit: batchSize, filters, sort })
+        searchHal({ query: subjectAugmentedQuery, offset: curOffset, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'HAL Open Science', key: 'hal', ...res, nextOffset: curOffset + (res.rawCount ?? res.records?.length ?? 0) }))
           .catch((err) => ({ name: 'HAL Open Science', key: 'hal', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
@@ -648,7 +674,7 @@ async function executeSearchSessionLocked(session, {
       const curPage = session.providerStates.doaj.page || 1;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
-        searchDoaj({ query, page: curPage, limit: batchSize, filters, sort })
+        searchDoaj({ query: subjectAugmentedQuery, page: curPage, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'DOAJ', key: 'doaj', ...res, nextPage: curPage + 1 }))
           .catch((err) => ({ name: 'DOAJ', key: 'doaj', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
@@ -698,12 +724,22 @@ async function executeSearchSessionLocked(session, {
           }
 
           // Subject category constraint validation
-          if (filters.subjectId) {
-            const targetSubId = String(filters.subjectId).trim().toLowerCase();
-            const hasSub = (record.subjects || []).some((s) => s.id && s.id.toLowerCase() === targetSubId);
-            const mappedSub = mapToCanonicalSubject(record.category);
-            if (!hasSub && (!mappedSub || mappedSub.id !== targetSubId)) {
-              continue;
+          const loopTargetSubId = filters.subjectId
+            ? String(filters.subjectId).trim().toLowerCase()
+            : (filters.category && filters.category !== 'All Disciplines' ? mapToCanonicalSubject(filters.category)?.id : null);
+
+          if (loopTargetSubId) {
+            const hasSub = (record.subjects || []).some((s) => s.id && s.id.toLowerCase() === loopTargetSubId);
+            if (!hasSub) {
+              const mappedFromCategory = mapToCanonicalSubject(record.category);
+              const mappedFromTitle = mapToCanonicalSubject(record.title);
+              const mappedFromAbstract = record.abstract ? mapToCanonicalSubject(record.abstract.slice(0, 1000)) : null;
+              const categoryMatch = mappedFromCategory && mappedFromCategory.id === loopTargetSubId;
+              const titleMatch = mappedFromTitle && mappedFromTitle.id === loopTargetSubId;
+              const abstractMatch = mappedFromAbstract && mappedFromAbstract.id === loopTargetSubId;
+              if (!categoryMatch && !titleMatch && !abstractMatch) {
+                continue;
+              }
             }
           }
 

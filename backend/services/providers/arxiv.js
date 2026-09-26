@@ -83,12 +83,17 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
       if (filters.yearMin && pubYear && pubYear < parseInt(filters.yearMin)) return null;
       if (filters.yearMax && pubYear && pubYear > parseInt(filters.yearMax)) return null;
 
+      // Extract arXiv primary category code (e.g. cs.CR, cs.AI, stat.ML)
+      const rawCatTerm = entry['arxiv:primary_category']?.['@_term'] ||
+        (Array.isArray(entry.category) ? entry.category[0]?.['@_term'] : entry.category?.['@_term']) || null;
+
       return createNormalizedRecord({
         id: `arxiv_${rawId.replace(/[^a-zA-Z0-9]/g, '_')}`,
         doi: doi,
         title: entry.title,
         authors: authors,
         abstract: entry.summary,
+        category: rawCatTerm,
         publicationType: journalRef ? 'journal-article' : 'preprint',
         isPeerReviewed: Boolean(journalRef), // arXiv preprints are not peer reviewed unless published in journal
         publicationDate: pubDate,

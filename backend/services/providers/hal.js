@@ -10,7 +10,7 @@ async function searchHal({ query = '', page = 1, limit = 20, offset: explicitOff
     params.append('wt', 'json');
     params.append('rows', String(Math.min(limit, 30)));
     params.append('start', String(offset));
-    params.append('fl', 'docid,title_s,abstract_s,authFullName_s,producedDateY_i,uri_s,files_s,fileMain_s,journalTitle_s,docType_s,doiId_s');
+    params.append('fl', 'docid,title_s,abstract_s,authFullName_s,producedDateY_i,uri_s,files_s,fileMain_s,journalTitle_s,docType_s,doiId_s,keyword_s,domain_s');
 
     if (filters.hasPdf) {
       params.append('fq', 'submitType_s:file');
@@ -85,12 +85,16 @@ async function searchHal({ query = '', page = 1, limit = 20, offset: explicitOff
         });
       }
 
+      const rawCategory = (Array.isArray(doc.keyword_s) ? doc.keyword_s.join(' ') : (doc.keyword_s || '')) ||
+        (Array.isArray(doc.domain_s) ? doc.domain_s.join(' ') : (doc.domain_s || null));
+
       return createNormalizedRecord({
         id: `hal_${doc.docid}`,
         doi: doi,
         title: title,
         authors: authors,
         abstract: Array.isArray(doc.abstract_s) ? doc.abstract_s[0] : doc.abstract_s,
+        category: rawCategory,
         publicationType: pubType,
         isPeerReviewed: isThesis || pubType === 'journal-article',
         publishedYear: pubYear,
