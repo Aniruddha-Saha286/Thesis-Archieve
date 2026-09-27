@@ -4,9 +4,10 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const AuditEvent = require('../models/AuditEvent');
 const { uploadLimiter } = require('../middleware/rateLimit');
-const { emitStudentProfileUpdated } = require('../socket');
+const { emitStudentProfileUpdated, emitToAdmins, emitToUser } = require('../socket');
 const emailService = require('../services/emailService');
 
 // Configure Cloudinary strictly from environment variables
@@ -130,6 +131,28 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
 
     if (updatedStudent) {
       emitStudentProfileUpdated(updatedStudent);
+
+      // In-app Notification for Admin
+      try {
+        const adminUser = await User.findOne({ role: 'admin' });
+        const notifPayload = {
+          type: 'verification_request',
+          title: 'Student Verification Requested',
+          message: `${updatedStudent.name} (${updatedStudent.email}) submitted credential documents for identity review.`,
+        };
+        if (adminUser) {
+          const adminNotif = new Notification({
+            user: adminUser._id,
+            ...notifPayload,
+          });
+          await adminNotif.save();
+          emitToUser(String(adminUser._id), 'notification:new', adminNotif);
+        }
+        emitToAdmins('notification:new', notifPayload);
+      } catch (notifErr) {
+        console.error('[Upload] In-app notification error:', notifErr.message);
+      }
+
       emailService.notifyAdminNewVerification({
         studentName: updatedStudent.name,
         studentEmail: updatedStudent.email,

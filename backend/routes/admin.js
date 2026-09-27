@@ -289,6 +289,19 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
     });
 
     if (decision === 'approve') {
+      try {
+        const studentNotif = new Notification({
+          user: student._id,
+          type: 'verification_approved',
+          title: 'Student Identity Verified',
+          message: 'Your student researcher credentials have been officially approved by the depository administration.',
+        });
+        await studentNotif.save();
+        emitToUser(String(student._id), 'notification:new', studentNotif);
+      } catch (notifErr) {
+        console.error('[Admin] Student notification error:', notifErr.message);
+      }
+
       emailService.notifyUserVerificationApproved({
         userEmail: student.email,
         userName: student.name,
@@ -559,6 +572,19 @@ router.post('/editors', requireAdmin, adminActionLimiter, async (req, res) => {
       appointedBy: req.user.email || req.user.name,
     }).catch((err) => console.error('[EmailService] Editor appointment notification error:', err.message));
 
+    try {
+      const editorNotif = new Notification({
+        user: targetUser._id,
+        type: 'editor_appointed',
+        title: 'Editorial Board Appointment',
+        message: `You have been appointed as a Depository Editor with permissions: ${validPerms.join(', ') || 'standard privileges'}.`,
+      });
+      await editorNotif.save();
+      emitToUser(String(targetUser._id), 'notification:new', editorNotif);
+    } catch (notifErr) {
+      console.error('[Admin] Editor notification error:', notifErr.message);
+    }
+
     return res.status(201).json({
       message: `Successfully appointed ${targetUser.name} (${targetUser.email}) as Editor.`,
       editor: toSanitizedUserDto(targetUser),
@@ -616,6 +642,19 @@ router.patch('/editors/:id', requireAdmin, adminActionLimiter, async (req, res) 
       permissions: validPerms,
       updatedBy: req.user.email || req.user.name,
     }).catch((err) => console.error('[EmailService] Editor permissions update notification error:', err.message));
+
+    try {
+      const editorNotif = new Notification({
+        user: editor._id,
+        type: 'permissions_updated',
+        title: 'Editorial Permissions Updated',
+        message: `Your active editorial permissions: ${validPerms.join(', ') || 'none'}.`,
+      });
+      await editorNotif.save();
+      emitToUser(String(editor._id), 'notification:new', editorNotif);
+    } catch (notifErr) {
+      console.error('[Admin] Editor update notification error:', notifErr.message);
+    }
 
     return res.json({
       message: `Permissions updated for editor ${editor.name}.`,

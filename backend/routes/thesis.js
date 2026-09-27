@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const Thesis = require('../models/Thesis');
 const Report = require('../models/Report');
 const TrialGrant = require('../models/TrialGrant');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { authenticateToken, optionalAuth, requireAdmin } = require('../middleware/auth');
 const { requirePermission, PERMISSIONS } = require('../middleware/rbac');
 const { orchestrateScholarlySearch } = require('../services/searchOrchestrator');
@@ -19,6 +21,8 @@ const {
   emitThesisUpdated,
   emitThesisDeleted,
   emitThesisPinned,
+  emitToAdmins,
+  emitToUser,
 } = require('../socket');
 const {
   reserveUsage,
@@ -739,6 +743,23 @@ router.post('/:id/report', optionalAuth, async (req, res) => {
       reportedBy: newReport.reportedBy,
       title: newReport.title,
     }).catch((err) => console.error('[EmailService] Report notification error:', err.message));
+
+    try {
+      const adminUser = await User.findOne({ role: 'admin' });
+      const notifPayload = {
+        type: 'report_created',
+        title: 'Publication Grievance Reported',
+        message: `Issue "${newReport.issueType}" reported for "${newReport.title}" by ${newReport.reportedBy}.`,
+      };
+      if (adminUser) {
+        const adminNotif = new Notification({ user: adminUser._id, ...notifPayload });
+        await adminNotif.save();
+        emitToUser(String(adminUser._id), 'notification:new', adminNotif);
+      }
+      emitToAdmins('notification:new', notifPayload);
+    } catch (notifErr) {
+      console.error('[Thesis] In-app notification error:', notifErr.message);
+    }
 
     return res.status(201).json({
       message: 'Thank you. Your report has been logged persistently for editorial review.',

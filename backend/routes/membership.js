@@ -475,6 +475,23 @@ router.post('/payments', async (req, res) => {
           isResubmission: true,
         }).catch((err) => console.error('[EmailService] Payment resubmission notification error:', err.message));
 
+        try {
+          const adminUser = await User.findOne({ role: 'admin' });
+          const notifPayload = {
+            type: 'payment_claim',
+            title: 'bKash Payment Resubmitted',
+            message: `${req.user.name || 'Scholar'} (${req.user.email}) resubmitted TrxID: ${existingForOrder.trxId} (৳${existingForOrder.claimedAmountPaisa / 100}) for review.`,
+          };
+          if (adminUser) {
+            const adminNotif = new Notification({ user: adminUser._id, ...notifPayload });
+            await adminNotif.save();
+            emitToUser(String(adminUser._id), 'notification:new', adminNotif);
+          }
+          emitToAdmins('notification:new', notifPayload);
+        } catch (notifErr) {
+          console.error('[Membership] In-app notification error:', notifErr.message);
+        }
+
         return res.status(200).json({
           message: 'bKash payment claim updated and resubmitted for admin review.',
           submission: {
@@ -547,6 +564,23 @@ router.post('/payments', async (req, res) => {
       orderRef: order.orderRef,
       isResubmission: false,
     }).catch((err) => console.error('[EmailService] Payment submission notification error:', err.message));
+
+    try {
+      const adminUser = await User.findOne({ role: 'admin' });
+      const notifPayload = {
+        type: 'payment_claim',
+        title: 'New bKash Payment Claim',
+        message: `${req.user.name || 'Scholar'} (${req.user.email}) submitted TrxID: ${submission.trxId} (৳${submission.claimedAmountPaisa / 100}) for review.`,
+      };
+      if (adminUser) {
+        const adminNotif = new Notification({ user: adminUser._id, ...notifPayload });
+        await adminNotif.save();
+        emitToUser(String(adminUser._id), 'notification:new', adminNotif);
+      }
+      emitToAdmins('notification:new', notifPayload);
+    } catch (notifErr) {
+      console.error('[Membership] In-app notification error:', notifErr.message);
+    }
 
     return res.status(201).json({
       message: 'bKash payment claim submitted successfully. It is now awaiting manual editorial review in the admin merchant desk.',
