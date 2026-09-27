@@ -970,6 +970,8 @@ export default function App() {
                         onClick={() => {
                           setSelectedSubjectId(sub.id);
                           setSelectedCategory(sub.label);
+                          setSelectedFieldId('');
+                          setSelectedFieldName('');
                           setSelectedPublisher('');
                           setSessionId(null);
                           setCurrentPage(1);
@@ -998,6 +1000,8 @@ export default function App() {
                   const matched = subjectsList.find((s) => s.id === subId);
                   setSelectedSubjectId(subId);
                   setSelectedCategory(matched ? matched.label : 'All Disciplines');
+                  setSelectedFieldId('');
+                  setSelectedFieldName('');
                   setSessionId(null);
                   setCurrentPage(1);
                 }}
@@ -1736,6 +1740,7 @@ export default function App() {
           onClose={() => setInspectingAuthor(null)}
           onSelectAuthorPublications={(auth) => {
             setSelectedAuthorFilter(auth);
+            setSearchQuery('');
             setSessionId(null);
             setCurrentPage(1);
           }}
@@ -1757,6 +1762,13 @@ export default function App() {
             setSelectedFieldName(fName || '');
             setSelectedSubjectId('');
             setSelectedCategory('All Disciplines');
+            if (inspectingLandscapeInst) {
+              setSelectedInstitution(inspectingLandscapeInst);
+            }
+            if (param && param.fromYear && param.toYear) {
+              setYearMin(String(param.fromYear));
+              setYearMax(String(param.toYear));
+            }
             setInspectingLandscapeInst(null);
             setSessionId(null);
             setCurrentPage(1);

@@ -118,9 +118,14 @@ const DETERMINISTIC_ANALYTICS_FIXTURES = {
 
 async function fetchWithRetry(url, options = {}, maxRetries = 2) {
   let attempt = 0;
+  const timeoutMs = options.timeoutMs || 8000;
+  const { signal: _discardedSignal, ...fetchOptions } = options;
+
   while (attempt <= maxRetries) {
     try {
-      const res = await fetch(url, options);
+      // Create a fresh AbortSignal per attempt so retry does not reuse an already-aborted signal
+      const signal = AbortSignal.timeout(timeoutMs);
+      const res = await fetch(url, { ...fetchOptions, signal });
       if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt) * 1000;
@@ -319,6 +324,8 @@ async function getInstitutionResearchLandscape({
       let institutionMeta = null;
       let rawFieldGroups = [];
       let rawYearGroups = [];
+      let rangeTotalWorks = null;
+      let publicationTrendsError = null;
 
       // If in test or offline mode and fixture exists, use deterministic recorded data
       if ((process.env.NODE_ENV === 'test' || process.env.OFFLINE_MODE === 'true') && fixture) {
@@ -344,20 +351,20 @@ async function getInstitutionResearchLandscape({
           // Parallelize OpenAlex requests to avoid sequential latency and timeouts
           const [instRes, fieldsRes, yearsRes] = await Promise.all([
             fetchWithRetry(`https://api.openalex.org/institutions/${cleanId}`, {
-              signal: AbortSignal.timeout(8000),
+              timeoutMs: 8000,
               headers: reqHeaders,
             }),
             fetchWithRetry(
               `https://api.openalex.org/works?filter=${encodeURIComponent(filterParam)}&group_by=primary_topic.field.id`,
               {
-                signal: AbortSignal.timeout(8000),
+                timeoutMs: 8000,
                 headers: reqHeaders,
               }
             ),
             fetchWithRetry(
               `https://api.openalex.org/works?filter=${encodeURIComponent(filterParam)}&group_by=publication_year`,
               {
-                signal: AbortSignal.timeout(8000),
+                timeoutMs: 8000,
                 headers: reqHeaders,
               }
             ),
@@ -410,22 +417,26 @@ async function getInstitutionResearchLandscape({
             citedByCount: instData.cited_by_count || 0,
           };
 
-          if (!fieldsRes.ok || !yearsRes.ok) {
-            const errStatus = !fieldsRes.ok ? fieldsRes.status : yearsRes.status;
+          if (!fieldsRes.ok) {
             return {
               enabled: true,
               error: true,
-              statusCode: errStatus >= 500 ? 502 : errStatus,
+              statusCode: fieldsRes.status >= 500 ? 502 : fieldsRes.status,
               code: 'ANALYTICS_UPSTREAM_ERROR',
-              message: `OpenAlex returned an error while aggregating research landscape data (HTTP ${errStatus}).`,
+              message: `OpenAlex returned an error while aggregating research landscape fields (HTTP ${fieldsRes.status}).`,
             };
           }
 
           const fData = await fieldsRes.json();
           rawFieldGroups = fData.group_by || [];
+          rangeTotalWorks = typeof fData.meta?.count === 'number' ? fData.meta.count : null;
 
-          const yData = await yearsRes.json();
-          rawYearGroups = yData.group_by || [];
+          if (yearsRes.ok) {
+            const yData = await yearsRes.json();
+            rawYearGroups = yData.group_by || [];
+          } else {
+            publicationTrendsError = `Publication trends currently unavailable (HTTP ${yearsRes.status}).`;
+          }
         } catch (fetchErr) {
           // If network failed and in test/offline mode with fixture available, use fixture as fallback
           if (fixture && (process.env.NODE_ENV === 'test' || process.env.OFFLINE_MODE === 'true')) {
@@ -456,6 +467,8 @@ async function getInstitutionResearchLandscape({
 
       const { slices, totalClassifiedWorks, otherCount } = aggregateTopFields(rawFieldGroups);
       const yearTrends = aggregateYearTrends(rawYearGroups, parsedFromYear, parsedToYear);
+      const effectiveRangeTotal = rangeTotalWorks !== null ? rangeTotalWorks : totalClassifiedWorks;
+      const unclassifiedWorksCount = Math.max(0, effectiveRangeTotal - totalClassifiedWorks);
 
       const result = {
         enabled: true,
@@ -471,14 +484,23 @@ async function getInstitutionResearchLandscape({
           slices,
           totalClassifiedWorks,
           otherCount,
+          unclassifiedWorksCount,
+          selectedRangeTotalWorks: effectiveRangeTotal,
           maxSlices: 7,
           hasOther: otherCount > 0,
         },
         publicationTrends: yearTrends,
+        publicationTrendsError: publicationTrendsError || null,
+        hasPartialData: Boolean(publicationTrendsError),
         summaryMetrics: {
+          lifetimeTotalWorks: institutionMeta.worksCount,
+          lifetimeTotalCitations: institutionMeta.citedByCount,
+          selectedRangeTotalWorks: effectiveRangeTotal,
+          totalClassifiedWorks,
+          unclassifiedWorksCount,
+          classifiedDisciplinesCount: rawFieldGroups.length,
           totalWorksIndexed: institutionMeta.worksCount,
           totalCitationsIndexed: institutionMeta.citedByCount,
-          classifiedDisciplinesCount: rawFieldGroups.length,
         },
         cached: false,
         cacheAgeSeconds: 0,

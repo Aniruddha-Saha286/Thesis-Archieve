@@ -13,6 +13,7 @@ const { runSearchHardeningRegressionTests } = require('./searchHardeningRegressi
 const { runDatasetDiscoveryRegressionTests } = require('./datasetDiscoveryRegression.test');
 const { runRbacAndGoogleAuthTests } = require('./rbacAndGoogleAuth.test');
 const { runE2EVerification } = require('./integrationE2E.test');
+const { runArchiveReviewRepairsRegressionTests } = require('./archiveReviewRepairs.test');
 
 console.log('===============================================================');
 console.log('  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   ');
@@ -53,9 +54,11 @@ async function main() {
     await runRbacAndGoogleAuthTests();
     console.log('');
     await runE2EVerification();
+    console.log('');
+    await runArchiveReviewRepairsRegressionTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 15 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 16 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

@@ -192,6 +192,33 @@ function revokeUserSocketPrivileges(userId) {
   }
 }
 
+/**
+ * Synchronize socket rooms and permissions in realtime when an editor's role or permissions change.
+ */
+function syncUserSocketRooms(userId, user) {
+  if (!io || !userId) return;
+  const sId = String(userId);
+  const room = io.sockets.adapter.rooms.get(`user:${sId}`);
+  if (room) {
+    for (const socketId of room) {
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock) {
+        if (sock.user) {
+          sock.user.role = user.role;
+          sock.user.status = user.status;
+          sock.user.permissions = Array.isArray(user.permissions) ? user.permissions : [];
+        }
+        assignSocketRooms(sock, {
+          id: sId,
+          role: user.role,
+          status: user.status,
+          permissions: Array.isArray(user.permissions) ? user.permissions : [],
+        });
+      }
+    }
+  }
+}
+
 // -------------------------------------------------------------
 // Realtime Minimal Broadcast Event Helpers
 // -------------------------------------------------------------
@@ -333,6 +360,7 @@ module.exports = {
   initSocket,
   getIO,
   revokeUserSocketPrivileges,
+  syncUserSocketRooms,
   emitStudentStatusChanged,
   emitNewStudentRegistered,
   emitStudentProfileUpdated,

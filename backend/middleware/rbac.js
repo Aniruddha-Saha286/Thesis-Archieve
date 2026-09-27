@@ -124,9 +124,36 @@ function requireAdmin(req, res, next) {
   });
 }
 
+/**
+ * Middleware: Requires staff status (admin or editor).
+ * Students receive 403.
+ */
+function requireStaff(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+
+  if (req.user.status === 'banned') {
+    return res.status(403).json({
+      message: 'Account Suspended: Your access has been revoked by administration.',
+      status: 'banned',
+    });
+  }
+
+  if (req.user.role === 'admin' || req.user.role === 'editor') {
+    return next();
+  }
+
+  return res.status(403).json({
+    message: 'Access denied: Staff privileges required.',
+    code: 'FORBIDDEN_ROLE',
+  });
+}
+
 module.exports = {
   requirePermission,
   requireAdmin,
+  requireStaff,
   getCapabilities,
   PERMISSIONS,
   ALL_PERMISSIONS,

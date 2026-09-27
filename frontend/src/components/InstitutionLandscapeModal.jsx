@@ -222,11 +222,12 @@ export default function InstitutionLandscapeModal({
   const radius = (chartSize - strokeWidth) / 2; // 94
   const circumference = 2 * Math.PI * radius; // ~590.6
 
-  let cumulativeAngle = 0;
+  let cumulativeFraction = 0;
   const donutSlices = slices.map((slice, index) => {
-    const strokeDasharray = `${(slice.percentage / 100) * circumference} ${circumference}`;
-    const strokeDashoffset = -((cumulativeAngle / 100) * circumference);
-    cumulativeAngle += slice.percentage;
+    const fraction = totalClassifiedWorks > 0 ? slice.count / totalClassifiedWorks : 0;
+    const strokeDasharray = `${fraction * circumference} ${circumference}`;
+    const strokeDashoffset = -(cumulativeFraction * circumference);
+    cumulativeFraction += fraction;
 
     return {
       ...slice,
@@ -411,39 +412,52 @@ export default function InstitutionLandscapeModal({
           {!loading && data && (
             <>
               {/* 1. Summary KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white border border-[#D5D1C7] p-3.5 rounded-sm">
                   <div className="text-[11px] font-mono-meta uppercase tracking-wider text-[#737067]">
-                    Total Indexed Works
+                    Lifetime Works
                   </div>
-                  <div className="text-2xl font-serif-title font-bold text-[#1C1B18] mt-1">
-                    {(data.summaryMetrics?.totalWorksIndexed || 0).toLocaleString()}
+                  <div className="text-xl sm:text-2xl font-serif-title font-bold text-[#1C1B18] mt-1">
+                    {(data.summaryMetrics?.lifetimeTotalWorks || data.summaryMetrics?.totalWorksIndexed || 0).toLocaleString()}
                   </div>
-                  <div className="text-[11px] text-[#8C887E] mt-0.5">
+                  <div className="text-[11px] text-[#8C887E] mt-0.5 truncate">
                     Affiliated author works
                   </div>
                 </div>
 
                 <div className="bg-white border border-[#D5D1C7] p-3.5 rounded-sm">
                   <div className="text-[11px] font-mono-meta uppercase tracking-wider text-[#737067]">
-                    Total Indexed Citations
+                    Range Works ({appliedRange.from}–{appliedRange.to})
                   </div>
-                  <div className="text-2xl font-serif-title font-bold text-[#2C6B3F] mt-1">
-                    {(data.summaryMetrics?.totalCitationsIndexed || 0).toLocaleString()}
+                  <div className="text-xl sm:text-2xl font-serif-title font-bold text-[#1C1B18] mt-1">
+                    {(data.summaryMetrics?.selectedRangeTotalWorks || totalClassifiedWorks || 0).toLocaleString()}
                   </div>
-                  <div className="text-[11px] text-[#8C887E] mt-0.5">
-                    Global scholarly citations
+                  <div className="text-[11px] text-[#8C887E] mt-0.5 truncate" title={`${totalClassifiedWorks.toLocaleString()} classified${data.summaryMetrics?.unclassifiedWorksCount ? ` · ${data.summaryMetrics.unclassifiedWorksCount.toLocaleString()} unclassified` : ''}`}>
+                    {totalClassifiedWorks.toLocaleString()} classified
+                    {data.summaryMetrics?.unclassifiedWorksCount ? ` · ${data.summaryMetrics.unclassifiedWorksCount.toLocaleString()} unclass.` : ''}
                   </div>
                 </div>
 
                 <div className="bg-white border border-[#D5D1C7] p-3.5 rounded-sm">
                   <div className="text-[11px] font-mono-meta uppercase tracking-wider text-[#737067]">
-                    Classified Disciplines
+                    Lifetime Citations
                   </div>
-                  <div className="text-2xl font-serif-title font-bold text-[#1C1B18] mt-1">
-                    {data.summaryMetrics?.classifiedDisciplinesCount || 0}
+                  <div className="text-xl sm:text-2xl font-serif-title font-bold text-[#2C6B3F] mt-1">
+                    {(data.summaryMetrics?.lifetimeTotalCitations || data.summaryMetrics?.totalCitationsIndexed || 0).toLocaleString()}
                   </div>
-                  <div className="text-[11px] text-[#8C887E] mt-0.5">
+                  <div className="text-[11px] text-[#8C887E] mt-0.5 truncate">
+                    Global citations
+                  </div>
+                </div>
+
+                <div className="bg-white border border-[#D5D1C7] p-3.5 rounded-sm">
+                  <div className="text-[11px] font-mono-meta uppercase tracking-wider text-[#737067]">
+                    Disciplines
+                  </div>
+                  <div className="text-xl sm:text-2xl font-serif-title font-bold text-[#1C1B18] mt-1">
+                    {data.summaryMetrics?.classifiedDisciplinesCount || slices.length}
+                  </div>
+                  <div className="text-[11px] text-[#8C887E] mt-0.5 truncate">
                     Primary research fields
                   </div>
                 </div>
@@ -595,7 +609,12 @@ export default function InstitutionLandscapeModal({
                               onFocus={() => setActiveHoveredSlice(slice)}
                               onClick={() => {
                                 if (onFilterByField && !slice.isOther) {
-                                  onFilterByField({ fieldId: slice.fieldId, fieldName: slice.name || slice.fieldName });
+                                  onFilterByField({
+                                    fieldId: slice.fieldId,
+                                    fieldName: slice.name || slice.fieldName,
+                                    fromYear: appliedRange.from,
+                                    toYear: appliedRange.to,
+                                  });
                                   onClose();
                                 }
                               }}
@@ -661,7 +680,12 @@ export default function InstitutionLandscapeModal({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    onFilterByField({ fieldId: slice.fieldId, fieldName: sliceDisplayName });
+                                    onFilterByField({
+                                      fieldId: slice.fieldId,
+                                      fieldName: sliceDisplayName,
+                                      fromYear: appliedRange.from,
+                                      toYear: appliedRange.to,
+                                    });
                                     onClose();
                                   }}
                                   title={`Filter papers by ${sliceDisplayName}`}
@@ -712,7 +736,12 @@ export default function InstitutionLandscapeModal({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      onFilterByField({ fieldId: slice.fieldId, fieldName: sliceDisplayName });
+                                      onFilterByField({
+                                        fieldId: slice.fieldId,
+                                        fieldName: sliceDisplayName,
+                                        fromYear: appliedRange.from,
+                                        toYear: appliedRange.to,
+                                      });
                                       onClose();
                                     }}
                                     className="min-h-[44px] px-3 py-1 text-2xs font-mono-meta uppercase font-bold text-[#1C1B18] hover:bg-[#FAF9F5] border border-[#D5D1C7] rounded-xs transition inline-flex items-center gap-1 cursor-pointer"

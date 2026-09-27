@@ -135,31 +135,45 @@ const CURATED_BY_ID = new Map(
 );
 
 function instMatchesTarget(candidateId, candidateName, targetInstId, targetInstName) {
-  const cId = candidateId ? String(candidateId).split('/').pop().toLowerCase() : '';
+  const cId = candidateId ? String(candidateId).split('/').pop().toLowerCase().trim() : '';
   const cName = (candidateName || '').toLowerCase().trim();
-  const tId = targetInstId ? String(targetInstId).split('/').pop().toLowerCase() : '';
+  const tId = targetInstId ? String(targetInstId).split('/').pop().toLowerCase().trim() : '';
   const tName = (targetInstName || '').toLowerCase().trim();
+
+  // If both target inputs are empty, no filter
+  if (!tId && !tName) return false;
+  // If both candidate inputs are empty, candidate cannot match
+  if (!cId && !cName) return false;
+
+  // Conflicting canonical OpenAlex IDs MUST reject immediately!
+  if (cId && tId && cId.startsWith('i') && tId.startsWith('i') && cId !== tId) {
+    return false;
+  }
 
   // 1. Direct ID match
   if (tId && cId && tId === cId) return true;
 
-  // 2. Direct name match (substring)
-  if (tName && cName && (cName.includes(tName) || tName.includes(cName))) return true;
+  // 2. Direct name match
+  if (tName && cName) {
+    if (cName === tName) return true;
+    if (tName.length >= 4 && (cName.includes(tName) || tName.includes(cName))) return true;
+  }
 
   // 3. Curated institution resolution (match against name or aliases)
   if (tId && CURATED_BY_ID.has(tId)) {
     const cur = CURATED_BY_ID.get(tId);
     const curName = cur.name.toLowerCase();
-    if (cName.includes(curName) || curName.includes(cName)) return true;
-    if (Array.isArray(cur.aliases)) {
+    if (cName && (cName === curName || (cName.length >= 4 && (cName.includes(curName) || curName.includes(cName))))) return true;
+    if (Array.isArray(cur.aliases) && cName) {
       for (const al of cur.aliases) {
-        if (cName.includes(al.toLowerCase())) return true;
+        const alLower = al.toLowerCase();
+        if (cName === alLower || (alLower.length >= 4 && cName.includes(alLower))) return true;
       }
     }
   }
 
   // 4. If targetInstId was passed as a name
-  if (tId && cName && (cName.includes(tId) || tId.includes(cName))) return true;
+  if (tId && !tId.startsWith('i') && cName && cName.length >= 4 && (cName.includes(tId) || tId.includes(cName))) return true;
 
   return false;
 }
@@ -361,7 +375,7 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
 
       if (targetCountries.length > 0) {
         const awardCountry = record.awardingInstitution?.countryCode || resolveCountryCode(record.awardingInstitution?.name || record.university);
-        if (awardCountry && !targetCountries.includes(awardCountry)) {
+        if (!awardCountry || !targetCountries.includes(awardCountry)) {
           return false;
         }
       }
@@ -382,14 +396,21 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
         }
       }
 
-      // Coauthor isolation: the matched institution itself must reside in the target country
-      if (targetCountries.length > 0 && matchingInsts.length > 0) {
-        const hasCountryMatch = matchingInsts.some((inst) => {
-          const cCode = inst.countryCode || resolveCountryCode(inst.name);
-          return cCode && targetCountries.includes(cCode);
-        });
-        if (!hasCountryMatch) {
-          return false;
+      // Coauthor isolation & institution country conjunction:
+      if (targetCountries.length > 0) {
+        if (matchingInsts.length > 0) {
+          const hasCountryMatch = matchingInsts.some((inst) => {
+            const cCode = inst.countryCode || resolveCountryCode(inst.name);
+            return cCode && targetCountries.includes(cCode);
+          });
+          if (!hasCountryMatch) {
+            return false;
+          }
+        } else {
+          const uniCountry = resolveCountryCode(record.university);
+          if (!uniCountry || !targetCountries.includes(uniCountry)) {
+            return false;
+          }
         }
       }
     }
@@ -561,6 +582,7 @@ function createNewSession(sessionId, scope, query, filters, sort, sessionHash) {
       hal: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
       doaj: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
     },
+    pageBoundaries: new Map(),
     allProvidersExhausted: false,
   };
 
@@ -591,10 +613,17 @@ async function executeSearchSessionLocked(session, {
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(5, parseInt(limit) || 20));
 
-  const startIndex = (pageNum - 1) * limitNum;
-  const endIndex = pageNum * limitNum;
+  let startIndex = 0;
+  if (pageNum === 1) {
+    startIndex = 0;
+  } else if (session.pageBoundaries && session.pageBoundaries.has(pageNum - 1)) {
+    startIndex = session.pageBoundaries.get(pageNum - 1).end;
+  } else {
+    startIndex = (pageNum - 1) * limitNum;
+  }
+  const targetEndIndex = startIndex + limitNum;
 
-  // Buffer Refill Loop: fetch until we have enough records to cover endIndex, or all eligible providers are exhausted
+  // Buffer Refill Loop: fetch until we have enough records to cover targetEndIndex, or all eligible providers are exhausted
   let refillAttempts = 0;
   const MAX_REFILL_ATTEMPTS = 5;
 
@@ -614,7 +643,7 @@ async function executeSearchSessionLocked(session, {
     }
   }
 
-  while (session.buffer.length < endIndex && !session.allProvidersExhausted && refillAttempts < MAX_REFILL_ATTEMPTS) {
+  while (session.buffer.length < targetEndIndex && !session.allProvidersExhausted && refillAttempts < MAX_REFILL_ATTEMPTS) {
     refillAttempts++;
     const fetchPromises = [];
 
@@ -712,10 +741,18 @@ async function executeSearchSessionLocked(session, {
       const isErr = Boolean(res.error);
       const provStatus = isErr ? 'degraded' : 'fulfilled';
 
-      provState.hasMore = Boolean(res.hasMore);
-      provState.status = provStatus;
-      if (res.nextPage !== undefined) provState.page = res.nextPage;
-      if (res.nextOffset !== undefined) provState.offset = res.nextOffset;
+      if (isErr) {
+        provState.failureCount = (provState.failureCount || 0) + 1;
+        // Allow retry on transient failure up to 2 attempts before marking exhausted
+        provState.hasMore = provState.failureCount < 2;
+        provState.status = 'degraded';
+      } else {
+        provState.hasMore = Boolean(res.hasMore);
+        provState.status = 'fulfilled';
+        provState.failureCount = 0;
+        if (res.nextPage !== undefined) provState.page = res.nextPage;
+        if (res.nextOffset !== undefined) provState.offset = res.nextOffset;
+      }
       session.providerStates[pKey] = provState;
 
       let acceptedFromProvider = 0;
@@ -884,15 +921,21 @@ async function executeSearchSessionLocked(session, {
   // Calculate hasMore strictly from eligible providers and buffered records
   const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters, subjectAugmentedQuery));
   const anyEligibleHasMore = !session.allProvidersExhausted && eligibleProviders.some(([_, p]) => p.hasMore);
-  const hasMoreForClient = session.buffer.length > endIndex || anyEligibleHasMore;
+  const hasMoreForClient = session.buffer.length > targetEndIndex || anyEligibleHasMore;
 
   // Stable slice for the requested page
-  const pageRecords = session.buffer.slice(startIndex, endIndex);
+  const pageRecords = session.buffer.slice(startIndex, targetEndIndex);
 
-  // Freeze served boundary: records up to endIndex must never be re-ordered
-  if (endIndex > (session.frozenIndex || 0)) {
-    session.frozenIndex = Math.min(endIndex, session.buffer.length);
-  }
+  // Record actual served boundary for continuous pagination without record loss
+  if (!session.pageBoundaries) session.pageBoundaries = new Map();
+  session.pageBoundaries.set(pageNum, {
+    start: startIndex,
+    count: pageRecords.length,
+    end: startIndex + pageRecords.length,
+  });
+
+  // Freeze served boundary: records up to served boundary must never be re-ordered
+  session.frozenIndex = Math.max(session.frozenIndex || 0, startIndex + pageRecords.length);
 
   // Ensure honest provider telemetry status for all known federated providers
   for (const [pKey, pName] of Object.entries(PROVIDER_NAMES)) {
@@ -914,10 +957,14 @@ async function executeSearchSessionLocked(session, {
   const queriedProviders = Object.entries(session.providerStatus).filter(
     ([_, st]) => st.status !== 'skipped_unsupported_filter' && st.status !== 'idle'
   );
+  const remoteQueried = queriedProviders.filter(([pName]) => pName !== 'Local Archive');
+  const allRemoteFailed = remoteQueried.length > 0 && remoteQueried.every(
+    ([_, st]) => Boolean(st.error) || st.status === 'degraded' || st.status === 'error'
+  );
   const allQueriedFailed = queriedProviders.length > 0 && queriedProviders.every(
     ([_, st]) => Boolean(st.error) || st.status === 'degraded' || st.status === 'error'
   );
-  const totalTechnicalFailure = allQueriedFailed && session.buffer.length === 0;
+  const totalTechnicalFailure = session.buffer.length === 0 && (allQueriedFailed || allRemoteFailed);
 
   const anyQueriedFailed = queriedProviders.some(
     ([_, st]) => Boolean(st.error) || st.status === 'degraded' || st.status === 'error'
@@ -1054,6 +1101,7 @@ module.exports = {
   cleanupExpiredSessions,
   normalizeSessionFilterKey,
   matchesInstitutionalAndAuthorFilters,
+  instMatchesTarget,
   matchesPublisherFilter,
   cleanPublisherForMatching,
   PROVIDER_CAPABILITIES,

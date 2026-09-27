@@ -280,6 +280,22 @@ router.get('/:id', optionalAuth, async (req, res) => {
         return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
       }
 
+      const isApproved = doc.status === 'approved' || doc.isApproved === true;
+      if (!isApproved) {
+        const isStaff = req.user && (
+          req.user.role === 'admin' ||
+          (req.user.role === 'editor' && Array.isArray(req.user.permissions) && (
+            req.user.permissions.includes(PERMISSIONS.PUBLICATIONS_MODERATE) ||
+            req.user.permissions.includes(PERMISSIONS.DOCUMENTS_VIEW)
+          ))
+        );
+        const isSubmitter = req.user && doc.submittedBy && String(doc.submittedBy) === String(req.user._id);
+
+        if (!isStaff && !isSubmitter) {
+          return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
+        }
+      }
+
       // Convert to normalized record
       const directPdf = doc.pdfUrl && doc.pdfUrl.trim() ? doc.pdfUrl.trim() : null;
       const isDirectPdf = Boolean(directPdf && (doc.isDirectPdf || directPdf.includes('/pdf') || directPdf.endsWith('.pdf')));
@@ -386,6 +402,22 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(id)) {
       const doc = await Thesis.findById(id).lean();
       if (doc) {
+        const isApproved = doc.status === 'approved' || doc.isApproved === true;
+        if (!isApproved) {
+          const isStaff = req.user && (
+            req.user.role === 'admin' ||
+            (req.user.role === 'editor' && Array.isArray(req.user.permissions) && (
+              req.user.permissions.includes(PERMISSIONS.PUBLICATIONS_MODERATE) ||
+              req.user.permissions.includes(PERMISSIONS.DOCUMENTS_VIEW)
+            ))
+          );
+          const isSubmitter = req.user && doc.submittedBy && String(doc.submittedBy) === String(req.user._id);
+
+          if (!isStaff && !isSubmitter) {
+            return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
+          }
+        }
+
         doi = doc.doi || null;
         title = doc.title || '';
         explicitDatasetUrl = doc.datasetUrl || null;
@@ -585,7 +617,25 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
 
     let paper = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
-      paper = await Thesis.findById(id).lean();
+      const doc = await Thesis.findById(id).lean();
+      if (doc) {
+        const isApproved = doc.status === 'approved' || doc.isApproved === true;
+        if (!isApproved) {
+          const isStaff = req.user && (
+            req.user.role === 'admin' ||
+            (req.user.role === 'editor' && Array.isArray(req.user.permissions) && (
+              req.user.permissions.includes(PERMISSIONS.PUBLICATIONS_MODERATE) ||
+              req.user.permissions.includes(PERMISSIONS.DOCUMENTS_VIEW)
+            ))
+          );
+          const isSubmitter = req.user && doc.submittedBy && String(doc.submittedBy) === String(req.user._id);
+
+          if (!isStaff && !isSubmitter) {
+            return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
+          }
+        }
+        paper = doc;
+      }
     }
 
     if (!paper) {

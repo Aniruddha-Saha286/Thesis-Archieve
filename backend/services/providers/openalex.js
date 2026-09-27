@@ -303,6 +303,8 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       const venueName = w.primary_location?.source?.display_name || w.host_venue?.display_name || null;
       const hostOrganization = w.primary_location?.source?.host_organization_name || w.host_venue?.publisher || null;
       const primaryFieldId = w.primary_topic?.field?.id ? String(w.primary_topic.field.id).split('/').pop() : null;
+      const primarySubfieldId = w.primary_topic?.subfield?.id ? String(w.primary_topic.subfield.id).split('/').pop() : null;
+      const primaryTopicId = w.primary_topic?.id ? String(w.primary_topic.id).split('/').pop() : null;
 
       let pubType = 'journal-article';
       if (w.type === 'dissertation') pubType = 'thesis';
@@ -328,6 +330,8 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
         awardingInstitution: awardingInstitution,
         subjects: canonicalSubjects,
         fieldId: primaryFieldId,
+        subfieldId: primarySubfieldId,
+        topicId: primaryTopicId,
         citationMetrics: citationMetrics,
         abstract: cleanAbstract,
         publicationType: pubType,

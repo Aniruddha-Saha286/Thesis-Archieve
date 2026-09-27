@@ -16,6 +16,7 @@ const { authenticateToken } = require('../middleware/auth');
 const {
   requirePermission,
   requireAdmin,
+  requireStaff,
   PERMISSIONS,
   ALL_PERMISSIONS,
 } = require('../middleware/rbac');
@@ -25,6 +26,7 @@ const {
   emitToUser,
   emitToAdmins,
   revokeUserSocketPrivileges,
+  syncUserSocketRooms,
   emitThesisUpdated,
 } = require('../socket');
 const {
@@ -421,8 +423,8 @@ router.delete('/student/:id', requireAdmin, adminActionLimiter, async (req, res)
 });
 
 // GET /api/admin/stats
-// Returns administrative telemetry
-router.get('/stats', async (req, res) => {
+// Returns administrative telemetry (staff authorization required)
+router.get('/stats', requireStaff, async (req, res) => {
   try {
     const [pendingCount, pendingThesesCount, approvedStudents, bannedStudents, totalTheses, totalDatasets, totalEditors] = await Promise.all([
       User.countDocuments({ role: 'student', status: 'pending' }),
@@ -536,6 +538,7 @@ router.post('/editors', requireAdmin, adminActionLimiter, async (req, res) => {
       role: 'editor',
       permissions: validPerms,
     });
+    syncUserSocketRooms(targetUser._id, targetUser);
     emitToAdmins('admin:student_updated', { studentId: String(targetUser._id) });
     emitToAdmins('admin:staff_updated', { editorId: String(targetUser._id) });
 
@@ -587,6 +590,7 @@ router.patch('/editors/:id', requireAdmin, adminActionLimiter, async (req, res) 
       role: 'editor',
       permissions: validPerms,
     });
+    syncUserSocketRooms(editor._id, editor);
     emitToAdmins('admin:staff_updated', { editorId: String(editor._id) });
 
     return res.json({
@@ -1245,8 +1249,8 @@ router.post('/payments/:id/request-correction', requirePermission(PERMISSIONS.PA
       return res.status(400).json({ message: 'Correction instructions are required.' });
     }
 
-    const submission = await PaymentSubmission.findByIdAndUpdate(
-      req.params.id,
+    const submission = await PaymentSubmission.findOneAndUpdate(
+      { _id: req.params.id, status: { $in: ['submitted', 'under_review'] } },
       {
         status: 'under_review',
         adminInstructions: adminInstructions.trim(),
@@ -1256,7 +1260,7 @@ router.post('/payments/:id/request-correction', requirePermission(PERMISSIONS.PA
       { new: true }
     );
 
-    if (!submission) return res.status(404).json({ message: 'Payment submission not found.' });
+    if (!submission) return res.status(409).json({ message: 'Payment submission not found or cannot be modified from its current status.' });
 
     await AuditEvent.create({
       actor: req.user._id,
@@ -1403,6 +1407,12 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
     if (grantRequestId && typeof grantRequestId === 'string') {
       const existingGrant = await MembershipPeriod.findOne({ grantRequestId: grantRequestId.trim() });
       if (existingGrant) {
+        if (String(existingGrant.user) !== String(student._id) || existingGrant.plan !== planCode) {
+          return res.status(409).json({
+            message: 'A grant request with this idempotency key already exists for different parameters.',
+            code: 'IDEMPOTENCY_KEY_CONFLICT',
+          });
+        }
         return res.status(200).json({
           message: 'Grant request was already processed; returning existing membership grant.',
           period: existingGrant,
@@ -1453,12 +1463,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
           code: 'OVERLAP_SHORTENS_COVERAGE',
         });
       }
-
-      // Convert active trial
-      await TrialGrant.updateMany(
-        { user: student._id, status: 'active' },
-        { status: 'converted' }
-      );
     } else if (overlapMode === 'extend_from_current_expiry') {
       if (latestActivePaid) {
         effectiveStartsAt = latestActivePaid.expiresAt;
@@ -1527,6 +1531,14 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       grantType: grantType || 'standard',
     });
     await period.save();
+
+    // Convert active trial only after period has successfully persisted
+    if (overlapMode === 'start_now') {
+      await TrialGrant.updateMany(
+        { user: student._id, status: 'active' },
+        { status: 'converted' }
+      );
+    }
 
     // 8. Audit Event
     await AuditEvent.create({

@@ -33,10 +33,11 @@ function validateMagicBytes(buffer, claimedMime) {
   const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
   // PDF: %PDF (25 50 44 46)
   const isPdf = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46;
-  // WebP: RIFF ...
+  // WebP: RIFF (bytes 0-3: 52 49 46 46) ... WEBP (bytes 8-11: 57 45 42 50)
   const isWebp =
     buffer.length >= 12 &&
-    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46;
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50;
 
   if (claimedMime === 'image/jpeg' || claimedMime === 'image/jpg') return isJpeg;
   if (claimedMime === 'image/png') return isPng;
@@ -187,4 +188,6 @@ router.delete('/id-card', authenticateToken, async (req, res) => {
   }
 });
 
+router.validateMagicBytes = validateMagicBytes;
 module.exports = router;
+module.exports.validateMagicBytes = validateMagicBytes;

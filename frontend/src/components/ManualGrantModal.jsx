@@ -11,6 +11,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
   const [startsAtLocal, setStartsAtLocal] = useState('');
   const [expiresAtLocal, setExpiresAtLocal] = useState('');
   const [grantReason, setGrantReason] = useState('');
+  const [grantRequestId, setGrantRequestId] = useState('');
   const [step, setStep] = useState('edit'); // 'edit' | 'review'
   const [loading, setLoading] = useState(false);
   const [revoking, setRevoking] = useState(false);
@@ -32,6 +33,17 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
     return `${dhakaStr}:00+06:00`;
   };
 
+  // Helper: Clamped calendar month addition to avoid end-of-month rollover errors
+  const addClampedMonths = (date, months) => {
+    const d = new Date(date);
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + months);
+    if (d.getDate() !== day) {
+      d.setDate(0); // Clamps to the last day of the intended month
+    }
+    return d;
+  };
+
   const applyPreset = (presetKey, baseDate = new Date()) => {
     setDurationPreset(presetKey);
     const start = new Date(baseDate);
@@ -44,9 +56,9 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
     } else if (presetKey === '30d') {
       expiry.setDate(start.getDate() + 30);
     } else if (presetKey === '6m') {
-      expiry.setMonth(start.getMonth() + 6);
+      expiry = addClampedMonths(start, 6);
     } else if (presetKey === '12m') {
-      expiry.setFullYear(start.getFullYear() + 1);
+      expiry = addClampedMonths(start, 12);
     }
 
     setStartsAtLocal(toDhakaDatetimeLocal(start));
@@ -85,6 +97,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
       setOverlapMode('start_now');
       setGrantType('test');
       setCustomLabelInput('');
+      setGrantRequestId(`GRANT-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
       applyPreset('7d', new Date());
     }
   }, [isOpen, student]);
@@ -150,7 +163,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
       setLoading(true);
       setError('');
 
-      const grantRequestId = `GRANT-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const effectiveRequestId = grantRequestId || `GRANT-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
       const payload = {
         userId: student._id || student.id,
@@ -159,7 +172,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
         expiresAt: dhakaLocalToIso(expiresAtLocal),
         grantReason: grantReason.trim(),
         overlapMode,
-        grantRequestId,
+        grantRequestId: effectiveRequestId,
         grantType,
         customLabel: getComputedLabel(),
       };

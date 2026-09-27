@@ -271,7 +271,25 @@ export default function AuthorProfileModal({
                 </div>
               </div>
 
-              {filteredWorks.length === 0 ? (
+              {profile?.worksStatus === 'error' ? (
+                <div className="bg-amber-50 border border-amber-200 p-6 text-center rounded-sm font-mono-meta text-xs text-amber-900 space-y-2">
+                  <p className="font-bold">Author publications could not be retrieved from provider at this time.</p>
+                  <p className="text-[11px] text-amber-800">{profile.worksError || 'Technical communication timeout with OpenAlex'}</p>
+                  {onSelectAuthorPublications && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectAuthorPublications(author);
+                        onClose();
+                      }}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1C1B18] text-white rounded-xs font-mono-meta hover:bg-[#2E2C28] cursor-pointer"
+                    >
+                      <Search className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Search Publications in Main Feed</span>
+                    </button>
+                  )}
+                </div>
+              ) : filteredWorks.length === 0 ? (
                 <div className="bg-[#FAF9F5] border border-[#E2DFD8] p-8 text-center rounded-sm font-mono-meta text-xs text-[#737067]">
                   {works.length === 0
                     ? 'No publication records currently indexed for this author.'
@@ -343,6 +361,22 @@ export default function AuthorProfileModal({
                       </div>
                     </div>
                   ))}
+
+                  {works.length > 0 && (author?.worksCount || 0) > works.length && onSelectAuthorPublications && (
+                    <div className="pt-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectAuthorPublications(author);
+                          onClose();
+                        }}
+                        className="w-full py-2.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] text-xs font-mono-meta rounded-sm transition flex items-center justify-center gap-2 cursor-pointer font-bold"
+                      >
+                        <Search className="w-3.5 h-3.5 text-[#1C1B18]" />
+                        <span>Explore all {author?.worksCount?.toLocaleString() || ''} publications in Search Feed</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

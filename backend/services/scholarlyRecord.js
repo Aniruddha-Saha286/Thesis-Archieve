@@ -174,6 +174,9 @@ function createNormalizedRecord(data) {
       shortLabel: s.shortLabel || s.label || 'Other',
       provenance: s.provenance || 'curated',
       sourceId: s.sourceId || null,
+      fieldId: s.fieldId || data.fieldId || null,
+      subfieldId: s.subfieldId || data.subfieldId || null,
+      topicId: s.topicId || data.topicId || null,
     }));
   } else if (data.category && data.category !== 'Other Disciplines') {
     const matched = mapToCanonicalSubject(data.category);
@@ -242,6 +245,9 @@ function createNormalizedRecord(data) {
     authorships: authorships,
     awardingInstitution: awardingInstitution,
     subjects: subjects,
+    fieldId: data.fieldId || subjects[0]?.fieldId || null,
+    subfieldId: data.subfieldId || subjects[0]?.subfieldId || null,
+    topicId: data.topicId || subjects[0]?.topicId || null,
     citationMetrics: citationMetrics,
     university: primaryUniversity,
     category: primaryCategory,

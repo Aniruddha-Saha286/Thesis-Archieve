@@ -30,6 +30,9 @@ const CURATED_AUTHORS = [
       ror: 'https://ror.org/0161xgx34',
     },
     topics: ['Artificial Intelligence', 'Deep Learning', 'Neural Networks', 'Representation Learning'],
+    isCuratedFallback: true,
+    isOfflineFallback: true,
+    liveMetrics: false,
     citationMetrics: {
       source: 'OpenAlex',
       retrievedAt: '2026-09-24T00:00:00.000Z',
@@ -54,6 +57,9 @@ const CURATED_AUTHORS = [
       ror: 'https://ror.org/03dbr7087',
     },
     topics: ['Machine Learning', 'Artificial Neural Networks', 'Computer Vision'],
+    isCuratedFallback: true,
+    isOfflineFallback: true,
+    liveMetrics: false,
     citationMetrics: {
       source: 'OpenAlex',
       retrievedAt: '2026-09-24T00:00:00.000Z',
@@ -78,6 +84,9 @@ const CURATED_AUTHORS = [
       ror: 'https://ror.org/0190ak572',
     },
     topics: ['Convolutional Neural Networks', 'Computer Vision', 'Deep Learning'],
+    isCuratedFallback: true,
+    isOfflineFallback: true,
+    liveMetrics: false,
     citationMetrics: {
       source: 'OpenAlex',
       retrievedAt: '2026-09-24T00:00:00.000Z',
@@ -263,31 +272,100 @@ async function getAuthorProfile(authorId) {
     }
   }
 
-  // Fetch top works for this author using OpenAlex search
+  // Fetch top works preview for this author using OpenAlex search
   let works = [];
+  let worksStatus = 'fulfilled';
+  let worksError = null;
+
   try {
     const worksResult = await searchOpenAlex({
       filters: { authorId: cleanId },
       sort: 'citations',
       limit: 15,
     });
-    works = worksResult.records || [];
+    if (worksResult.error) {
+      worksStatus = 'error';
+      worksError = worksResult.error;
+    } else {
+      works = worksResult.records || [];
+    }
   } catch (wErr) {
     console.warn('Author works fetch error:', wErr.message);
+    worksStatus = 'error';
+    worksError = wErr.message;
   }
 
   const profile = {
     author: authorDetails,
     works,
+    worksStatus,
+    worksError,
+    totalWorks: authorDetails.worksCount || 0,
+    hasMoreWorks: (authorDetails.worksCount || 0) > works.length,
     retrievedAt: new Date().toISOString(),
   };
 
-  authorProfileCache.set(cleanId, { data: profile, timestamp: Date.now() });
+  // Only cache profile if works retrieval did not fail with technical error
+  if (worksStatus !== 'error') {
+    authorProfileCache.set(cleanId, { data: profile, timestamp: Date.now() });
+  }
   return profile;
+}
+
+/**
+ * Retrieves paginated works for an author with cursor/page continuation.
+ */
+async function getAuthorWorks(authorId, { page = 1, limit = 20, sort = 'citations' } = {}) {
+  if (!authorId) {
+    return { records: [], totalCount: 0, hasMore: false, error: 'Author ID is required' };
+  }
+  const cleanId = String(authorId).trim().split('/').pop();
+
+  if (process.env.OFFLINE_MODE === 'true' || process.env.NODE_ENV === 'test') {
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const count = Math.min(limit || 20, 20);
+    return {
+      records: [
+        {
+          id: `w_offline_auth_${cleanId}_${pageNum}`,
+          title: `Scholarly Publication on Deep Representations - Volume ${pageNum}`,
+          publishedYear: 2024,
+          citationCount: 4200,
+          publicationType: 'journal-article',
+          venue: 'Journal of Machine Learning Research',
+          pdfUrl: 'https://example.org/pdf/auth_1.pdf',
+          isDirectPdf: true,
+        },
+      ],
+      totalCount: 100,
+      hasMore: pageNum < 5,
+      nextPage: pageNum < 5 ? pageNum + 1 : null,
+      error: null,
+    };
+  }
+
+  try {
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 20));
+    return await searchOpenAlex({
+      filters: { authorId: cleanId },
+      page: pageNum,
+      limit: limitNum,
+      sort,
+    });
+  } catch (err) {
+    return {
+      records: [],
+      totalCount: 0,
+      hasMore: false,
+      error: err.message,
+    };
+  }
 }
 
 module.exports = {
   searchAuthors,
   getAuthorProfile,
+  getAuthorWorks,
   CURATED_AUTHORS,
 };

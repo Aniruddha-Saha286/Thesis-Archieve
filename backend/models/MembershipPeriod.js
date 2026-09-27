@@ -75,7 +75,7 @@ const membershipPeriodSchema = new mongoose.Schema({
   },
   grantType: {
     type: String,
-    enum: ['standard', 'test', 'research_grant', 'evaluation'],
+    enum: ['standard', 'test', 'research_grant', 'evaluation', 'custom'],
     default: 'standard',
   },
   createdAt: {

@@ -48,7 +48,25 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const canModerateReports = hasPermission('reports.moderate');
 
   // Active admin tab: 'pending' | 'roster' | 'publications' | 'payments' | 'reports' | 'staff'
-  const [activeTab, setActiveTab] = useState(canViewStudents ? 'pending' : 'publications');
+  const permittedTabs = useMemo(() => {
+    const tabs = [];
+    if (canViewStudents) tabs.push('pending', 'roster');
+    if (canModeratePublications || isAdmin) tabs.push('publications');
+    if (canViewPayments) tabs.push('payments');
+    if (canModerateReports) tabs.push('reports');
+    if (isAdmin) tabs.push('staff');
+    return tabs;
+  }, [canViewStudents, canModeratePublications, canViewPayments, canModerateReports, isAdmin]);
+
+  const [activeTab, setActiveTab] = useState(() => (
+    canViewStudents ? 'pending' : (canModeratePublications || isAdmin ? 'publications' : (canViewPayments ? 'payments' : (canModerateReports ? 'reports' : (isAdmin ? 'staff' : 'pending'))))
+  ));
+
+  useEffect(() => {
+    if (permittedTabs.length > 0 && !permittedTabs.includes(activeTab)) {
+      setActiveTab(permittedTabs[0]);
+    }
+  }, [permittedTabs, activeTab]);
 
   // Student management state
   const [students, setStudents] = useState([]);
@@ -179,12 +197,13 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   };
 
-  const fetchPublications = async (page = 1) => {
+  const fetchPublications = async (page = 1, statusOverride = null) => {
     try {
       setLoadingTheses(true);
+      const effectiveStatus = statusOverride !== null ? statusOverride : publicationStatusFilter;
       const res = await axios.get('/api/admin/publications', {
         params: {
-          status: publicationStatusFilter,
+          status: effectiveStatus,
           q: searchTheses,
           page,
           limit: 20,
@@ -1054,7 +1073,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                       key={st}
                       onClick={() => {
                         setPublicationStatusFilter(st);
-                        setTimeout(() => fetchPublications(1), 50);
+                        fetchPublications(1, st);
                       }}
                       className={`px-2 py-1 rounded-xs uppercase text-[10px] cursor-pointer transition ${
                         publicationStatusFilter === st ? 'bg-[#1C1B18] text-white font-bold' : 'text-[#737067] hover:text-[#1C1B18]'
