@@ -161,6 +161,14 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
         studentId: updatedStudent.studentId,
         documentRef,
       }).catch((err) => console.error('[EmailService] Verification request notification error:', err.message));
+
+      emailService.notifyUserVerificationRequested({
+        userEmail: updatedStudent.email,
+        userName: updatedStudent.name,
+        university: updatedStudent.university,
+        degreeProgram: updatedStudent.degreeProgram,
+        studentId: updatedStudent.studentId,
+      }).catch((err) => console.error('[EmailService] User verification receipt error:', err.message));
     }
 
     // Audit event for document upload

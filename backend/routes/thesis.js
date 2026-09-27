@@ -744,6 +744,17 @@ router.post('/:id/report', optionalAuth, async (req, res) => {
       title: newReport.title,
     }).catch((err) => console.error('[EmailService] Report notification error:', err.message));
 
+    const reporterEmail = req.user?.email || (typeof userEmail === 'string' && userEmail.includes('@') ? userEmail.trim() : null);
+    if (reporterEmail) {
+      emailService.notifyUserReportSubmitted({
+        userEmail: reporterEmail,
+        userName: req.user?.name || reporterEmail.split('@')[0],
+        title: newReport.title,
+        issueType: newReport.issueType,
+        reportId: newReport._id,
+      }).catch((err) => console.error('[EmailService] User report acknowledgment error:', err.message));
+    }
+
     try {
       const adminUser = await User.findOne({ role: 'admin' });
       const notifPayload = {

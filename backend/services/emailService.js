@@ -401,8 +401,130 @@ Review and resolve in Admin Portal -> Grievance & Reports Desk.
 }
 
 // =========================================================================
-// 2. USER NOTIFICATIONS
+// 2. USER NOTIFICATIONS (Confirmations & Approvals)
 // =========================================================================
+
+/**
+ * Alerts User when their student identity verification request has been submitted.
+ */
+async function notifyUserVerificationRequested({ userEmail, userName, university, degreeProgram, studentId }) {
+  const subject = `Verification Request Received — The Thesis Archive`;
+
+  const html = buildHtmlTemplate({
+    badgeLabel: 'Request Received',
+    badgeBg: '#FEF3C7',
+    badgeColor: '#92400E',
+    title: 'Identity Verification Submission Received',
+    introText: `Hello <strong>${escapeHtml(userName || 'Scholar')}</strong>,<br><br>We have successfully received your student identity credentials for academic verification. Our editorial board is currently reviewing your document.`,
+    items: [
+      { label: 'Student Name', value: userName || 'Scholar' },
+      { label: 'University', value: university || 'Pending review' },
+      { label: 'Degree Program', value: degreeProgram || 'B.Sc. Undergraduate Thesis' },
+      { label: 'Student ID', value: studentId || 'Not provided' },
+      { label: 'Status', value: 'Under Review by Depository Staff' },
+      { label: 'Submitted At', value: formatDhakaDateTime(new Date()) },
+    ],
+    footerNote: 'You will receive another email confirmation as soon as your account verification is reviewed and approved by an administrator.',
+  });
+
+  const text = `
+[The Thesis Archive]
+Verification Request Received
+
+Hello ${userName || 'Scholar'},
+
+We have received your student identity credentials for ${university || 'academic review'}.
+Our editorial staff is currently reviewing your submission.
+You will receive another email notification as soon as your student researcher status is verified.
+  `.trim();
+
+  return sendEmail({ to: userEmail, subject, html, text });
+}
+
+/**
+ * Alerts User when their bKash payment claim has been submitted.
+ */
+async function notifyUserPaymentSubmitted({ userEmail, userName, orderRef, trxId, amount, planLabel, isResubmission = false }) {
+  const subjectPrefix = isResubmission ? 'Payment Resubmission Received' : 'Payment Claim Received';
+  const subject = `${subjectPrefix} — ৳${amount} (${planLabel})`;
+
+  const html = buildHtmlTemplate({
+    badgeLabel: isResubmission ? 'Resubmission Under Review' : 'Payment Under Review',
+    badgeBg: '#E0E7FF',
+    badgeColor: '#3730A3',
+    title: isResubmission ? 'Corrected bKash Payment Received' : 'bKash Payment Claim Received',
+    introText: `Hello <strong>${escapeHtml(userName || 'Scholar')}</strong>,<br><br>Thank you for submitting your bKash payment claim. Our merchant desk is currently reconciling your transaction with our bKash statement.`,
+    items: [
+      { label: 'Order Reference', value: orderRef || 'N/A' },
+      { label: 'bKash TrxID', value: trxId },
+      { label: 'Amount Paid', value: `৳${amount} BDT` },
+      { label: 'Selected Plan', value: planLabel || 'Premium Membership' },
+      { label: 'Status', value: 'Reconciliation in Progress' },
+      { label: 'Submitted At', value: formatDhakaDateTime(new Date()) },
+    ],
+    footerNote: 'Your research subscription will be automatically activated as soon as the merchant reconciliation is completed by administration.',
+  });
+
+  const text = `
+[The Thesis Archive]
+${subject}
+
+Hello ${userName || 'Scholar'},
+
+We have received your bKash payment claim:
+- Order Reference: ${orderRef || 'N/A'}
+- bKash TrxID: ${trxId}
+- Amount: ৳${amount} BDT
+- Plan: ${planLabel}
+- Status: Under Review
+
+You will receive an activation confirmation email as soon as your payment is approved.
+  `.trim();
+
+  return sendEmail({ to: userEmail, subject, html, text });
+}
+
+/**
+ * Alerts User when their grievance report is submitted.
+ */
+async function notifyUserReportSubmitted({ userEmail, userName, title, issueType, reportId }) {
+  if (!userEmail || userEmail === 'anonymous' || !isValidEmail(userEmail)) {
+    return { success: false, reason: 'ANONYMOUS_REPORTER' };
+  }
+  const subject = `Grievance Report Acknowledged — ${title ? title.slice(0, 50) : 'Publication'}`;
+
+  const html = buildHtmlTemplate({
+    badgeLabel: 'Report Logged',
+    badgeBg: '#F3F4F6',
+    badgeColor: '#4B5563',
+    title: 'Depository Issue Report Acknowledged',
+    introText: `Hello <strong>${escapeHtml(userName || 'Scholar')}</strong>,<br><br>Thank you for bringing this issue to our attention. Your report has been logged and assigned to our depository moderation team.`,
+    items: [
+      { label: 'Publication', value: title || 'Scholarly Record' },
+      { label: 'Issue Category', value: issueType || 'dead-link' },
+      { label: 'Report Reference', value: String(reportId || 'N/A') },
+      { label: 'Status', value: 'Assigned for Editorial Moderation' },
+      { label: 'Logged At', value: formatDhakaDateTime(new Date()) },
+    ],
+    footerNote: 'Our editorial board will inspect the metadata and source links to correct or update the record accordingly.',
+  });
+
+  const text = `
+[The Thesis Archive]
+Report Acknowledged — ${title || 'Publication'}
+
+Hello ${userName || 'Scholar'},
+
+Thank you for reporting an issue regarding "${title}".
+- Category: ${issueType || 'dead-link'}
+- Report Reference: ${reportId || 'N/A'}
+- Status: Assigned for Editorial Moderation
+
+Our moderation team will review and resolve this publication issue.
+  `.trim();
+
+  return sendEmail({ to: userEmail, subject, html, text });
+}
 
 /**
  * 4. Alerts User when Admin approves their bKash payment.
@@ -622,6 +744,9 @@ module.exports = {
   notifyAdminNewVerification,
   notifyAdminNewPayment,
   notifyAdminNewReport,
+  notifyUserVerificationRequested,
+  notifyUserPaymentSubmitted,
+  notifyUserReportSubmitted,
   notifyUserPaymentApproved,
   notifyUserMembershipGranted,
   notifyUserVerificationApproved,

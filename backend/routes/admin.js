@@ -1028,8 +1028,26 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
         paymentSubmission: existingSubmission._id,
       });
 
+      const order = existingSubmission.order;
+      const planCode = order?.planCode || order?.plan || 'premium_6m';
+      const planDef = getPlan(planCode);
+      const amountBdt = order?.pricePaisa ? order.pricePaisa / 100 : planDef.price || 500;
+
+      const targetUserId = existingSubmission.user?._id || existingSubmission.user;
+      const targetUser = await User.findById(targetUserId);
+      if (targetUser && targetUser.email) {
+        emailService.notifyUserPaymentApproved({
+          userEmail: targetUser.email,
+          userName: targetUser.name,
+          planLabel: planDef.label,
+          expiresAt: existingPeriod?.expiresAt || new Date(),
+          trxId: existingSubmission.trxId,
+          amount: amountBdt,
+        }).catch((err) => console.error('[EmailService] Payment approval notification error:', err.message));
+      }
+
       return res.status(200).json({
-        message: 'Payment submission was already approved; returning existing membership record without modifications.',
+        message: 'Payment submission was already approved; returning existing membership record.',
         submission: existingSubmission,
         period: existingPeriod || null,
         isReplay: true,
@@ -1240,31 +1258,19 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
     });
     emitToAdmins('admin:student_updated', { studentId: String(userId) });
 
-    const recipientEmail = submission.user?.email;
-    const recipientName = submission.user?.name;
+    const targetUser = submission?.user?.email
+      ? submission.user
+      : (await User.findById(userId).select('name email')) || existingSubmission.user;
 
-    if (recipientEmail) {
+    if (targetUser && targetUser.email) {
       emailService.notifyUserPaymentApproved({
-        userEmail: recipientEmail,
-        userName: recipientName,
+        userEmail: targetUser.email,
+        userName: targetUser.name,
         planLabel: planDef.label,
         expiresAt: newExpiresAt,
-        trxId: submission.trxId,
+        trxId: submission?.trxId || existingSubmission.trxId,
         amount: amountBdt,
       }).catch((err) => console.error('[EmailService] Payment approval notification error:', err.message));
-    } else {
-      User.findById(userId).select('name email').then((u) => {
-        if (u?.email) {
-          emailService.notifyUserPaymentApproved({
-            userEmail: u.email,
-            userName: u.name,
-            planLabel: planDef.label,
-            expiresAt: newExpiresAt,
-            trxId: submission.trxId,
-            amount: amountBdt,
-          }).catch((err) => console.error('[EmailService] Payment approval notification error:', err.message));
-        }
-      }).catch(() => {});
     }
 
     return res.json({
@@ -1503,6 +1509,15 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
             code: 'IDEMPOTENCY_KEY_CONFLICT',
           });
         }
+        emailService.notifyUserMembershipGranted({
+          userEmail: student.email,
+          userName: student.name,
+          planLabel: existingGrant.customLabel || getPlan(planCode).label,
+          expiresAt: existingGrant.expiresAt,
+          grantReason: existingGrant.grantReason || grantReason.trim(),
+          grantType: existingGrant.grantType || grantType,
+        }).catch((err) => console.error('[EmailService] Membership grant replay error:', err.message));
+
         return res.status(200).json({
           message: 'Grant request was already processed; returning existing membership grant.',
           period: existingGrant,

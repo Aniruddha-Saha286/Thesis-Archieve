@@ -475,6 +475,16 @@ router.post('/payments', async (req, res) => {
           isResubmission: true,
         }).catch((err) => console.error('[EmailService] Payment resubmission notification error:', err.message));
 
+        emailService.notifyUserPaymentSubmitted({
+          userEmail: req.user.email,
+          userName: req.user.name,
+          orderRef: order.orderRef,
+          trxId: existingForOrder.trxId,
+          amount: existingForOrder.claimedAmountPaisa / 100,
+          planLabel: order.planName || order.plan,
+          isResubmission: true,
+        }).catch((err) => console.error('[EmailService] User payment receipt error:', err.message));
+
         try {
           const adminUser = await User.findOne({ role: 'admin' });
           const notifPayload = {
@@ -564,6 +574,16 @@ router.post('/payments', async (req, res) => {
       orderRef: order.orderRef,
       isResubmission: false,
     }).catch((err) => console.error('[EmailService] Payment submission notification error:', err.message));
+
+    emailService.notifyUserPaymentSubmitted({
+      userEmail: req.user.email,
+      userName: req.user.name,
+      orderRef: order.orderRef,
+      trxId: submission.trxId,
+      amount: submission.claimedAmountPaisa / 100,
+      planLabel: order.planName || order.plan,
+      isResubmission: false,
+    }).catch((err) => console.error('[EmailService] User payment receipt error:', err.message));
 
     try {
       const adminUser = await User.findOne({ role: 'admin' });

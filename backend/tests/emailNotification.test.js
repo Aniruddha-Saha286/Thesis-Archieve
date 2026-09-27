@@ -209,8 +209,72 @@ async function runEmailNotificationTests() {
     assert(email.html.includes('metadata-inaccuracy'));
   });
 
-  // --- 5. User Triggers (Payment Approved, Grant, Verification, Editor) ---
+  // --- 5. User Triggers (Confirmations & Approvals) ---
   console.log('--- 5. User Email Triggers ---');
+
+  await test('Trigger: notifyUserVerificationRequested sends receipt to the requesting student', async () => {
+    const res = await emailService.notifyUserVerificationRequested({
+      userEmail: 'applicant.scholar@campus.edu',
+      userName: 'Farhana Kabir',
+      university: 'Dhaka University',
+      degreeProgram: 'B.Sc. in Physics',
+      studentId: 'DU-PHYS-2022',
+    });
+
+    assert.strictEqual(res.success, true);
+    const sent = emailService.getSentEmails();
+    assert.strictEqual(sent.length, 1);
+    const email = sent[0];
+
+    assert.strictEqual(email.to, 'applicant.scholar@campus.edu');
+    assert(email.subject.includes('Verification Request Received'));
+    assert(email.html.includes('Farhana Kabir'));
+    assert(email.html.includes('Dhaka University'));
+    assert(email.html.includes('Under Review'));
+  });
+
+  await test('Trigger: notifyUserPaymentSubmitted sends submission receipt to paying researcher', async () => {
+    const res = await emailService.notifyUserPaymentSubmitted({
+      userEmail: 'subscriber@lab.org',
+      userName: 'Dr. Tanvir Ahmed',
+      orderRef: 'ORD-20260927-TNV01',
+      trxId: 'BKA5544332211',
+      amount: 500,
+      planLabel: 'Premium Membership (6 Months)',
+      isResubmission: false,
+    });
+
+    assert.strictEqual(res.success, true);
+    const sent = emailService.getSentEmails();
+    assert.strictEqual(sent.length, 1);
+    const email = sent[0];
+
+    assert.strictEqual(email.to, 'subscriber@lab.org');
+    assert(email.subject.includes('Payment Claim Received'));
+    assert(email.html.includes('BKA5544332211'));
+    assert(email.html.includes('500'));
+    assert(email.html.includes('Reconciliation in Progress'));
+  });
+
+  await test('Trigger: notifyUserReportSubmitted acknowledges receipt of publication grievance to user', async () => {
+    const res = await emailService.notifyUserReportSubmitted({
+      userEmail: 'alerted.reader@journal.org',
+      userName: 'Nasreen Akter',
+      title: 'Deep Learning in Bangla NLP',
+      issueType: 'dead-link',
+      reportId: 'rep_987654321',
+    });
+
+    assert.strictEqual(res.success, true);
+    const sent = emailService.getSentEmails();
+    assert.strictEqual(sent.length, 1);
+    const email = sent[0];
+
+    assert.strictEqual(email.to, 'alerted.reader@journal.org');
+    assert(email.subject.includes('Grievance Report Acknowledged'));
+    assert(email.html.includes('Deep Learning in Bangla NLP'));
+    assert(email.html.includes('rep_987654321'));
+  });
 
   await test('Trigger: notifyUserPaymentApproved sends activation receipt to the specific user', async () => {
     const expiry = new Date('2027-03-27T18:00:00.000Z');
