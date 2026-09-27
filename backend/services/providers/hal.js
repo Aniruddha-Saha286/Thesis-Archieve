@@ -2,6 +2,10 @@ const { createNormalizedRecord } = require('../scholarlyRecord');
 
 async function searchHal({ query = '', page = 1, limit = 20, offset: explicitOffset = null, filters = {}, sort = 'relevance' }) {
   try {
+    if (process.env.OFFLINE_MODE === 'true') {
+      return { records: [], totalCount: 0, rawCount: 0, hasMore: false, error: null };
+    }
+
     const offset = typeof explicitOffset === 'number' ? explicitOffset : (page - 1) * limit;
     const cleanQ = (query || 'research thesis').trim();
 

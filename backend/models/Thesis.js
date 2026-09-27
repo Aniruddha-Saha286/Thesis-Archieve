@@ -199,6 +199,24 @@ const thesisSchema = new mongoose.Schema({
     default: null,
     index: true,
   },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+  rejectionReason: {
+    type: String,
+    default: '',
+  },
+  rejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+  rejectedAt: {
+    type: Date,
+    default: null,
+  },
   updatedAt: {
     type: Date,
     default: Date.now,

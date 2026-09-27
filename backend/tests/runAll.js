@@ -3,12 +3,15 @@ const { runDeduplicationTests } = require('./deduplication.test');
 const { runCitationTests } = require('./citation.test');
 const { runSecurityTests } = require('./security.test');
 const { runSearchAndPaginationTests } = require('./searchAndPagination.test');
+const { testSearchSessionArchitecture } = require('./searchSessionPagination.test');
 const { runSearchCorrectnessRegressionTests } = require('./searchCorrectnessRegression.test');
 const { runMembershipAndBkashTests } = require('./membershipAndBkash.test');
 const { runAuthorAndInstitutionRegressionTests } = require('./authorAndInstitutionRegression.test');
 const { runPaperSummaryTests } = require('./paperSummaryService.test');
 const { runInstitutionAnalyticsTests } = require('./institutionAnalytics.test');
 const { runSearchHardeningRegressionTests } = require('./searchHardeningRegression.test');
+const { runDatasetDiscoveryRegressionTests } = require('./datasetDiscoveryRegression.test');
+const { runRbacAndGoogleAuthTests } = require('./rbacAndGoogleAuth.test');
 const { runE2EVerification } = require('./integrationE2E.test');
 
 console.log('===============================================================');
@@ -31,6 +34,8 @@ async function main() {
     console.log('');
     runSearchAndPaginationTests();
     console.log('');
+    testSearchSessionArchitecture();
+    console.log('');
     await runSearchCorrectnessRegressionTests();
     console.log('');
     await runMembershipAndBkashTests();
@@ -43,10 +48,14 @@ async function main() {
     console.log('');
     await runSearchHardeningRegressionTests();
     console.log('');
+    await runDatasetDiscoveryRegressionTests();
+    console.log('');
+    await runRbacAndGoogleAuthTests();
+    console.log('');
     await runE2EVerification();
     
     console.log('\n===============================================================');
-    console.log('  ALL 12 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 15 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

@@ -9,6 +9,7 @@ const { searchDoaj } = require('./providers/doaj');
 const { mergeTwoRecords, cleanTitleForMatching, getFirstAuthorSurname } = require('./deduplicator');
 const { mapToCanonicalSubject, getSubjectById } = require('./subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('./institutionService');
+const { resolveCountryCode } = require('./countryResolver');
 const sessionStore = require('./sessionStore');
 
 const PROVIDER_NAMES = {
@@ -339,7 +340,10 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     // If country is specified alongside author: author's institution must match the country
     if (targetCountries.length > 0) {
       const authorInCountry = matchingAuthorships.some((a) =>
-        (a.institutions || []).some((inst) => inst.countryCode && targetCountries.includes(inst.countryCode))
+        (a.institutions || []).some((inst) => {
+          const cCode = inst.countryCode || resolveCountryCode(inst.name || a.rawAffiliation);
+          return cCode && targetCountries.includes(cCode);
+        })
       );
       if (!authorInCountry) {
         return false;
@@ -356,7 +360,7 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
       if (!matchAward) return false;
 
       if (targetCountries.length > 0) {
-        const awardCountry = record.awardingInstitution?.countryCode;
+        const awardCountry = record.awardingInstitution?.countryCode || resolveCountryCode(record.awardingInstitution?.name || record.university);
         if (awardCountry && !targetCountries.includes(awardCountry)) {
           return false;
         }
@@ -380,7 +384,10 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
 
       // Coauthor isolation: the matched institution itself must reside in the target country
       if (targetCountries.length > 0 && matchingInsts.length > 0) {
-        const hasCountryMatch = matchingInsts.some((inst) => inst.countryCode && targetCountries.includes(inst.countryCode));
+        const hasCountryMatch = matchingInsts.some((inst) => {
+          const cCode = inst.countryCode || resolveCountryCode(inst.name);
+          return cCode && targetCountries.includes(cCode);
+        });
         if (!hasCountryMatch) {
           return false;
         }
@@ -391,15 +398,23 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     let hasCountry = false;
     for (const a of record.authorships || []) {
       for (const inst of a.institutions || []) {
-        if (inst.countryCode && targetCountries.includes(inst.countryCode)) {
+        const cCode = inst.countryCode || resolveCountryCode(inst.name || a.rawAffiliation);
+        if (cCode && targetCountries.includes(cCode)) {
           hasCountry = true;
           break;
         }
       }
       if (hasCountry) break;
     }
-    if (!hasCountry && record.awardingInstitution?.countryCode) {
-      if (targetCountries.includes(record.awardingInstitution.countryCode)) {
+    if (!hasCountry && record.awardingInstitution) {
+      const awardCountry = record.awardingInstitution.countryCode || resolveCountryCode(record.awardingInstitution.name || record.university);
+      if (awardCountry && targetCountries.includes(awardCountry)) {
+        hasCountry = true;
+      }
+    }
+    if (!hasCountry && record.university) {
+      const uniCountry = resolveCountryCode(record.university);
+      if (uniCountry && targetCountries.includes(uniCountry)) {
         hasCountry = true;
       }
     }
@@ -455,7 +470,7 @@ function sortUnfrozenBuffer(session, sort, query, pageNum) {
   }
 }
 
-function isProviderEligible(pKey, filters = {}) {
+function isProviderEligible(pKey, filters = {}, query = '') {
   const caps = PROVIDER_CAPABILITIES[pKey];
   if (!caps) return false;
 
@@ -499,15 +514,15 @@ function isProviderEligible(pKey, filters = {}) {
     return false;
   }
 
-  if (hasInst && !caps.supportsInstitution) return false;
-  if (hasCountry && !caps.supportsCountry) return false;
-  if (hasAuthorId && !caps.supportsAuthor) return false;
-  if (hasMinCitations && !caps.supportsMinCitations) return false;
+  // When a search query is provided (e.g. "golam rabiul"), aggregators (Crossref, Europe PMC, etc.)
+  // should NOT be blocked upfront. They return relevant candidate records whose affiliations
+  // and metadata are then accurately validated in the buffer dedup post-filter.
+  const hasQuery = Boolean(query && String(query).trim());
 
-  // NOTE: subject, field, and publisher filters are intentionally NOT checked here.
-  // They are applied as post-filters on returned records in the buffer dedup loop.
-  // Skipping providers for these filters caused false "0 results" when only
-  // Local + OpenAlex supported them natively.
+  if (hasInst && !caps.supportsInstitution && !hasQuery) return false;
+  if (hasCountry && !caps.supportsCountry && !hasQuery) return false;
+  if (hasAuthorId && !caps.supportsAuthor && !hasQuery) return false;
+  if (hasMinCitations && !caps.supportsMinCitations && !hasQuery) return false;
 
   return true;
 }
@@ -604,7 +619,7 @@ async function executeSearchSessionLocked(session, {
     const fetchPromises = [];
 
     // Local MongoDB
-    if (isProviderEligible('local', filters) && session.providerStates.local.hasMore) {
+    if (isProviderEligible('local', filters, query) && session.providerStates.local.hasMore) {
       const curOffset = session.providerStates.local.offset || 0;
       const localLimit = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -615,7 +630,7 @@ async function executeSearchSessionLocked(session, {
     }
 
     // OpenAlex
-    if (isProviderEligible('openalex', filters) && session.providerStates.openalex.hasMore) {
+    if (isProviderEligible('openalex', filters, query) && session.providerStates.openalex.hasMore) {
       const curPage = session.providerStates.openalex.page || 1;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -626,7 +641,7 @@ async function executeSearchSessionLocked(session, {
     }
 
     // arXiv
-    if (isProviderEligible('arxiv', filters) && session.providerStates.arxiv.hasMore) {
+    if (isProviderEligible('arxiv', filters, subjectAugmentedQuery) && session.providerStates.arxiv.hasMore) {
       const curOffset = session.providerStates.arxiv.offset || 0;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -637,7 +652,7 @@ async function executeSearchSessionLocked(session, {
     }
 
     // Crossref
-    if (isProviderEligible('crossref', filters) && session.providerStates.crossref.hasMore) {
+    if (isProviderEligible('crossref', filters, subjectAugmentedQuery) && session.providerStates.crossref.hasMore) {
       const curOffset = session.providerStates.crossref.offset || 0;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -648,7 +663,7 @@ async function executeSearchSessionLocked(session, {
     }
 
     // Europe PMC
-    if (isProviderEligible('europepmc', filters) && session.providerStates.europepmc.hasMore) {
+    if (isProviderEligible('europepmc', filters, subjectAugmentedQuery) && session.providerStates.europepmc.hasMore) {
       const curPage = session.providerStates.europepmc.page || 1;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -659,7 +674,7 @@ async function executeSearchSessionLocked(session, {
     }
 
     // HAL Open Science
-    if (isProviderEligible('hal', filters) && session.providerStates.hal.hasMore) {
+    if (isProviderEligible('hal', filters, subjectAugmentedQuery) && session.providerStates.hal.hasMore) {
       const curOffset = session.providerStates.hal.offset || 0;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -670,7 +685,7 @@ async function executeSearchSessionLocked(session, {
     }
 
     // DOAJ
-    if (isProviderEligible('doaj', filters) && session.providerStates.doaj.hasMore) {
+    if (isProviderEligible('doaj', filters, subjectAugmentedQuery) && session.providerStates.doaj.hasMore) {
       const curPage = session.providerStates.doaj.page || 1;
       const batchSize = Math.max(limitNum, 20);
       fetchPromises.push(
@@ -857,7 +872,7 @@ async function executeSearchSessionLocked(session, {
     sortUnfrozenBuffer(session, sort, query, pageNum);
 
     // Check if any eligible provider still has items remaining
-    const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters));
+    const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters, subjectAugmentedQuery));
     const anyEligibleHasMore = eligibleProviders.some(([_, p]) => p.hasMore);
 
     if (!anyEligibleHasMore) {
@@ -867,7 +882,7 @@ async function executeSearchSessionLocked(session, {
   }
 
   // Calculate hasMore strictly from eligible providers and buffered records
-  const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters));
+  const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters, subjectAugmentedQuery));
   const anyEligibleHasMore = !session.allProvidersExhausted && eligibleProviders.some(([_, p]) => p.hasMore);
   const hasMoreForClient = session.buffer.length > endIndex || anyEligibleHasMore;
 
@@ -882,7 +897,7 @@ async function executeSearchSessionLocked(session, {
   // Ensure honest provider telemetry status for all known federated providers
   for (const [pKey, pName] of Object.entries(PROVIDER_NAMES)) {
     if (!session.providerStatus[pName]) {
-      const eligible = isProviderEligible(pKey, filters);
+      const eligible = isProviderEligible(pKey, filters, subjectAugmentedQuery);
       session.providerStatus[pName] = {
         status: eligible ? 'idle' : 'skipped_unsupported_filter',
         count: 0,

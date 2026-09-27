@@ -135,6 +135,16 @@ async function suggestInstitutions(queryOrOptions = '', maybeOptions = {}) {
     return CURATED_INSTITUTIONS.slice(0, limit);
   }
 
+  if (process.env.OFFLINE_MODE === 'true' || process.env.NODE_ENV === 'test') {
+    const lowerQ = q.toLowerCase();
+    const matched = CURATED_INSTITUTIONS.filter((inst) =>
+      inst.name.toLowerCase().includes(lowerQ) ||
+      (inst.aliases && inst.aliases.some((a) => a.toLowerCase().includes(lowerQ))) ||
+      (inst.acronyms && inst.acronyms.some((a) => a.toLowerCase().includes(lowerQ)))
+    );
+    return matched.slice(0, limit);
+  }
+
   const cacheKey = `${q.toLowerCase()}:${Boolean(academicOnly)}:${limit}`;
   const cached = institutionCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {

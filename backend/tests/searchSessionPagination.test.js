@@ -92,4 +92,8 @@ async function testSearchSessionArchitecture() {
   console.log('✓ Phase 1 A Acceptance Case PASSED: All 120 papers reachable across 6 pages without duplicates or empty pages!');
 }
 
-testSearchSessionArchitecture();
+module.exports = { testSearchSessionArchitecture };
+
+if (require.main === module) {
+  testSearchSessionArchitecture();
+}

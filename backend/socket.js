@@ -19,6 +19,42 @@ function isAllowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin);
 }
 
+function assignSocketRooms(socket, user) {
+  if (!socket || !user) return;
+  // Always join personal user room
+  socket.join(`user:${user.id}`);
+
+  // Clean all previous privileged rooms
+  socket.leave('role:admin');
+  socket.leave('role:editor');
+  socket.leave('perm:students.view');
+  socket.leave('perm:students.verify');
+  socket.leave('perm:students.suspend');
+  socket.leave('perm:documents.view');
+  socket.leave('perm:payments.view');
+  socket.leave('perm:payments.review');
+  socket.leave('perm:publications.moderate');
+  socket.leave('perm:reports.moderate');
+
+  if (user.role === 'admin' && user.status === 'approved') {
+    socket.join('role:admin');
+    socket.join('perm:students.view');
+    socket.join('perm:students.verify');
+    socket.join('perm:students.suspend');
+    socket.join('perm:documents.view');
+    socket.join('perm:payments.view');
+    socket.join('perm:payments.review');
+    socket.join('perm:publications.moderate');
+    socket.join('perm:reports.moderate');
+  } else if (user.role === 'editor' && user.status === 'approved') {
+    socket.join('role:editor');
+    const perms = Array.isArray(user.permissions) ? user.permissions : [];
+    for (const p of perms) {
+      socket.join(`perm:${p}`);
+    }
+  }
+}
+
 function initSocket(httpServer) {
   io = new Server(httpServer, {
     cors: {
@@ -35,8 +71,7 @@ function initSocket(httpServer) {
     pingInterval: 25000,
   });
 
-  // Socket middleware: Verifies token AND loads current user from DB
-  // Requires current role and status from database, preventing stale token escalation
+  // Socket middleware: Verifies token AND re-checks current user from DB
   io.use(async (socket, next) => {
     try {
       const rawToken =
@@ -48,12 +83,13 @@ function initSocket(httpServer) {
           const secret = getJwtSecret();
           const decoded = jwt.verify(rawToken, secret);
           if (decoded && decoded.id) {
-            const dbUser = await User.findById(decoded.id).select('role status name email');
+            const dbUser = await User.findById(decoded.id).select('role status permissions name email');
             if (dbUser && dbUser.status !== 'banned') {
               socket.user = {
                 id: String(dbUser._id),
                 role: dbUser.role,
                 status: dbUser.status,
+                permissions: dbUser.permissions || [],
               };
             } else {
               socket.user = null;
@@ -72,14 +108,8 @@ function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
-    // Join personal user room if authenticated
-    if (socket.user?.id) {
-      socket.join(`user:${socket.user.id}`);
-    }
-
-    // Join admin room strictly if verified administrator in database
-    if (socket.user?.role === 'admin' && socket.user?.status === 'approved') {
-      socket.join('role:admin');
+    if (socket.user) {
+      assignSocketRooms(socket, socket.user);
     }
 
     // Client can dynamically re-authenticate after login
@@ -90,10 +120,10 @@ function initSocket(httpServer) {
         const decoded = jwt.verify(token, secret);
         if (!decoded || !decoded.id) return;
 
-        const dbUser = await User.findById(decoded.id).select('role status name email');
+        const dbUser = await User.findById(decoded.id).select('role status permissions name email');
         if (!dbUser || dbUser.status === 'banned') {
           socket.user = null;
-          socket.leave('role:admin');
+          revokeUserSocketPrivileges(decoded.id);
           socket.emit('auth:error', { message: 'Account suspended or invalid.' });
           socket.disconnect(true);
           return;
@@ -103,18 +133,15 @@ function initSocket(httpServer) {
           id: String(dbUser._id),
           role: dbUser.role,
           status: dbUser.status,
+          permissions: dbUser.permissions || [],
         };
 
-        socket.join(`user:${socket.user.id}`);
-        if (dbUser.role === 'admin' && dbUser.status === 'approved') {
-          socket.join('role:admin');
-        } else {
-          socket.leave('role:admin');
-        }
+        assignSocketRooms(socket, socket.user);
 
         socket.emit('auth:authenticated', {
           userId: socket.user.id,
           role: socket.user.role,
+          permissions: socket.user.permissions,
         });
       } catch (err) {
         socket.emit('auth:error', { message: 'Invalid socket authentication token.' });
@@ -134,7 +161,7 @@ function getIO() {
 }
 
 /**
- * Remove privileged rooms and disconnect sockets when a user is banned, demoted, or logged out.
+ * Remove privileged rooms and disconnect sockets when a user is banned, demoted, or revoked.
  */
 function revokeUserSocketPrivileges(userId) {
   if (!io || !userId) return;
@@ -145,11 +172,20 @@ function revokeUserSocketPrivileges(userId) {
       const sock = io.sockets.sockets.get(socketId);
       if (sock) {
         sock.leave('role:admin');
+        sock.leave('role:editor');
+        sock.leave('perm:students.view');
+        sock.leave('perm:students.verify');
+        sock.leave('perm:students.suspend');
+        sock.leave('perm:documents.view');
+        sock.leave('perm:payments.view');
+        sock.leave('perm:payments.review');
+        sock.leave('perm:publications.moderate');
+        sock.leave('perm:reports.moderate');
         if (sock.user) {
           sock.user.role = 'student';
-          sock.user.status = 'banned';
+          sock.user.permissions = [];
         }
-        sock.emit('auth:revoked', { message: 'Privileges have been revoked or account status changed.' });
+        sock.emit('auth:revoked', { message: 'Privileges have been modified or account status changed.' });
         sock.disconnect(true);
       }
     }
@@ -161,8 +197,7 @@ function revokeUserSocketPrivileges(userId) {
 // -------------------------------------------------------------
 
 /**
- * Broadcast when an admin approves, rejects, bans, or reinstates a student.
- * Sends minimal sanitized payload only.
+ * Broadcast when an admin/editor approves, rejects, bans, or reinstates a student.
  */
 function emitStudentStatusChanged(studentId, payload) {
   if (!io) return;
@@ -174,16 +209,15 @@ function emitStudentStatusChanged(studentId, payload) {
     verifiedAt: payload.verifiedAt || null,
   };
   io.to(`user:${sId}`).emit('user:status_changed', sanitized);
-  io.to('role:admin').emit('admin:student_updated', sanitized);
+  io.to('role:admin').to('perm:students.view').emit('admin:student_updated', sanitized);
 }
 
 /**
  * Broadcast when a new student registers via Google OAuth.
- * Delivered strictly to administrators; minimal registration notification only.
  */
 function emitNewStudentRegistered(student) {
   if (!io) return;
-  io.to('role:admin').emit('admin:new_student_application', {
+  io.to('role:admin').to('perm:students.view').emit('admin:new_student_application', {
     studentId: String(student._id || student.id),
     name: student.name,
     email: student.email,
@@ -194,7 +228,6 @@ function emitNewStudentRegistered(student) {
 
 /**
  * Broadcast when a student updates their academic profile.
- * Sends sanitized profile data only.
  */
 function emitStudentProfileUpdated(student) {
   if (!io) return;
@@ -207,13 +240,11 @@ function emitStudentProfileUpdated(student) {
     researchDomain: student.researchDomain,
   };
   io.to(`user:${sId}`).emit('user:profile_updated', { student: sanitized });
-  io.to('role:admin').emit('admin:student_profile_updated', { studentId: sId });
+  io.to('role:admin').to('perm:students.view').emit('admin:student_profile_updated', { studentId: sId });
 }
 
 /**
  * Broadcast when a new thesis or research paper is proposed.
- * SECURITY: If status is 'pending', emitted STRICTLY to administrators.
- * Only approved publications are broadcast to research users.
  */
 function emitThesisCreated(thesis) {
   if (!io) return;
@@ -226,10 +257,8 @@ function emitThesisCreated(thesis) {
     submittedAt: thesis.createdAt || new Date(),
   };
 
-  // Always notify administrators of new submission
-  io.to('role:admin').emit('admin:thesis_submitted', minimalAdminPayload);
+  io.to('role:admin').to('perm:publications.moderate').emit('admin:thesis_submitted', minimalAdminPayload);
 
-  // Broadcast to research users ONLY after formal approval
   if (thesis.status === 'approved') {
     io.emit('thesis:created', {
       id: String(thesis._id || thesis.id),
@@ -281,11 +310,23 @@ function emitToUser(userId, event, payload) {
 }
 
 /**
- * Send an event to all connected administrators.
+ * Send an event to connected staff with permission or admin role.
  */
 function emitToAdmins(event, payload) {
   if (!io) return;
+  // Always broadcast to all authenticated administrators
   io.to('role:admin').emit(event, payload);
+
+  // Also broadcast to granular permission holders (editors)
+  if (event.includes('payment')) {
+    io.to('perm:payments.view').emit(event, payload);
+  } else if (event.includes('student')) {
+    io.to('perm:students.view').emit(event, payload);
+  } else if (event.includes('thesis')) {
+    io.to('perm:publications.moderate').emit(event, payload);
+  } else if (event.includes('report')) {
+    io.to('perm:reports.moderate').emit(event, payload);
+  }
 }
 
 module.exports = {

@@ -160,6 +160,8 @@ async function startServer() {
   }
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
-module.exports = { app, server, isAllowedOrigin };
+module.exports = { app, server, isAllowedOrigin, startServer };

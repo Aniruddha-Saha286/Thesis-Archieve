@@ -7,6 +7,22 @@ const { getInstitutionResearchLandscape } = require('../services/institutionAnal
 const { getOrGeneratePaperSummary } = require('../services/paperSummaryService');
 
 async function runLiveSmokeTests() {
+  const isExplicitOptIn = process.env.RUN_LIVE_SMOKE === 'true' || process.argv.includes('--live');
+  if (!isExplicitOptIn) {
+    console.log('===============================================================');
+    console.log('  PROJECT PANTHER - LIVE SMOKE SUITE OPT-IN NOTICE             ');
+    console.log('===============================================================');
+    console.log('  Live network tests require explicit opt-in to avoid hitting external');
+    console.log('  APIs (OpenAlex, Crossref, DataCite) during deterministic runs.');
+    console.log('  To execute against the live network:');
+    console.log('    node backend/tests/runLiveSmoke.js --live');
+    console.log('  or set RUN_LIVE_SMOKE=true\n');
+    console.log('  (Skipping real-network calls in deterministic mode)');
+    return;
+  }
+
+  process.env.OFFLINE_MODE = 'false';
+
   console.log('===============================================================');
   console.log('  PROJECT PANTHER - LIVE SMOKE & EXTERNAL API INTEGRATION TEST  ');
   console.log('===============================================================\n');

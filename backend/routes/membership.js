@@ -44,13 +44,24 @@ router.get('/status', async (req, res) => {
 
     const formatPeriod = (p) => {
       if (!p) return null;
+      const isManual = p.source === 'manual_admin';
+      const planDef = getPlan(p.plan || 'premium_6m');
+      const effectiveLabel = isManual
+        ? (p.customLabel || (p.plan === 'pro_max_12m' ? 'Pro Max Research Grant' : 'Premium Research Grant'))
+        : planDef?.label;
+
       return {
         id: p._id,
         plan: p.plan,
         planCode: p.plan,
+        label: effectiveLabel,
         startsAt: p.startsAt,
         expiresAt: p.expiresAt,
         formattedExpiry: formatDhakaDateTime(p.expiresAt),
+        source: p.source || 'payment',
+        customLabel: p.customLabel || '',
+        grantType: p.grantType || 'standard',
+        grantReason: p.grantReason || '',
       };
     };
 

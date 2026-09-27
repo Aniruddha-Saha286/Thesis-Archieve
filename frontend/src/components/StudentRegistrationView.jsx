@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, AlertCircle, ShieldCheck, Upload, Image, CheckCircle, FileText, X } from 'lucide-react';
+import { LogOut, AlertCircle, ShieldCheck, Upload, CheckCircle, FileText, X } from 'lucide-react';
 import axios from 'axios';
 
 export default function StudentRegistrationView() {
@@ -12,9 +12,9 @@ export default function StudentRegistrationView() {
     degreeProgram: 'B.Sc. Undergraduate Thesis',
     researchDomain: 'Renewable Energy & Materials',
     thesisGoal: '',
-    idCardProof: '',
   });
 
+  const [hasUploadedDocument, setHasUploadedDocument] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -28,6 +28,11 @@ export default function StudentRegistrationView() {
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size exceeds the 10 MB maximum limit.');
+      return;
+    }
 
     // Local instant preview
     const objectUrl = URL.createObjectURL(file);
@@ -43,23 +48,39 @@ export default function StudentRegistrationView() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const uploadedUrl = res.data?.url || res.data?.secure_url || objectUrl;
-      setFormData((prev) => ({ ...prev, idCardProof: uploadedUrl }));
-      setUploadSuccess(true);
+      if (res.data?.hasVerificationDocument) {
+        setHasUploadedDocument(true);
+        setUploadSuccess(true);
+      }
     } catch (err) {
       console.error('Upload error:', err);
-      // Fallback: use local preview URL if network glitch
-      setFormData((prev) => ({ ...prev, idCardProof: objectUrl }));
-      setUploadSuccess(true);
+      // FAILS CLOSED: Never treat local blob: as completed server upload
+      setHasUploadedDocument(false);
+      setUploadSuccess(false);
+      setError(
+        err.response?.data?.message ||
+        'Identity document upload failed. Only JPEG, PNG, WebP, and PDF documents are accepted.'
+      );
     } finally {
       setUploading(false);
     }
   };
 
-  const handleRemoveFile = () => {
-    setPreviewUrl('');
-    setFormData((prev) => ({ ...prev, idCardProof: '' }));
-    setUploadSuccess(false);
+  const handleRemoveFile = async () => {
+    try {
+      setUploading(true);
+      await axios.delete('/api/upload/id-card');
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl('');
+      setHasUploadedDocument(false);
+      setUploadSuccess(false);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to remove document from server. Please retry.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -68,11 +89,7 @@ export default function StudentRegistrationView() {
     setLoading(true);
 
     try {
-      const submissionData = {
-        ...formData,
-        idCardProof: formData.idCardProof || previewUrl,
-      };
-      await axios.post('/api/auth/complete-profile', submissionData);
+      await axios.post('/api/auth/complete-profile', formData);
       await refreshUser();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit student registration.');
@@ -118,10 +135,10 @@ export default function StudentRegistrationView() {
               <ShieldCheck className="w-3.5 h-3.5" /> Authenticated Identity: {user?.email}
             </span>
             <h2 className="text-2xl font-serif-title font-normal text-[#1C1B18] mt-1">
-              Complete Your Student Academic Profile
+              Scholarly Credentials Verification
             </h2>
-            <p className="text-xs text-[#737067] mt-0.5 font-light">
-              Welcome, <strong>{user?.name}</strong>. Please enter your university credentials to activate your thesis repository access.
+            <p className="text-xs text-[#737067] mt-0.5">
+              Please register your academic program and university affiliation to request editorial verification.
             </p>
           </div>
 
@@ -132,21 +149,22 @@ export default function StudentRegistrationView() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono-meta">
+            
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Full Student Name *</label>
+              <label className="block font-medium text-[#1C1B18] mb-1">Full Legal Name *</label>
               <input
                 type="text"
                 name="name"
                 required
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="e.g. Zarin Tasnim"
+                placeholder="e.g. Aniruddha Saha"
                 className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-2 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-medium text-[#1C1B18] mb-1">University / Institute *</label>
                 <input
@@ -155,25 +173,26 @@ export default function StudentRegistrationView() {
                   required
                   value={formData.university}
                   onChange={handleChange}
-                  placeholder="e.g. University of Dhaka / BUET"
+                  placeholder="e.g. University of Dhaka"
                   className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-2 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
                 />
               </div>
+
               <div>
-                <label className="block font-medium text-[#1C1B18] mb-1">Student ID Number *</label>
+                <label className="block font-medium text-[#1C1B18] mb-1">Student / Registration ID *</label>
                 <input
                   type="text"
                   name="studentId"
                   required
                   value={formData.studentId}
                   onChange={handleChange}
-                  placeholder="e.g. 2021-CS-104"
+                  placeholder="e.g. 2020-832-114"
                   className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-2 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-medium text-[#1C1B18] mb-1">Degree Program *</label>
                 <select
@@ -184,19 +203,20 @@ export default function StudentRegistrationView() {
                 >
                   <option>B.Sc. Undergraduate Thesis</option>
                   <option>M.Sc. Postgraduate Thesis</option>
-                  <option>M.Phil Researcher</option>
-                  <option>Doctoral Candidate (Ph.D.)</option>
+                  <option>M.Phil. Research</option>
+                  <option>Ph.D. Doctoral Dissertation</option>
+                  <option>Faculty / Institutional Researcher</option>
                 </select>
               </div>
+
               <div>
-                <label className="block font-medium text-[#1C1B18] mb-1">Research Domain *</label>
+                <label className="block font-medium text-[#1C1B18] mb-1">Primary Research Domain *</label>
                 <select
                   name="researchDomain"
                   value={formData.researchDomain}
                   onChange={handleChange}
                   className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-2 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
                 >
-                  <option>Renewable Energy & Materials</option>
                   <option>Computer Science & NLP</option>
                   <option>Biomedical & Clinical Science</option>
                   <option>Agricultural Systems & Soil</option>
@@ -219,13 +239,13 @@ export default function StudentRegistrationView() {
               ></textarea>
             </div>
 
-            {/* Cloudinary Student ID Card Upload */}
+            {/* Student ID Card Document Upload */}
             <div>
               <label className="block font-medium text-[#1C1B18] mb-1">
-                Upload Student ID Card / Proof (Image / PDF)
+                Upload Student ID Card / Proof (JPEG, PNG, WebP, or PDF — Max 10MB)
               </label>
 
-              {formData.idCardProof ? (
+              {hasUploadedDocument ? (
                 <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-3 rounded-sm flex items-center justify-between">
                   <div className="flex items-center gap-2.5 overflow-hidden">
                     {previewUrl ? (
@@ -241,15 +261,16 @@ export default function StudentRegistrationView() {
                       <div className="flex items-center gap-1 text-[#2C6B3F] font-bold text-[11px]">
                         <CheckCircle className="w-3.5 h-3.5" /> ID Uploaded Securely
                       </div>
-                      <div className="text-[10px] text-[#737067] truncate max-w-[280px]">
-                        {formData.idCardProof}
+                      <div className="text-[10px] text-[#737067]">
+                        Verified asset stored privately for depository moderation.
                       </div>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={handleRemoveFile}
-                    className="text-[#737067] hover:text-red-700 p-1 cursor-pointer"
+                    disabled={uploading}
+                    className="text-[#737067] hover:text-red-700 p-1 cursor-pointer disabled:opacity-50"
                     title="Remove file"
                   >
                     <X className="w-4 h-4" />
@@ -259,45 +280,49 @@ export default function StudentRegistrationView() {
                 <label className="border-2 border-dashed border-[#D5D1C7] hover:border-[#1C1B18] bg-[#FAF9F5] rounded-sm p-4 text-center block cursor-pointer transition">
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                     onChange={handleFileUpload}
                     className="hidden"
+                    disabled={uploading}
                   />
                   <div className="flex flex-col items-center justify-center space-y-1">
                     <Upload className={`w-5 h-5 ${uploading ? 'animate-bounce text-amber-600' : 'text-[#737067]'}`} />
                     <span className="font-medium text-[#1C1B18]">
-                      {uploading ? 'Uploading to Secure Cloudinary Storage...' : 'Click or drag student ID card to upload'}
+                      {uploading ? 'Uploading to private storage...' : 'Click or drag student ID card to upload'}
                     </span>
                     <span className="text-[10px] text-[#737067]">
-                      Supports JPG, PNG, WebP, or PDF (Max 10MB)
+                      JPEG, PNG, WebP, or PDF (Maximum 10 MB)
                     </span>
                   </div>
                 </label>
               )}
             </div>
 
-            {/* Data Retention & Privacy Policy Note */}
+            {/* Privacy & Evaluation Note */}
             <div className="p-3 bg-[#FAF9F5] border border-[#E2DFD8] rounded-sm text-[11px] font-mono-meta text-[#605D55] space-y-1">
-              <div className="font-bold text-[#1C1B18]">Data Retention & Privacy Notice:</div>
-              <p>
-                Student verification credentials are encrypted and accessed solely by university editorial board reviewers to verify thesis authorship. Uploaded proofs are not shared publicly, are not required for discovery search or citation export, and can be removed upon account request.
+              <span className="font-semibold text-[#1C1B18] block uppercase tracking-wider text-[10px]">
+                Identity Verification Notice
+              </span>
+              <p className="leading-relaxed">
+                Your submitted credentials and identification documents are inspected strictly by authorized depository staff through short-lived access. Identification assets are never made publicly available.
               </p>
             </div>
 
-            <div className="pt-2 space-y-2">
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={loading || uploading}
-                className="w-full bg-[#1C1B18] hover:bg-[#2E2C28] text-white font-medium py-2.5 rounded-sm transition text-xs shadow-sm cursor-pointer disabled:opacity-50"
+                className="w-full bg-[#1C1B18] hover:bg-[#2C2A24] text-[#FAF9F5] py-2.5 rounded-sm transition font-medium cursor-pointer disabled:opacity-50 text-xs"
               >
-                {loading ? 'Submitting Registration...' : 'Complete Academic Registration'}
+                {loading ? 'Submitting Application...' : 'Submit Academic Verification Request'}
               </button>
             </div>
-          </form>
 
+          </form>
         </div>
       </main>
 
+      {/* Footer */}
       <footer className="max-w-6xl mx-auto w-full py-4 border-t border-[#E2DFD8] text-center text-xs font-mono-meta text-[#737067]">
         Prepared and Developed by CSE IMPOSTERS TEAM
       </footer>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, Shield, Ban, CheckCircle, Search, ExternalLink, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Users, Shield, Ban, CheckCircle, Search, ExternalLink, Trash2, X, AlertTriangle, Eye } from 'lucide-react';
+import DocumentViewerModal from './DocumentViewerModal';
 
 export default function StudentManagementModal({ isOpen, onClose, onRefreshStats }) {
   const [students, setStudents] = useState([]);
@@ -8,6 +9,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+  const [inspectingStudent, setInspectingStudent] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -222,16 +224,15 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
                     <td className="p-3">
                       <div className="font-bold text-[#1C1B18]">{s.name}</div>
                       <div className="text-[11px] font-mono-meta text-[#737067]">{s.email}</div>
-                      {s.idCardProof && (
-                        <a
-                          href={s.idCardProof}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-blue-700 hover:underline font-mono-meta mt-1"
+                      {(s.hasVerificationDocument || s.idCardProof) && (
+                        <button
+                          type="button"
+                          onClick={() => setInspectingStudent(s)}
+                          className="inline-flex items-center gap-1 text-[10px] text-blue-700 hover:text-blue-900 hover:underline font-mono-meta mt-1 cursor-pointer"
                         >
-                          <ExternalLink className="w-2.5 h-2.5" />
-                          <span>View Uploaded ID</span>
-                        </a>
+                          <Eye className="w-2.5 h-2.5" />
+                          <span>View ID Proof</span>
+                        </button>
                       )}
                     </td>
 
@@ -362,6 +363,15 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
         </div>
 
       </div>
+
+      {inspectingStudent && (
+        <DocumentViewerModal
+          isOpen={!!inspectingStudent}
+          onClose={() => setInspectingStudent(null)}
+          studentId={inspectingStudent._id || inspectingStudent.id}
+          studentName={inspectingStudent.name}
+        />
+      )}
     </div>
   );
 }

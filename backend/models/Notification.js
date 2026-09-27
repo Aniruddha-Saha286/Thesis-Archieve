@@ -9,7 +9,18 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['topic_alert', 'payment_approved', 'payment_rejected', 'payment_correction', 'membership_cancelled', 'editorial_update', 'general'],
+    enum: [
+      'topic_alert',
+      'payment_approved',
+      'payment_rejected',
+      'payment_correction',
+      'membership_granted',
+      'membership_cancelled',
+      'thesis_approved',
+      'thesis_rejected',
+      'editorial_update',
+      'general',
+    ],
     default: 'general',
   },
   title: {

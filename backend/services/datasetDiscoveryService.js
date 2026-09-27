@@ -169,6 +169,30 @@ function evaluateDataCiteRelation(attrs, doi, isLinked) {
 async function queryDataCite({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
+    if (process.env.OFFLINE_MODE === 'true') {
+      const records = [
+        {
+          id: `datacite_offline_${pageNum}_1`,
+          title: `DataCite Research Dataset for ${query || doi || 'Scientific Study'}`,
+          url: 'https://doi.org/10.5281/zenodo.7627309',
+          doi: '10.5281/zenodo.7627309',
+          publisher: 'DataCite Depository',
+          publicationYear: 2024,
+          description: 'Deterministic offline fixture dataset for regression tests.',
+          formats: ['CSV', 'JSON'],
+          size: '12 MB',
+          license: 'CC-BY-4.0',
+          isLinked: Boolean(isLinked),
+          relationType: isLinked ? 'Primary Associated Dataset' : 'Topic Similarity Discovery',
+          relationshipDirection: isLinked ? 'supplemental' : 'topic',
+          relationEvidence: 'Deterministic offline fixture evidence.',
+          source: 'DataCite',
+          sourceUrl: 'https://doi.org/10.5281/zenodo.7627309',
+        },
+      ];
+      return { records, totalCount: 1, hasMore: false, error: null };
+    }
+
     let url;
     if (doi) {
       url = `https://api.datacite.org/dois?query=relatedIdentifiers.relatedIdentifier:${encodeURIComponent(doi)}&resource-type-id=dataset&page[number]=${pageNum}&page[size]=${size}`;
@@ -300,6 +324,30 @@ function evaluateZenodoRelation(meta, doi, isLinked) {
 async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
+    if (process.env.OFFLINE_MODE === 'true') {
+      const records = [
+        {
+          id: `zenodo_offline_${pageNum}_1`,
+          title: `Zenodo Open Dataset for ${query || doi || 'Precipitation Models'}`,
+          url: 'https://zenodo.org/records/7627309',
+          doi: '10.5281/zenodo.7627309',
+          publisher: 'Zenodo Open Repository',
+          publicationYear: 2024,
+          description: 'Deterministic offline fixture dataset for regression tests.',
+          formats: ['ZIP'],
+          size: '1.4 GB',
+          license: 'CC-BY-4.0',
+          isLinked: Boolean(isLinked),
+          relationType: isLinked ? 'Primary Associated Dataset' : 'Topic Similarity Discovery',
+          relationshipDirection: isLinked ? 'supplemental' : 'topic',
+          relationEvidence: 'Deterministic offline fixture evidence.',
+          source: 'Zenodo',
+          sourceUrl: 'https://zenodo.org/records/7627309',
+        },
+      ];
+      return { records, totalCount: 1, hasMore: false, error: null };
+    }
+
     let url;
     if (doi) {
       url = `https://zenodo.org/api/records?q=related.identifier:"${encodeURIComponent(doi)}"&type=dataset&page=${pageNum}&size=${size}`;

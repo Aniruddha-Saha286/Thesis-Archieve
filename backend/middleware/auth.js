@@ -76,7 +76,7 @@ const requireApproved = (req, res, next) => {
     return res.status(401).json({ message: 'Authentication required.' });
   }
 
-  if (req.user.role === 'admin') {
+  if (req.user.role === 'admin' || req.user.role === 'editor') {
     return next();
   }
 

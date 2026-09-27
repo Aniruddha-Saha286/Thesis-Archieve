@@ -2,20 +2,15 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const { authenticateToken, getJwtSecret } = require('../middleware/auth');
 const { authLimiter, loginLimiter } = require('../middleware/rateLimit');
-const { emitNewStudentRegistered, emitStudentProfileUpdated } = require('../socket');
-
-// Lazy-initialize Google OAuth client with validated environment variable
-const getGoogleClient = () => {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    throw new Error('Server configuration error: GOOGLE_CLIENT_ID environment variable is required.');
-  }
-  return new OAuth2Client(clientId);
-};
+const { emitStudentProfileUpdated } = require('../socket');
+const {
+  verifyGoogleCredential,
+  resolveAndSyncGoogleUser,
+  toSanitizedUserDto,
+} = require('../services/googleIdentityService');
 
 const generateToken = (user) => {
   const secret = getJwtSecret();
@@ -27,135 +22,50 @@ const generateToken = (user) => {
 };
 
 // POST /api/auth/google
-// Authenticates user strictly via verified Google ID token.
-// NEVER accepts unverified client-provided email or decoded tokens.
-// Google OAuth can NEVER grant or maintain an administrator role.
+// Unified Google authentication endpoint for Students, Editors, and Administrators.
+// Cryptographically verifies Google ID token and server-authoritatively determines role.
 router.post('/google', authLimiter, async (req, res) => {
   try {
     const { credential } = req.body;
 
     if (!credential || typeof credential !== 'string') {
-      return res.status(400).json({ message: 'Google authentication credential (ID token) is required.' });
-    }
-
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      console.error('Missing GOOGLE_CLIENT_ID environment variable.');
-      return res.status(500).json({ message: 'Google authentication service is not configured on the server.' });
-    }
-
-    const client = getGoogleClient();
-
-    // Verify cryptographic signature, audience, expiry, and issuer
-    let payload;
-    try {
-      const ticket = await client.verifyIdToken({
-        idToken: credential,
-        audience: clientId,
+      return res.status(400).json({
+        message: 'Google authentication credential (ID token) is required.',
+        code: 'MISSING_CREDENTIAL',
       });
-      payload = ticket.getPayload();
-    } catch (verifyErr) {
-      console.warn('Google ID token verification failed:', verifyErr.message);
-      return res.status(401).json({ message: 'Invalid, malformed, or expired Google authentication token.' });
     }
 
-    if (!payload) {
-      return res.status(401).json({ message: 'Empty or invalid token payload received from Google.' });
-    }
+    // 1. Verify token cryptographically against official Google endpoints
+    const payload = await verifyGoogleCredential(credential);
 
-    // Strict validation of issuer
-    const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
-    if (!validIssuers.includes(payload.iss)) {
-      return res.status(401).json({ message: 'Invalid token issuer.' });
-    }
+    // 2. Authoritatively resolve/provision the user record
+    const user = await resolveAndSyncGoogleUser(payload, { ip: req.ip });
 
-    // Strict validation of audience
-    if (payload.aud !== clientId) {
-      return res.status(401).json({ message: 'Token audience does not match application client ID.' });
-    }
-
-    // Strict validation of expiry
-    const nowSec = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < nowSec) {
-      return res.status(401).json({ message: 'Google authentication token has expired.' });
-    }
-
-    // Strict validation of verified email
-    if (!payload.email || payload.email_verified !== true) {
-      return res.status(403).json({ message: 'A verified Google email address is required to sign in.' });
-    }
-
-    const userEmail = payload.email.trim().toLowerCase();
-    const userName = (payload.name || payload.given_name || 'University Scholar').trim();
-    const userAvatar = payload.picture || null;
-    const userGoogleId = payload.sub || null;
-
-    let user = await User.findOne({ email: userEmail });
-
-    if (!user) {
-      // New account: Google sign-in strictly provisions 'student' role
-      user = new User({
-        name: userName,
-        email: userEmail,
-        googleId: userGoogleId,
-        avatar: userAvatar,
-        role: 'student', // ALWAYS student. Google identity can never become admin.
-        status: 'pending', // Requires admin verification
-        isProfileComplete: false,
-        university: '',
-        degreeProgram: 'B.Sc. Undergraduate Thesis',
-        researchDomain: 'Computer Science & NLP',
-      });
-      await user.save();
-      emitNewStudentRegistered(user);
-    } else {
-      // SECURITY REQUIREMENT (Priority 0, Item 2):
-      // Prevent a Google identity from acquiring or retaining an admin role through email matching.
-      if (user.role === 'admin') {
-        return res.status(403).json({
-          message: 'Administrative accounts must authenticate via the Administrative Gate with their secure passkey, not via Google OAuth.',
-        });
-      }
-
-      // Ensure student role is preserved
-      user.role = 'student';
-      // Strict Admin Verification: If student was never verified by an admin, status must be pending
-      if (!user.verifiedAt || !user.verifiedBy) {
-        if (user.status !== 'banned') {
-          user.status = 'pending';
-        }
-      }
-      if (userGoogleId && !user.googleId) user.googleId = userGoogleId;
-      if (userAvatar && !user.avatar) user.avatar = userAvatar;
-      if (!user.name || user.name === 'University Scholar') user.name = userName;
-      await user.save();
-    }
-
+    // 3. Issue session token and return sanitized DTO
     const token = generateToken(user);
     return res.json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        isProfileComplete: user.isProfileComplete,
-        university: user.university,
-        studentId: user.studentId,
-        degreeProgram: user.degreeProgram,
-        researchDomain: user.researchDomain,
-        avatar: user.avatar,
-      },
+      user: toSanitizedUserDto(user),
     });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({
+        message: err.message,
+        code: err.code || 'AUTH_ERROR',
+        detail: err.detail || undefined,
+      });
+    }
+
     console.error('Google Auth Error:', err);
-    return res.status(500).json({ message: 'Failed to process Google authentication.' });
+    return res.status(500).json({
+      message: 'Failed to process Google authentication.',
+      code: 'AUTH_SERVER_ERROR',
+    });
   }
 });
 
 // POST /api/auth/complete-profile
-// Optional student registration details (university, program, topic)
+// Student academic registration details (university, program, topic)
 router.post('/complete-profile', authenticateToken, async (req, res) => {
   try {
     const {
@@ -164,7 +74,6 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
       degreeProgram,
       researchDomain,
       thesisGoal,
-      idCardProof,
       name,
     } = req.body;
 
@@ -185,7 +94,7 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
     // Strict Admin Verification Policy:
     // Students can NEVER auto-verify. Unless an admin explicitly approved with verifiedAt and verifiedBy,
     // their status MUST be 'pending' awaiting editorial review!
-    if (!user.verifiedAt || !user.verifiedBy) {
+    if (user.role === 'student' && (!user.verifiedAt || !user.verifiedBy)) {
       if (user.status !== 'banned') {
         user.status = 'pending';
       }
@@ -195,20 +104,7 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
 
     return res.json({
       message: 'Student profile updated successfully.',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        isProfileComplete: user.isProfileComplete,
-        university: user.university,
-        studentId: user.studentId,
-        degreeProgram: user.degreeProgram,
-        researchDomain: user.researchDomain,
-        thesisGoal: user.thesisGoal,
-        avatar: user.avatar,
-      },
+      user: toSanitizedUserDto(user),
     });
   } catch (err) {
     console.error('Complete profile error:', err);
@@ -217,9 +113,17 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
 });
 
 // POST /api/auth/login
-// Exclusively for Editorial Board / Admin authentication with rate limiting & genuine bcrypt verification
+// Temporary break-glass administrative password login.
+// Gated strictly behind ENABLE_LEGACY_ADMIN_LOGIN=true. Disabled by default.
 router.post('/login', loginLimiter, async (req, res) => {
   try {
+    if (process.env.ENABLE_LEGACY_ADMIN_LOGIN !== 'true') {
+      return res.status(404).json({
+        message: 'Legacy password authentication is disabled. Please use the unified Google Sign-In gateway.',
+        code: 'LEGACY_AUTH_DISABLED',
+      });
+    }
+
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -229,19 +133,14 @@ router.post('/login', loginLimiter, async (req, res) => {
     const cleanInput = String(email).trim().toLowerCase();
     const rawPassword = typeof password === 'string' ? password : String(password);
 
-    // Look up administrator account strictly by email or username 'admin'
-    const queryEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput}@thesis.org`;
+    // Look up administrator account strictly by exact normalized email
     const user = await User.findOne({
-      $or: [
-        { email: cleanInput },
-        { email: queryEmail },
-        { email: 'admin@thesis.org' },
-      ],
+      email: cleanInput,
       role: 'admin',
     });
 
     if (!user || user.role !== 'admin' || !user.password) {
-      // Use constant-time dummy comparison to mitigate timing attacks
+      // Constant-time comparison to mitigate timing attacks
       await bcrypt.compare(rawPassword, '$2a$12$e8r0.m0X5qR.G5Yy6Z3h.eZ9k2vQp6wRt8s7u4v1y0z1x2w3v4u5t');
       return res.status(401).json({ message: 'Invalid administrative email or password.' });
     }
@@ -254,18 +153,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     const token = generateToken(user);
     return res.json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        isProfileComplete: user.isProfileComplete,
-        university: user.university,
-        degreeProgram: user.degreeProgram,
-        researchDomain: user.researchDomain,
-        avatar: user.avatar,
-      },
+      user: toSanitizedUserDto(user),
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -276,20 +164,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 // GET /api/auth/me
 router.get('/me', authenticateToken, async (req, res) => {
   return res.json({
-    user: {
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-      status: req.user.status,
-      isProfileComplete: req.user.isProfileComplete,
-      university: req.user.university,
-      studentId: req.user.studentId,
-      degreeProgram: req.user.degreeProgram,
-      researchDomain: req.user.researchDomain,
-      thesisGoal: req.user.thesisGoal,
-      avatar: req.user.avatar,
-    },
+    user: toSanitizedUserDto(req.user),
   });
 });
 

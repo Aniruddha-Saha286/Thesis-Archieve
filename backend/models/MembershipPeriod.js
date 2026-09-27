@@ -50,6 +50,34 @@ const membershipPeriodSchema = new mongoose.Schema({
     ref: 'User',
     default: null,
   },
+  source: {
+    type: String,
+    enum: ['payment', 'manual_admin'],
+    default: 'payment',
+    index: true,
+  },
+  grantedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+  grantReason: {
+    type: String,
+    default: '',
+  },
+  grantRequestId: {
+    type: String,
+    default: null,
+  },
+  customLabel: {
+    type: String,
+    default: '',
+  },
+  grantType: {
+    type: String,
+    enum: ['standard', 'test', 'research_grant', 'evaluation'],
+    default: 'standard',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -59,6 +87,11 @@ const membershipPeriodSchema = new mongoose.Schema({
 membershipPeriodSchema.index(
   { paymentSubmission: 1 },
   { unique: true, partialFilterExpression: { paymentSubmission: { $type: 'objectId' } } }
+);
+
+membershipPeriodSchema.index(
+  { grantRequestId: 1 },
+  { unique: true, partialFilterExpression: { grantRequestId: { $type: 'string' } } }
 );
 
 module.exports = mongoose.model('MembershipPeriod', membershipPeriodSchema);

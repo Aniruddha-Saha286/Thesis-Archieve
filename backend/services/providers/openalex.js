@@ -1,12 +1,15 @@
 const { createNormalizedRecord } = require('../scholarlyRecord');
-const { getSubjectById, extractSubjectsFromOpenAlex } = require('../subjectCatalog');
+const { getSubjectById, extractSubjectsFromOpenAlex, mapToCanonicalSubject } = require('../subjectCatalog');
 
 async function fetchOpenAlexWithRetry(url, options = {}, maxRetries = 2) {
   let attempt = 0;
   while (attempt <= maxRetries) {
     try {
       const res = await fetch(url, options);
-      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+      if (res.status === 429) {
+        return res;
+      }
+      if (res.status >= 500 && res.status <= 599) {
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt) * 1000;
           console.warn(`[OpenAlex] Status ${res.status}. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
@@ -30,6 +33,40 @@ async function fetchOpenAlexWithRetry(url, options = {}, maxRetries = 2) {
 }
 
 async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, sort = 'relevance' }) {
+  if (process.env.OFFLINE_MODE === 'true') {
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const count = Math.min(limit || 20, 20);
+    const records = [];
+    for (let i = 0; i < count; i++) {
+      const idx = (pageNum - 1) * count + i + 1;
+      records.push(
+        createNormalizedRecord({
+          id: `openalex_w_offline_${pageNum}_${i}`,
+          doi: `10.1000/offline.openalex.${pageNum}.${i}`,
+          title: `Scholarly Publication on ${query || 'Quantum Deep Learning'} - Volume ${idx}`,
+          authors: [{ name: `Researcher ${idx}`, affiliation: 'Academic Institute' }],
+          publishedYear: 2024,
+          publicationType: filters.publicationType || 'journal-article',
+          source: 'OpenAlex',
+          catalogId: `W${idx}`,
+          citationCount: 10 + idx,
+          isOpenAccess: true,
+          pdfUrl: `https://example.org/pdf/offline_${idx}.pdf`,
+          isDirectPdf: true,
+          subjects: [{ id: 'ai-ml', label: 'Artificial Intelligence and Machine Learning' }],
+        })
+      );
+    }
+    return {
+      records,
+      rawCount: records.length,
+      totalCount: 100,
+      hasMore: pageNum < 5,
+      nextPage: pageNum < 5 ? pageNum + 1 : null,
+      error: null,
+    };
+  }
+
   try {
     const params = new URLSearchParams();
     if (query && query.trim()) {
@@ -105,18 +142,21 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
     if (filters.fieldId) {
       const fId = String(filters.fieldId).trim().split('/').pop();
       filterParts.push(`primary_topic.field.id:${fId}`);
-    } else if (filters.subjectId) {
-      // Canonical Subject / Discipline filter
-      const sub = getSubjectById(filters.subjectId);
-      if (sub) {
-        if (sub.openAlexTopicIds && sub.openAlexTopicIds.length > 0) {
-          filterParts.push(`topics.id:${sub.openAlexTopicIds.join('|')}`);
-        } else if (sub.openAlexFieldId) {
-          filterParts.push(`primary_topic.field.id:${sub.openAlexFieldId}`);
-        } else if (sub.openAlexConceptIds && sub.openAlexConceptIds.length > 0) {
-          filterParts.push(`concepts.id:${sub.openAlexConceptIds.join('|')}`);
-        } else if (sub.keywords && sub.keywords.length > 0 && !query) {
-          params.append('search', sub.keywords[0]);
+    } else {
+      const subId = filters.subjectId || (filters.category && filters.category !== 'All Disciplines' ? mapToCanonicalSubject(filters.category)?.id : null);
+      if (subId) {
+        // Canonical Subject / Discipline filter
+        const sub = getSubjectById(subId);
+        if (sub) {
+          if (sub.openAlexTopicIds && sub.openAlexTopicIds.length > 0) {
+            filterParts.push(`topics.id:${sub.openAlexTopicIds.join('|')}`);
+          } else if (sub.openAlexFieldId) {
+            filterParts.push(`primary_topic.field.id:${sub.openAlexFieldId}`);
+          } else if (sub.openAlexConceptIds && sub.openAlexConceptIds.length > 0) {
+            filterParts.push(`concepts.id:${sub.openAlexConceptIds.join('|')}`);
+          } else if (sub.keywords && sub.keywords.length > 0 && !query) {
+            params.append('search', sub.keywords[0]);
+          }
         }
       }
     }
@@ -138,12 +178,23 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       params.append('sort', 'publication_date:desc');
     }
 
+    const mailto = process.env.OPENALEX_MAILTO || 'panther.thesis.vault@gmail.com';
+    params.append('mailto', mailto);
+
+    const headers = {
+      'User-Agent': `ThesisArchive/1.0 (https://projectpanther.org; mailto:${mailto})`,
+    };
+
+    if (process.env.OPENALEX_API_KEY && process.env.OPENALEX_API_KEY.trim()) {
+      const apiKey = process.env.OPENALEX_API_KEY.trim();
+      params.append('api_key', apiKey);
+      headers['api-key'] = apiKey;
+    }
+
     const url = `https://api.openalex.org/works?${params.toString()}`;
     const res = await fetchOpenAlexWithRetry(url, {
       signal: AbortSignal.timeout(6500),
-      headers: {
-        'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
-      },
+      headers,
     });
 
     if (res.status === 429) {

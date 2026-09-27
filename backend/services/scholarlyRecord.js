@@ -5,6 +5,7 @@
  */
 
 const { mapToCanonicalSubject } = require('./subjectCatalog');
+const { resolveCountryCode } = require('./countryResolver');
 
 // Helper to clean and normalize titles
 function normalizeTitle(rawTitle) {
@@ -118,7 +119,7 @@ function createNormalizedRecord(data) {
             id: inst.id ? String(inst.id) : null,
             ror: inst.ror ? String(inst.ror) : null,
             name: (inst.name || inst.display_name || '').trim(),
-            countryCode: (inst.countryCode || inst.country_code || '').trim().toUpperCase() || null,
+            countryCode: (inst.countryCode || inst.country_code || resolveCountryCode(inst.name) || resolveCountryCode(auth.rawAffiliation) || '').trim().toUpperCase() || null,
             type: inst.type ? String(inst.type).toLowerCase() : null,
           })).filter((inst) => inst.name || inst.id)
         : [],
@@ -135,7 +136,7 @@ function createNormalizedRecord(data) {
         id: null,
         ror: null,
         name: a.affiliation,
-        countryCode: null,
+        countryCode: resolveCountryCode(a.affiliation) || null,
         type: null,
       }] : [],
       rawAffiliation: a.affiliation || null,
@@ -149,7 +150,7 @@ function createNormalizedRecord(data) {
       id: data.awardingInstitution.id ? String(data.awardingInstitution.id) : null,
       ror: data.awardingInstitution.ror ? String(data.awardingInstitution.ror) : null,
       name: (data.awardingInstitution.name || data.awardingInstitution.display_name || '').trim(),
-      countryCode: (data.awardingInstitution.countryCode || data.awardingInstitution.country_code || '').trim().toUpperCase() || null,
+      countryCode: (data.awardingInstitution.countryCode || data.awardingInstitution.country_code || resolveCountryCode(data.awardingInstitution.name) || '').trim().toUpperCase() || null,
       type: data.awardingInstitution.type ? String(data.awardingInstitution.type).toLowerCase() : 'education',
       evidence: data.awardingInstitution.evidence || 'thesis_metadata',
     };
@@ -158,7 +159,7 @@ function createNormalizedRecord(data) {
       id: null,
       ror: null,
       name: String(data.university).trim(),
-      countryCode: null,
+      countryCode: resolveCountryCode(data.university) || null,
       type: 'education',
       evidence: 'thesis_university_field',
     };

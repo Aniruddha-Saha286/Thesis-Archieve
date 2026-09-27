@@ -68,16 +68,24 @@ async function getEffectiveEntitlements(userId) {
 
   if (activePaid) {
     const planDef = getPlan(activePaid.plan || 'premium_6m');
+    const isManual = activePaid.source === 'manual_admin';
+    const effectiveLabel = isManual
+      ? (activePaid.customLabel || (activePaid.plan === 'pro_max_12m' ? 'Pro Max Research Grant' : 'Premium Research Grant'))
+      : planDef.label;
+
     return {
       plan: planDef.code,
       planCode: planDef.code,
-      label: planDef.label,
+      label: effectiveLabel,
       isActive: true,
       isPaid: true,
       hasPaidAccess: true,
       startsAt: activePaid.startsAt,
       expiresAt: activePaid.expiresAt,
-      source: 'paid',
+      source: activePaid.source || 'paid',
+      customLabel: activePaid.customLabel || '',
+      grantType: activePaid.grantType || 'standard',
+      grantReason: activePaid.grantReason || '',
       periodId: activePaid._id,
       trialEligible: false,
       quotas: planDef.quotas,

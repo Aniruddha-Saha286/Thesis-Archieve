@@ -1,7 +1,10 @@
-import React from 'react';
-import { Check, X, FileText, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, X, FileText, Eye } from 'lucide-react';
+import DocumentViewerModal from './DocumentViewerModal';
 
 export default function VerificationDrawer({ isOpen, onClose, pendingStudents, onEvaluate, loading }) {
+  const [inspectingCandidate, setInspectingCandidate] = useState(null);
+
   if (!isOpen) return null;
 
   return (
@@ -80,21 +83,20 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
                         <em className="text-[#1C1B18]">{candidate.thesisGoal}</em>
                       </div>
                     )}
-                    {candidate.idCardProof && (
+                    {(candidate.hasVerificationDocument || candidate.idCardProof) && (
                       <div className="pt-2 border-t border-[#E5E2DA] space-y-1">
                         <div className="flex items-center gap-1.5 text-[#1C1B18]">
                           <FileText className="w-3.5 h-3.5 text-[#737067]" />
-                          <span className="font-bold">UPLOADED STUDENT ID PROOF:</span>
+                          <span className="font-bold">STUDENT ID PROOF:</span>
                         </div>
-                        <a
-                          href={candidate.idCardProof}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline bg-[#FAF9F5] border border-[#D5D1C7] px-2 py-1 rounded-sm"
+                        <button
+                          type="button"
+                          onClick={() => setInspectingCandidate(candidate)}
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-[#FAF9F5] hover:bg-blue-50 border border-[#D5D1C7] px-2.5 py-1 rounded-sm cursor-pointer transition"
                         >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>Inspect Student ID Document (Cloudinary) &rarr;</span>
-                        </a>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Inspect Verification Document (Protected) &rarr;</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -124,6 +126,16 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
 
         </div>
       </div>
+
+      {/* Protected Document Viewer Modal */}
+      {inspectingCandidate && (
+        <DocumentViewerModal
+          isOpen={!!inspectingCandidate}
+          onClose={() => setInspectingCandidate(null)}
+          studentId={inspectingCandidate._id}
+          studentName={inspectingCandidate.name}
+        />
+      )}
     </div>
   );
 }

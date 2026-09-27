@@ -27,8 +27,21 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['student', 'admin'],
+    enum: ['student', 'editor', 'admin'],
     default: 'student',
+  },
+  permissions: {
+    type: [String],
+    default: [],
+  },
+  roleChangedAt: {
+    type: Date,
+    default: null,
+  },
+  roleChangedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
   },
   status: {
     type: String,
@@ -165,5 +178,15 @@ const userSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
+
+userSchema.index(
+  { googleId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      googleId: { $type: 'string' },
+    },
+  }
+);
 
 module.exports = mongoose.model('User', userSchema);

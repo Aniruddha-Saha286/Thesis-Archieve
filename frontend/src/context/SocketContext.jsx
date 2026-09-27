@@ -5,7 +5,7 @@ import { useAuth } from './AuthContext';
 const SocketContext = createContext();
 
 export const SocketProvider = ({ children }) => {
-  const { token, user, updateUserStatus, logout } = useAuth();
+  const { token, user, updateUserStatus, logout, refreshUser } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [realtimeNotice, setRealtimeNotice] = useState(null);
   const socketRef = useRef(null);
@@ -61,6 +61,47 @@ export const SocketProvider = ({ children }) => {
           });
         }
       }
+    });
+
+    // Handle real-time membership grant/revocation
+    socket.on('membership:updated', (payload) => {
+      if (refreshUser) refreshUser();
+      setRealtimeNotice({
+        type: 'info',
+        message: payload.plan === 'free'
+          ? 'Membership access updated: Your account is now on the Standard Free tier.'
+          : `Membership updated: ${payload.label || 'Active Access'} is now active!`,
+      });
+    });
+
+    // Handle staff role & capability delegation updates
+    socket.on('auth:permissions_updated', (payload) => {
+      if (refreshUser) refreshUser();
+      if (payload.role === 'editor') {
+        setRealtimeNotice({
+          type: 'success',
+          message: 'Staff Privileges Granted: You have been appointed as a Depository Editor with assigned permissions.',
+        });
+      } else {
+        setRealtimeNotice({
+          type: 'info',
+          message: 'Role Updated: Your account has been returned to standard scholar status.',
+        });
+      }
+    });
+
+    // Handle incoming direct notifications
+    socket.on('notification:new', (notif) => {
+      if (notif?.message) {
+        setRealtimeNotice({
+          type: notif.type === 'membership_cancelled' ? 'error' : 'info',
+          message: `${notif.title ? notif.title + ' — ' : ''}${notif.message}`,
+        });
+      }
+    });
+
+    socket.on('auth:revoked', () => {
+      if (refreshUser) refreshUser();
     });
 
     return () => {

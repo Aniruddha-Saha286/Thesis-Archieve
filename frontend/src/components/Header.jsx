@@ -54,7 +54,7 @@ export default function Header({
   onToggleFilterDrawer,
   activeFilterCount = 0,
 }) {
-  const { user, isAdmin, isAuthenticated, logout } = useAuth();
+  const { user, isAdmin, isEditor, isStaff, hasPermission, isAuthenticated, logout } = useAuth();
   const [inputValue, setInputValue] = useState(searchQuery);
   const [showFilters, setShowFilters] = useState(false);
   const debounceTimerRef = useRef(null);
@@ -382,15 +382,15 @@ export default function Header({
                 <Bell className="w-3.5 h-3.5 text-[#737067]" />
               </button>
 
-              {/* Admin Button */}
-              {isAdmin && (
+              {/* Staff / Admin Desk Button */}
+              {isStaff && (hasPermission?.('students.view') || isAdmin) && (
                 <button
                   onClick={onOpenStudentManagement}
                   className="bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold px-2.5 py-1.5 rounded-sm text-xs transition flex items-center gap-1 shadow-2xs cursor-pointer border border-amber-500"
                   title="Manage verification applications"
                 >
                   <Shield className="w-3.5 h-3.5 text-neutral-950" />
-                  <span className="hidden sm:inline">Admin</span>
+                  <span className="hidden sm:inline">{isAdmin ? 'Admin' : 'Staff'}</span>
                   {pendingCount > 0 && (
                     <span className="bg-neutral-950 text-amber-300 text-[10px] px-1 rounded-xs">
                       {pendingCount}

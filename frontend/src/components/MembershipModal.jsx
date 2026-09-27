@@ -327,7 +327,9 @@ export default function MembershipModal({ isOpen, onClose }) {
             <span className="text-[11px] text-[#737067]">Current Tier:</span>
             <span
               className={`px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider ${
-                currentPlanCode === 'pro_max_12m'
+                activePeriod?.source === 'manual_admin'
+                  ? 'bg-blue-100 text-blue-900 border border-blue-400'
+                  : currentPlanCode === 'pro_max_12m'
                   ? 'bg-amber-100 text-amber-900 border border-amber-400'
                   : currentPlan === 'premium' || currentPlanCode === 'premium_6m'
                   ? 'bg-purple-100 text-purple-900 border border-purple-300'
@@ -338,7 +340,9 @@ export default function MembershipModal({ isOpen, onClose }) {
                   : 'bg-neutral-100 text-neutral-800 border border-neutral-300'
               }`}
             >
-              {effectiveIsTrial
+              {activePeriod?.source === 'manual_admin'
+                ? (activePeriod.customLabel || activePeriod.label || 'Administrative Grant')
+                : effectiveIsTrial
                 ? '7-Day Trial'
                 : currentPlanCode === 'pro_max_12m'
                 ? 'Pro Max Annual'
@@ -389,17 +393,45 @@ export default function MembershipModal({ isOpen, onClose }) {
             <div className="space-y-6">
               {/* Active Plan Notification Banner */}
               {activePeriod && (
-                <div className="bg-purple-50 border border-purple-200 p-4 rounded-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className={`p-4 rounded-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border ${
+                  activePeriod.source === 'manual_admin'
+                    ? 'bg-blue-50/70 border-blue-300'
+                    : 'bg-purple-50 border-purple-200'
+                }`}>
                   <div className="flex items-start gap-3">
-                    <ShieldCheck className="w-5 h-5 text-purple-700 shrink-0 mt-0.5" />
+                    <ShieldCheck className={`w-5 h-5 shrink-0 mt-0.5 ${
+                      activePeriod.source === 'manual_admin' ? 'text-blue-700' : 'text-purple-700'
+                    }`} />
                     <div>
-                      <h4 className="font-semibold text-sm text-purple-900">
-                        Active Paid Membership ({activePeriod.plan === 'pro_max_12m' ? 'Pro Max Annual' : 'Premium 6-Month'})
+                      <h4 className={`font-semibold text-sm ${
+                        activePeriod.source === 'manual_admin' ? 'text-blue-950' : 'text-purple-900'
+                      }`}>
+                        {activePeriod.source === 'manual_admin'
+                          ? (activePeriod.customLabel || activePeriod.label || 'Administrative Access Grant')
+                          : `Active Paid Membership (${activePeriod.plan === 'pro_max_12m' ? 'Pro Max Annual' : 'Premium 6-Month'})`}
                       </h4>
-                      <p className="text-xs text-purple-800 mt-0.5">
-                        Your coverage is active through{' '}
-                        <strong>{activePeriod.formattedExpiry || new Date(activePeriod.expiresAt).toLocaleDateString()}</strong> (Asia/Dhaka time). You enjoy unlimited daily searches, unlimited paper dataset discovery, 1,000 saved papers, 50 collections, bulk export, and 10 topic alerts.
-                      </p>
+                      <div className={`text-xs mt-0.5 ${
+                        activePeriod.source === 'manual_admin' ? 'text-blue-900' : 'text-purple-800'
+                      }`}>
+                        {activePeriod.source === 'manual_admin' ? (
+                          <>
+                            <span>
+                              You have complimentary research access granted by Depository Administration, active through{' '}
+                              <strong>{activePeriod.formattedExpiry || new Date(activePeriod.expiresAt).toLocaleDateString()}</strong> (Asia/Dhaka time). Unlimited daily searches, grounded paper summaries, and full research tools active.
+                            </span>
+                            {activePeriod.grantReason && (
+                              <span className="block mt-1 italic text-[11px] text-blue-800 bg-white/70 px-2 py-0.5 rounded border border-blue-200">
+                                Note: "{activePeriod.grantReason}"
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span>
+                            Your coverage is active through{' '}
+                            <strong>{activePeriod.formattedExpiry || new Date(activePeriod.expiresAt).toLocaleDateString()}</strong> (Asia/Dhaka time). You enjoy unlimited daily searches, unlimited paper dataset discovery, 1,000 saved papers, 50 collections, bulk export, and 10 topic alerts.
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -409,10 +441,10 @@ export default function MembershipModal({ isOpen, onClose }) {
                       setShowCancelModal(true);
                     }}
                     className="shrink-0 px-3 py-1.5 text-xs font-mono-meta text-rose-700 hover:text-white hover:bg-rose-700 border border-rose-300 hover:border-rose-700 rounded-xs transition cursor-pointer flex items-center gap-1.5"
-                    title="Cancel Active Subscription"
+                    title={activePeriod.source === 'manual_admin' ? 'Cancel Grant' : 'Cancel Active Subscription'}
                   >
                     <X className="w-3.5 h-3.5" />
-                    <span>Cancel Subscription</span>
+                    <span>{activePeriod.source === 'manual_admin' ? 'Cancel Access' : 'Cancel Subscription'}</span>
                   </button>
                 </div>
               )}
@@ -600,7 +632,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       </h3>
                       {currentPlanCode === 'premium_6m' && (
                         <span className="bg-purple-700 text-white text-[9px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
-                          Active
+                          {activePeriod?.source === 'manual_admin' ? 'Active (Admin Grant)' : 'Active'}
                         </span>
                       )}
                     </div>
@@ -671,7 +703,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       </h3>
                       {currentPlanCode === 'pro_max_12m' && (
                         <span className="bg-amber-600 text-white text-[9px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
-                          Active
+                          {activePeriod?.source === 'manual_admin' ? 'Active (Admin Grant)' : 'Active'}
                         </span>
                       )}
                     </div>

@@ -2,6 +2,10 @@ const { createNormalizedRecord } = require('../scholarlyRecord');
 
 async function searchDoaj({ query = '', page = 1, limit = 20, filters = {}, sort = 'relevance' }) {
   try {
+    if (process.env.OFFLINE_MODE === 'true') {
+      return { records: [], totalCount: 0, hasMore: false, error: null };
+    }
+
     // DOAJ contains only peer-reviewed journals, not dissertations/theses
     if (filters.publicationType && (filters.publicationType === 'thesis' || filters.publicationType === 'preprint')) {
       return { records: [], totalCount: 0, hasMore: false, error: null };

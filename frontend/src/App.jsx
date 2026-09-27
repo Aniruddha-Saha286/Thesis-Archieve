@@ -66,7 +66,7 @@ const DEFAULT_CATEGORIES = [
 ];
 
 export default function App() {
-  const { user, loading, isAuthenticated, needsRegistration, isApproved, isPending, isAdmin } = useAuth();
+  const { user, loading, isAuthenticated, needsRegistration, isApproved, isPending, isAdmin, isEditor, isStaff, hasPermission } = useAuth();
 
   // Search & Filtering State
   const [searchMode, setSearchMode] = useState('publications'); // 'publications' | 'authors'
@@ -238,12 +238,12 @@ export default function App() {
     }
   }, [isApproved]);
 
-  // Fetch admin pending tasks if admin
+  // Fetch staff pending tasks if admin or editor with students.view permission
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin || (isEditor && hasPermission('students.view'))) {
       fetchPendingStudents();
     }
-  }, [isAdmin]);
+  }, [isAdmin, isEditor]);
 
   // Real-time WebSocket connection
   const { socket, isConnected, realtimeNotice, clearRealtimeNotice } = useSocket();
@@ -288,7 +288,7 @@ export default function App() {
     };
 
     const handleAdminUpdate = () => {
-      if (isAdmin) {
+      if (isAdmin || (isEditor && hasPermission('students.view'))) {
         fetchPendingStudents();
       }
     };
@@ -634,8 +634,8 @@ export default function App() {
     return <PendingView />;
   }
 
-  // 5. Dedicated Admin Portal: If user is an administrator and not previewing student view
-  if (isAdmin && !adminPreviewStudentView) {
+  // 5. Dedicated Staff / Admin Portal: If user is staff (admin or editor) and not previewing student view
+  if (isStaff && !adminPreviewStudentView) {
     return <AdminPortalView onSwitchToStudentPreview={() => setAdminPreviewStudentView(true)} />;
   }
 
@@ -670,19 +670,21 @@ export default function App() {
           </div>
         )}
 
-        {/* Top Preview Banner (Only shown if Admin is inspecting Student View) */}
-        {isAdmin && adminPreviewStudentView && (
+        {/* Top Preview Banner (Shown if Admin or Editor is inspecting Student View) */}
+        {isStaff && adminPreviewStudentView && (
           <div className="bg-amber-400 text-neutral-950 px-6 py-2 flex items-center justify-between text-xs font-mono-meta font-bold border-b border-amber-500 sticky top-0 z-40 shadow-xs">
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4" />
-              <span>EDITORIAL PREVIEW: You are currently inspecting the repository as verified students see it.</span>
+              <span>
+                {isAdmin ? 'EDITORIAL PREVIEW' : 'MODERATOR PREVIEW'}: You are currently inspecting the repository as verified students see it.
+              </span>
             </div>
             <button
               onClick={() => setAdminPreviewStudentView(false)}
               className="bg-neutral-950 hover:bg-neutral-900 text-amber-300 px-3 py-1 rounded-xs transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Return to Admin Console</span>
+              <span>{isAdmin ? 'Return to Admin Console' : 'Return to Staff Console'}</span>
             </button>
           </div>
         )}
@@ -734,7 +736,7 @@ export default function App() {
         />
 
         {/* Admin Quick Action Desk Banner */}
-        {isAdmin && (
+        {(isAdmin || (isEditor && hasPermission('students.verify'))) && (
           <AdminDesk
             pendingCount={pendingStudents.length}
             onOpenDrawer={() => setIsDrawerOpen(true)}
@@ -1341,6 +1343,7 @@ export default function App() {
                   {Object.entries(providerTelemetry).map(([prov, meta]) => {
                     const isFulfilled = meta.status === 'fulfilled';
                     const isDegraded = meta.status === 'degraded';
+                    const isSkipped = meta.status === 'skipped_unsupported_filter' || meta.status === 'idle';
                     const count = meta.count ?? meta.returnedCount ?? 0;
                     return (
                       <span
@@ -1352,11 +1355,20 @@ export default function App() {
                             ? 'bg-amber-50 text-amber-900 border-amber-300 font-medium'
                             : isFulfilled && count === 0
                             ? 'bg-neutral-50 text-neutral-600 border-neutral-200'
+                            : isSkipped
+                            ? 'bg-neutral-100 text-neutral-500 border-neutral-200'
                             : 'bg-red-50 text-red-700 border-red-200'
                         }`}
-                        title={meta.error || (isFulfilled ? `${count} records retrieved` : 'Provider unavailable')}
+                        title={
+                          meta.error ||
+                          (isFulfilled
+                            ? `${count} records retrieved`
+                            : isSkipped
+                            ? 'This provider does not natively support the selected filter'
+                            : 'Provider unavailable')
+                        }
                       >
-                        {prov}: {isFulfilled ? (count > 0 ? `${count} records` : '0 matches') : isDegraded ? 'degraded' : 'unavailable'}
+                        {prov}: {isFulfilled ? (count > 0 ? `${count} records` : '0 matches') : isDegraded ? 'degraded' : isSkipped ? 'filter unsupported' : 'unavailable'}
                       </span>
                     );
                   })}

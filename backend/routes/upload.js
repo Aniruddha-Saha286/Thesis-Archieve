@@ -142,7 +142,7 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
 
     return res.json({
       message: 'Student credential document uploaded securely for administrative verification.',
-      documentRef,
+      hasVerificationDocument: true,
     });
   } catch (err) {
     console.error('Document upload error:', err.message);
@@ -160,7 +160,8 @@ router.delete('/id-card', authenticateToken, async (req, res) => {
     const oldRef = user.idCardProof;
     if (oldRef && hasCloudinary && !oldRef.startsWith('data:') && !oldRef.startsWith('http')) {
       try {
-        await cloudinary.uploader.destroy(oldRef);
+        const isPdf = oldRef.endsWith('.pdf');
+        await cloudinary.uploader.destroy(oldRef, { resource_type: isPdf ? 'raw' : 'image' });
       } catch (cloudErr) {
         console.warn('Failed to delete Cloudinary asset:', cloudErr.message);
       }

@@ -5,6 +5,10 @@ const cursorCache = new Map();
 
 async function searchEuropePmc({ query = '', page = 1, limit = 20, filters = {}, sort = 'relevance' }) {
   try {
+    if (process.env.OFFLINE_MODE === 'true') {
+      return { records: [], totalCount: 0, rawCount: 0, hasMore: false, error: null };
+    }
+
     let cleanQ = (query || 'research').trim();
 
     // Query builder

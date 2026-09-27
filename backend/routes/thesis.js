@@ -5,6 +5,7 @@ const Thesis = require('../models/Thesis');
 const Report = require('../models/Report');
 const TrialGrant = require('../models/TrialGrant');
 const { authenticateToken, optionalAuth, requireAdmin } = require('../middleware/auth');
+const { requirePermission, PERMISSIONS } = require('../middleware/rbac');
 const { orchestrateScholarlySearch } = require('../services/searchOrchestrator');
 const { validateAndGetSession, normalizePublicationType } = require('../services/searchSessionManager');
 const { parseAndValidateThesisQuery } = require('../services/queryParser');
@@ -770,6 +771,13 @@ router.post('/:id/upvote', authenticateToken, async (req, res) => {
 // Authenticated user required. Status defaults strictly to 'pending' until admin moderation.
 router.post('/', authenticateToken, async (req, res) => {
   try {
+    if (req.user.role === 'student' && req.user.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Access restricted: Publication submission is restricted to verified, approved scholars.',
+        code: 'APPROVAL_REQUIRED',
+      });
+    }
+
     const {
       title,
       abstract,
@@ -859,13 +867,13 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin Moderation Endpoints
-router.put('/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+// Admin / Staff Moderation Endpoints
+router.put('/:id/approve', authenticateToken, requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), async (req, res) => {
   try {
     const now = new Date();
     const thesis = await Thesis.findByIdAndUpdate(
       req.params.id,
-      { status: 'approved', approvedAt: now, updatedAt: now },
+      { status: 'approved', approvedAt: now, approvedBy: req.user._id, updatedAt: now },
       { new: true }
     );
     if (!thesis) return res.status(404).json({ message: 'Thesis not found.' });
@@ -879,11 +887,23 @@ router.put('/:id/approve', authenticateToken, requireAdmin, async (req, res) => 
   }
 });
 
-router.put('/:id/reject', authenticateToken, requireAdmin, async (req, res) => {
+router.put('/:id/reject', authenticateToken, requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), async (req, res) => {
   try {
+    const { rejectionReason } = req.body;
+    if (!rejectionReason || !rejectionReason.trim()) {
+      return res.status(400).json({ message: 'A mandatory rejection reason is required.' });
+    }
+
+    const now = new Date();
     const thesis = await Thesis.findByIdAndUpdate(
       req.params.id,
-      { status: 'rejected' },
+      {
+        status: 'rejected',
+        rejectionReason: rejectionReason.trim(),
+        rejectedBy: req.user._id,
+        rejectedAt: now,
+        updatedAt: now,
+      },
       { new: true }
     );
     if (!thesis) return res.status(404).json({ message: 'Thesis not found.' });
@@ -1003,16 +1023,13 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
       thesis = await Thesis.findByIdAndDelete(rawId);
     }
     if (!thesis) {
-      thesis = await Thesis.findOneAndDelete({
-        $or: [
-          { catalogId: rawId },
-          { doi: rawId },
-        ],
+      return res.status(404).json({
+        message: 'Publication record not found in local depository. External federated records cannot be deleted.',
       });
     }
 
     // Broadcast deletion in real-time
-    emitThesisDeleted(thesis?._id || rawId);
+    emitThesisDeleted(thesis._id);
 
     return res.json({ message: 'Thesis record purged from repository.' });
   } catch (err) {
