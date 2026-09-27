@@ -28,6 +28,7 @@ const {
   guestSearchStore,
 } = require('../services/usageReservationService');
 const { summaryGenerationLimiter } = require('../middleware/rateLimit');
+const emailService = require('../services/emailService');
 const { getOrGeneratePaperSummary } = require('../services/paperSummaryService');
 const {
   isValidDatasetRepositoryUrl,
@@ -729,6 +730,15 @@ router.post('/:id/report', optionalAuth, async (req, res) => {
       status: 'pending',
     });
     await newReport.save();
+
+    emailService.notifyAdminNewReport({
+      reportId: newReport._id,
+      recordId: newReport.recordId,
+      issueType: newReport.issueType,
+      description: newReport.description,
+      reportedBy: newReport.reportedBy,
+      title: newReport.title,
+    }).catch((err) => console.error('[EmailService] Report notification error:', err.message));
 
     return res.status(201).json({
       message: 'Thank you. Your report has been logged persistently for editorial review.',

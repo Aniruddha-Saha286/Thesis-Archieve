@@ -14,6 +14,7 @@ const { runDatasetDiscoveryRegressionTests } = require('./datasetDiscoveryRegres
 const { runRbacAndGoogleAuthTests } = require('./rbacAndGoogleAuth.test');
 const { runE2EVerification } = require('./integrationE2E.test');
 const { runArchiveReviewRepairsRegressionTests } = require('./archiveReviewRepairs.test');
+const { runEmailNotificationTests } = require('./emailNotification.test');
 
 console.log('===============================================================');
 console.log('  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   ');
@@ -56,9 +57,11 @@ async function main() {
     await runE2EVerification();
     console.log('');
     await runArchiveReviewRepairsRegressionTests();
+    console.log('');
+    await runEmailNotificationTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 16 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 17 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

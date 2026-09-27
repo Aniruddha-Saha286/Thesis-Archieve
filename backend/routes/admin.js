@@ -33,6 +33,7 @@ const {
   toSanitizedUserDto,
   getValidatedPrimaryAdminEmail,
 } = require('../services/googleIdentityService');
+const emailService = require('../services/emailService');
 const cloudinary = require('cloudinary').v2;
 
 const hasCloudinary = Boolean(
@@ -286,6 +287,15 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
         hasVerificationDocument: Boolean(student.idCardProof),
       },
     });
+
+    if (decision === 'approve') {
+      emailService.notifyUserVerificationApproved({
+        userEmail: student.email,
+        userName: student.name,
+        university: student.university,
+        degreeProgram: student.degreeProgram,
+      }).catch((err) => console.error('[EmailService] Verification approval notification error:', err.message));
+    }
 
     return res.json({
       message: `Student application ${decision === 'approve' ? 'approved' : 'declined'}.`,
@@ -542,6 +552,13 @@ router.post('/editors', requireAdmin, adminActionLimiter, async (req, res) => {
     emitToAdmins('admin:student_updated', { studentId: String(targetUser._id) });
     emitToAdmins('admin:staff_updated', { editorId: String(targetUser._id) });
 
+    emailService.notifyUserEditorAppointed({
+      userEmail: targetUser.email,
+      userName: targetUser.name,
+      permissions: validPerms,
+      appointedBy: req.user.email || req.user.name,
+    }).catch((err) => console.error('[EmailService] Editor appointment notification error:', err.message));
+
     return res.status(201).json({
       message: `Successfully appointed ${targetUser.name} (${targetUser.email}) as Editor.`,
       editor: toSanitizedUserDto(targetUser),
@@ -592,6 +609,13 @@ router.patch('/editors/:id', requireAdmin, adminActionLimiter, async (req, res) 
     });
     syncUserSocketRooms(editor._id, editor);
     emitToAdmins('admin:staff_updated', { editorId: String(editor._id) });
+
+    emailService.notifyUserEditorPermissionsUpdated({
+      userEmail: editor.email,
+      userName: editor.name,
+      permissions: validPerms,
+      updatedBy: req.user.email || req.user.name,
+    }).catch((err) => console.error('[EmailService] Editor permissions update notification error:', err.message));
 
     return res.json({
       message: `Permissions updated for editor ${editor.name}.`,
@@ -1177,6 +1201,33 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
     });
     emitToAdmins('admin:student_updated', { studentId: String(userId) });
 
+    const recipientEmail = submission.user?.email;
+    const recipientName = submission.user?.name;
+
+    if (recipientEmail) {
+      emailService.notifyUserPaymentApproved({
+        userEmail: recipientEmail,
+        userName: recipientName,
+        planLabel: planDef.label,
+        expiresAt: newExpiresAt,
+        trxId: submission.trxId,
+        amount: amountBdt,
+      }).catch((err) => console.error('[EmailService] Payment approval notification error:', err.message));
+    } else {
+      User.findById(userId).select('name email').then((u) => {
+        if (u?.email) {
+          emailService.notifyUserPaymentApproved({
+            userEmail: u.email,
+            userName: u.name,
+            planLabel: planDef.label,
+            expiresAt: newExpiresAt,
+            trxId: submission.trxId,
+            amount: amountBdt,
+          }).catch((err) => console.error('[EmailService] Payment approval notification error:', err.message));
+        }
+      }).catch(() => {});
+    }
+
     return res.json({
       message: `bKash payment successfully verified. ${planDef.label} activated.`,
       submission,
@@ -1577,6 +1628,15 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       source: 'manual_admin',
     });
     emitToAdmins('admin:student_updated', { studentId: String(student._id) });
+
+    emailService.notifyUserMembershipGranted({
+      userEmail: student.email,
+      userName: student.name,
+      planLabel: effectiveCustomLabel,
+      expiresAt: effectiveExpiresAt,
+      grantReason: grantReason.trim(),
+      grantType,
+    }).catch((err) => console.error('[EmailService] Membership grant notification error:', err.message));
 
     return res.status(201).json({
       message: `${effectiveCustomLabel} granted to ${student.name} through ${formatDhakaDateTime(effectiveExpiresAt)}.`,

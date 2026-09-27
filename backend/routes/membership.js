@@ -13,6 +13,7 @@ const { getEffectiveEntitlements, PLAN_LIMITS } = require('../services/entitleme
 const { getPlan, getPublicPlans } = require('../services/planCatalog');
 const { addDhakaDays, addDhakaCalendarMonths, formatDhakaDateTime } = require('../utils/dhakaDate');
 const { emitToUser, emitToAdmins } = require('../socket');
+const emailService = require('../services/emailService');
 
 // All membership endpoints require authenticated user
 router.use(authenticateToken);
@@ -463,6 +464,17 @@ router.post('/payments', async (req, res) => {
           ipAddress: req.ip || '',
         });
 
+        emailService.notifyAdminNewPayment({
+          senderNumber: existingForOrder.senderNumber,
+          trxId: existingForOrder.trxId,
+          amount: existingForOrder.claimedAmountPaisa / 100,
+          planLabel: order.planName || order.plan,
+          userEmail: req.user.email,
+          userName: req.user.name,
+          orderRef: order.orderRef,
+          isResubmission: true,
+        }).catch((err) => console.error('[EmailService] Payment resubmission notification error:', err.message));
+
         return res.status(200).json({
           message: 'bKash payment claim updated and resubmitted for admin review.',
           submission: {
@@ -524,6 +536,17 @@ router.post('/payments', async (req, res) => {
       },
       ipAddress: req.ip || '',
     });
+
+    emailService.notifyAdminNewPayment({
+      senderNumber: submission.senderNumber,
+      trxId: submission.trxId,
+      amount: submission.claimedAmountPaisa / 100,
+      planLabel: order.planName || order.plan,
+      userEmail: req.user.email,
+      userName: req.user.name,
+      orderRef: order.orderRef,
+      isResubmission: false,
+    }).catch((err) => console.error('[EmailService] Payment submission notification error:', err.message));
 
     return res.status(201).json({
       message: 'bKash payment claim submitted successfully. It is now awaiting manual editorial review in the admin merchant desk.',

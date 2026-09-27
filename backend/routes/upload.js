@@ -7,6 +7,7 @@ const User = require('../models/User');
 const AuditEvent = require('../models/AuditEvent');
 const { uploadLimiter } = require('../middleware/rateLimit');
 const { emitStudentProfileUpdated } = require('../socket');
+const emailService = require('../services/emailService');
 
 // Configure Cloudinary strictly from environment variables
 const hasCloudinary = Boolean(
@@ -129,6 +130,14 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
 
     if (updatedStudent) {
       emitStudentProfileUpdated(updatedStudent);
+      emailService.notifyAdminNewVerification({
+        studentName: updatedStudent.name,
+        studentEmail: updatedStudent.email,
+        university: updatedStudent.university,
+        degreeProgram: updatedStudent.degreeProgram,
+        studentId: updatedStudent.studentId,
+        documentRef,
+      }).catch((err) => console.error('[EmailService] Verification request notification error:', err.message));
     }
 
     // Audit event for document upload
