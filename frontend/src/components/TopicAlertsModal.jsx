@@ -12,12 +12,6 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
   const [creating, setCreating] = useState(false);
   const [checkStatus, setCheckStatus] = useState(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchAlertsAndNotifications();
-    }
-  }, [isOpen]);
-
   const fetchAlertsAndNotifications = async () => {
     try {
       setLoading(true);
@@ -33,6 +27,12 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchAlertsAndNotifications();
+    }
+  }, [isOpen]);
 
   const handleCreate = async (e) => {
     e.preventDefault();

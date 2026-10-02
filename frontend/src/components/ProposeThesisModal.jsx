@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 
-export default function ProposeThesisModal({ isOpen, onClose, onCreated }) {
+export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSuccess }) {
   const [formData, setFormData] = useState({
     title: '',
     abstract: '',
@@ -36,7 +36,8 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated }) {
 
     try {
       const res = await axios.post('/api/thesis', formData);
-      onCreated(res.data);
+      if (typeof onCreated === 'function') onCreated(res.data);
+      if (typeof onSuccess === 'function') onSuccess(res.data);
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to deposit thesis record.');

@@ -10,12 +10,6 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
   const [savingNote, setSavingNote] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchSavedPapers();
-    }
-  }, [isOpen]);
-
   const fetchSavedPapers = async () => {
     try {
       setLoading(true);
@@ -27,6 +21,12 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchSavedPapers();
+    }
+  }, [isOpen]);
 
   const handleDelete = async (paperId) => {
     try {

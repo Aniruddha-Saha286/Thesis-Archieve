@@ -222,20 +222,19 @@ export default function InstitutionLandscapeModal({
   const radius = (chartSize - strokeWidth) / 2; // 94
   const circumference = 2 * Math.PI * radius; // ~590.6
 
-  let cumulativeFraction = 0;
-  const donutSlices = slices.map((slice, index) => {
+  const donutSlices = slices.reduce((acc, slice, index) => {
     const fraction = totalClassifiedWorks > 0 ? slice.count / totalClassifiedWorks : 0;
     const strokeDasharray = `${fraction * circumference} ${circumference}`;
-    const strokeDashoffset = -(cumulativeFraction * circumference);
-    cumulativeFraction += fraction;
-
-    return {
+    const strokeDashoffset = -(acc.cumulative * circumference);
+    acc.list.push({
       ...slice,
       color: slice.color || COLOR_BLIND_PALETTE[index % COLOR_BLIND_PALETTE.length],
       strokeDasharray,
       strokeDashoffset,
-    };
-  });
+    });
+    acc.cumulative += fraction;
+    return acc;
+  }, { list: [], cumulative: 0 }).list;
 
   // Trends max calculation for bar normalization
   const publicationTrends = data?.publicationTrends || [];

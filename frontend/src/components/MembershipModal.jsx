@@ -57,29 +57,6 @@ export default function MembershipModal({ isOpen, onClose }) {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelFeedback, setCancelFeedback] = useState({ type: '', message: '' });
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchPlans();
-      fetchStatus();
-      fetchHistory();
-    }
-  }, [isOpen]);
-
-  // Listen for real-time membership updates
-  useEffect(() => {
-    if (!socket) return;
-    const handleUpdate = () => {
-      fetchStatus();
-      fetchHistory();
-    };
-    socket.on('membership:updated', handleUpdate);
-    socket.on('notification:new', handleUpdate);
-    return () => {
-      socket.off('membership:updated', handleUpdate);
-      socket.off('notification:new', handleUpdate);
-    };
-  }, [socket]);
-
   const fetchPlans = async () => {
     try {
       const res = await axios.get('/api/membership/plans');
@@ -112,6 +89,29 @@ export default function MembershipModal({ isOpen, onClose }) {
       setLoadingHistory(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchPlans();
+      fetchStatus();
+      fetchHistory();
+    }
+  }, [isOpen]);
+
+  // Listen for real-time membership updates
+  useEffect(() => {
+    if (!socket) return;
+    const handleUpdate = () => {
+      fetchStatus();
+      fetchHistory();
+    };
+    socket.on('membership:updated', handleUpdate);
+    socket.on('notification:new', handleUpdate);
+    return () => {
+      socket.off('membership:updated', handleUpdate);
+      socket.off('notification:new', handleUpdate);
+    };
+  }, [socket]);
 
   const handleCancelSubscription = async () => {
     try {

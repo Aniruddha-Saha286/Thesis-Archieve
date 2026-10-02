@@ -11,12 +11,6 @@ export default function CollectionsModal({ isOpen, onClose }) {
   const [creating, setCreating] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchCollections();
-    }
-  }, [isOpen]);
-
   const fetchCollections = async () => {
     try {
       setLoading(true);
@@ -31,6 +25,12 @@ export default function CollectionsModal({ isOpen, onClose }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchCollections();
+    }
+  }, [isOpen]);
 
   const handleCreateCollection = async (e) => {
     e.preventDefault();

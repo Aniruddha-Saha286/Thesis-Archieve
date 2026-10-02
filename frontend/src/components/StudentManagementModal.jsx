@@ -11,12 +11,6 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
   const [actionLoading, setActionLoading] = useState(null);
   const [inspectingStudent, setInspectingStudent] = useState(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchStudents();
-    }
-  }, [isOpen]);
-
   const fetchStudents = async () => {
     try {
       setLoading(true);
@@ -28,6 +22,12 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchStudents();
+    }
+  }, [isOpen]);
 
   const handleVerify = async (id, decision) => {
     try {

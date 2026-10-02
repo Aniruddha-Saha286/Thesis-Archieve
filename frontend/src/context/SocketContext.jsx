@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
@@ -6,33 +6,34 @@ const SocketContext = createContext();
 
 export const SocketProvider = ({ children }) => {
   const { token, user, updateUserStatus, logout, refreshUser } = useAuth();
+  const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [realtimeNotice, setRealtimeNotice] = useState(null);
-  const socketRef = useRef(null);
 
   useEffect(() => {
-    const socket = io(window.location.origin, {
+    const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const s = io(socketUrl, {
       path: '/socket.io',
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 15,
       reconnectionDelay: 1000,
     });
-    socketRef.current = socket;
+    setSocket(s);
 
-    socket.on('connect', () => {
+    s.on('connect', () => {
       setIsConnected(true);
       if (token) {
-        socket.emit('auth:authenticate', token);
+        s.emit('auth:authenticate', token);
       }
     });
 
-    socket.on('disconnect', () => {
+    s.on('disconnect', () => {
       setIsConnected(false);
     });
 
     // Handle personal real-time status update from the Editorial Board
-    socket.on('user:status_changed', (payload) => {
+    s.on('user:status_changed', (payload) => {
       if (!user) return;
       const currentUserId = String(user.id || user._id);
       const targetStudentId = String(payload.studentId || payload.student?._id || payload.student?.id);
@@ -64,7 +65,7 @@ export const SocketProvider = ({ children }) => {
     });
 
     // Handle real-time membership grant/revocation
-    socket.on('membership:updated', (payload) => {
+    s.on('membership:updated', (payload) => {
       if (refreshUser) refreshUser();
       setRealtimeNotice({
         type: 'info',
@@ -75,7 +76,7 @@ export const SocketProvider = ({ children }) => {
     });
 
     // Handle staff role & capability delegation updates
-    socket.on('auth:permissions_updated', (payload) => {
+    s.on('auth:permissions_updated', (payload) => {
       if (refreshUser) refreshUser();
       if (payload.role === 'editor') {
         setRealtimeNotice({
@@ -91,7 +92,7 @@ export const SocketProvider = ({ children }) => {
     });
 
     // Handle incoming direct notifications
-    socket.on('notification:new', (notif) => {
+    s.on('notification:new', (notif) => {
       if (notif?.message) {
         setRealtimeNotice({
           type: notif.type === 'membership_cancelled' ? 'error' : 'info',
@@ -100,17 +101,18 @@ export const SocketProvider = ({ children }) => {
       }
     });
 
-    socket.on('auth:revoked', () => {
+    s.on('auth:revoked', () => {
       if (refreshUser) refreshUser();
     });
 
     return () => {
-      socket.disconnect();
+      s.disconnect();
+      setSocket(null);
     };
   }, [token, user?._id, user?.id]);
 
   const value = {
-    socket: socketRef.current,
+    socket,
     isConnected,
     realtimeNotice,
     clearRealtimeNotice: () => setRealtimeNotice(null),

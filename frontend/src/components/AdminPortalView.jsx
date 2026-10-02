@@ -117,70 +117,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   // Real-time WebSocket connection
   const { socket, isConnected } = useSocket();
 
-  // Lazy-load active tab data
-  useEffect(() => {
-    if (activeTab === 'pending' || activeTab === 'roster') {
-      if (canViewStudents) fetchStudents();
-    } else if (activeTab === 'publications') {
-      if (canModeratePublications || isAdmin) fetchPublications();
-    } else if (activeTab === 'payments') {
-      if (canViewPayments) fetchPayments();
-    } else if (activeTab === 'reports') {
-      if (canModerateReports) fetchReports();
-    } else if (activeTab === 'staff') {
-      if (isAdmin) fetchStaff();
-    }
-  }, [activeTab]);
-
-  // Real-time synchronization
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleStudentEvent = () => {
-      if (canViewStudents) fetchStudents();
-      if (isAdmin) fetchStaff();
-    };
-
-    const handleStaffEvent = () => {
-      if (isAdmin) fetchStaff();
-      if (canViewStudents) fetchStudents();
-    };
-
-    const handlePaymentEvent = () => {
-      if (canViewPayments) fetchPayments();
-    };
-
-    const handleReportEvent = () => {
-      if (canModerateReports) fetchReports();
-    };
-
-    const handleThesisEvent = () => {
-      if (canModeratePublications || isAdmin) fetchPublications();
-    };
-
-    socket.on('admin:student_updated', handleStudentEvent);
-    socket.on('admin:new_student_application', handleStudentEvent);
-    socket.on('admin:student_profile_updated', handleStudentEvent);
-    socket.on('admin:staff_updated', handleStaffEvent);
-    socket.on('membership:updated', handleStudentEvent);
-    socket.on('admin:payment_updated', handlePaymentEvent);
-    socket.on('admin:report_updated', handleReportEvent);
-    socket.on('thesis:updated', handleThesisEvent);
-    socket.on('admin:thesis_submitted', handleThesisEvent);
-
-    return () => {
-      socket.off('admin:student_updated', handleStudentEvent);
-      socket.off('admin:new_student_application', handleStudentEvent);
-      socket.off('admin:student_profile_updated', handleStudentEvent);
-      socket.off('admin:staff_updated', handleStaffEvent);
-      socket.off('membership:updated', handleStudentEvent);
-      socket.off('admin:payment_updated', handlePaymentEvent);
-      socket.off('admin:report_updated', handleReportEvent);
-      socket.off('thesis:updated', handleThesisEvent);
-      socket.off('admin:thesis_submitted', handleThesisEvent);
-    };
-  }, [socket, canViewStudents, canViewPayments, canModerateReports, canModeratePublications, isAdmin]);
-
   // ==========================================
   // API Fetchers
   // ==========================================
@@ -255,6 +191,70 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       setLoadingStaff(false);
     }
   };
+
+  // Lazy-load active tab data
+  useEffect(() => {
+    if (activeTab === 'pending' || activeTab === 'roster') {
+      if (canViewStudents) fetchStudents();
+    } else if (activeTab === 'publications') {
+      if (canModeratePublications || isAdmin) fetchPublications();
+    } else if (activeTab === 'payments') {
+      if (canViewPayments) fetchPayments();
+    } else if (activeTab === 'reports') {
+      if (canModerateReports) fetchReports();
+    } else if (activeTab === 'staff') {
+      if (isAdmin) fetchStaff();
+    }
+  }, [activeTab]);
+
+  // Real-time synchronization
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStudentEvent = () => {
+      if (canViewStudents) fetchStudents();
+      if (isAdmin) fetchStaff();
+    };
+
+    const handleStaffEvent = () => {
+      if (isAdmin) fetchStaff();
+      if (canViewStudents) fetchStudents();
+    };
+
+    const handlePaymentEvent = () => {
+      if (canViewPayments) fetchPayments();
+    };
+
+    const handleReportEvent = () => {
+      if (canModerateReports) fetchReports();
+    };
+
+    const handleThesisEvent = () => {
+      if (canModeratePublications || isAdmin) fetchPublications();
+    };
+
+    socket.on('admin:student_updated', handleStudentEvent);
+    socket.on('admin:new_student_application', handleStudentEvent);
+    socket.on('admin:student_profile_updated', handleStudentEvent);
+    socket.on('admin:staff_updated', handleStaffEvent);
+    socket.on('membership:updated', handleStudentEvent);
+    socket.on('admin:payment_updated', handlePaymentEvent);
+    socket.on('admin:report_updated', handleReportEvent);
+    socket.on('thesis:updated', handleThesisEvent);
+    socket.on('admin:thesis_submitted', handleThesisEvent);
+
+    return () => {
+      socket.off('admin:student_updated', handleStudentEvent);
+      socket.off('admin:new_student_application', handleStudentEvent);
+      socket.off('admin:student_profile_updated', handleStudentEvent);
+      socket.off('admin:staff_updated', handleStaffEvent);
+      socket.off('membership:updated', handleStudentEvent);
+      socket.off('admin:payment_updated', handlePaymentEvent);
+      socket.off('admin:report_updated', handleReportEvent);
+      socket.off('thesis:updated', handleThesisEvent);
+      socket.off('admin:thesis_submitted', handleThesisEvent);
+    };
+  }, [socket, canViewStudents, canViewPayments, canModerateReports, canModeratePublications, isAdmin]);
 
   // ==========================================
   // Student Handlers

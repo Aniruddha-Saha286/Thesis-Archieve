@@ -8,15 +8,6 @@ export default function DocumentViewerModal({ isOpen, onClose, studentId, studen
   const [documentUrl, setDocumentUrl] = useState('');
   const [expiresIn, setExpiresIn] = useState(600);
 
-  useEffect(() => {
-    if (isOpen && studentId) {
-      fetchSignedDocument();
-    } else {
-      setDocumentUrl('');
-      setError('');
-    }
-  }, [isOpen, studentId]);
-
   const fetchSignedDocument = async () => {
     try {
       setLoading(true);
@@ -34,6 +25,15 @@ export default function DocumentViewerModal({ isOpen, onClose, studentId, studen
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && studentId) {
+      fetchSignedDocument();
+    } else {
+      setDocumentUrl('');
+      setError('');
+    }
+  }, [isOpen, studentId]);
 
   if (!isOpen) return null;
 

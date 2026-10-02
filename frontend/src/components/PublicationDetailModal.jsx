@@ -414,6 +414,8 @@ export default function PublicationDetailModal({
 
   const totalDatasetsCount = datasetsState.linked.length + datasetsState.related.length;
 
+  if (!thesis) return null;
+
   return (
     <div
       role="dialog"

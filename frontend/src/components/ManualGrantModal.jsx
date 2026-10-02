@@ -16,6 +16,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
   const [loading, setLoading] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [error, setError] = useState('');
+  const [currentMembership, setCurrentMembership] = useState(student?.membership || null);
 
   // Helper: Format a Date to YYYY-MM-DDTHH:mm in Asia/Dhaka timezone
   const toDhakaDatetimeLocal = (date) => {
@@ -97,6 +98,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
       setOverlapMode('start_now');
       setGrantType('test');
       setCustomLabelInput('');
+      setCurrentMembership(student?.membership || null);
       setGrantRequestId(`GRANT-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
       applyPreset('7d', new Date());
     }
@@ -106,8 +108,8 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
 
   const handleModeChange = (mode) => {
     setOverlapMode(mode);
-    if (mode === 'extend_from_current_expiry' && student.membership?.expiresAt) {
-      applyPreset(durationPreset, new Date(student.membership.expiresAt));
+    if (mode === 'extend_from_current_expiry' && (currentMembership?.expiresAt || student.membership?.expiresAt)) {
+      applyPreset(durationPreset, new Date(currentMembership?.expiresAt || student.membership.expiresAt));
     } else {
       applyPreset(durationPreset, new Date());
     }
@@ -148,7 +150,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
       await axios.post(`/api/admin/membership/${student._id || student.id}/revoke`, {
         reason: 'Revoked by administrator from grant override modal',
       });
-      student.membership = { plan: 'free', label: 'Standard Free', expiresAt: null, formattedExpiry: null };
+      setCurrentMembership({ plan: 'free', label: 'Standard Free', expiresAt: null, formattedExpiry: null });
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error('Error revoking membership:', err);
@@ -244,10 +246,10 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
               <span className="text-[#8C887E]">CURRENT ACCESS:</span>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-emerald-800">
-                  {student.membership?.label || 'Standard Free'}
-                  {student.membership?.formattedExpiry ? ` (Expires: ${student.membership.formattedExpiry})` : ''}
+                  {currentMembership?.label || 'Standard Free'}
+                  {currentMembership?.formattedExpiry ? ` (Expires: ${currentMembership.formattedExpiry})` : ''}
                 </span>
-                {student.membership?.plan && student.membership.plan !== 'free' && (
+                {currentMembership?.plan && currentMembership.plan !== 'free' && (
                   <button
                     type="button"
                     onClick={handleRevokeCurrent}

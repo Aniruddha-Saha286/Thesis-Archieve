@@ -19,12 +19,6 @@ export default function ComparisonMatrixModal({
   const [savedMatrices, setSavedMatrices] = useState([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchSavedMatrices();
-    }
-  }, [isOpen]);
-
   const fetchSavedMatrices = async () => {
     try {
       setLoadingSaved(true);
@@ -36,6 +30,12 @@ export default function ComparisonMatrixModal({
       setLoadingSaved(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchSavedMatrices();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

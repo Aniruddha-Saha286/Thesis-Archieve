@@ -67,6 +67,7 @@ const DEFAULT_CATEGORIES = [
 
 export default function App() {
   const { user, loading, isAuthenticated, needsRegistration, isApproved, isPending, isAdmin, isEditor, isStaff, hasPermission } = useAuth();
+  const { socket, isConnected, realtimeNotice, clearRealtimeNotice } = useSocket();
 
   // Search & Filtering State
   const [searchMode, setSearchMode] = useState('publications'); // 'publications' | 'authors'
@@ -203,120 +204,9 @@ export default function App() {
     }
   };
 
-  // Fetch theses whenever user is approved and search criteria changes
-  useEffect(() => {
-    if (isApproved) {
-      fetchTheses();
-    }
-  }, [
-    isApproved,
-    selectedCategory,
-    selectedSubjectId,
-    selectedFieldId,
-    selectedInstitution,
-    institutionMode,
-    academicOnly,
-    selectedCountries,
-    selectedAuthorFilter,
-    minCitations,
-    sortOrder,
-    searchQuery,
-    selectedPublisher,
-    selectedPublicationType,
-    hasPdfOnly,
-    isOpenAccessOnly,
-    yearMin,
-    yearMax,
-    currentPage,
-    paperLimit,
-  ]);
-
-  // Fetch publishers directory
-  useEffect(() => {
-    if (isApproved) {
-      fetchPublishers();
-    }
-  }, [isApproved]);
-
-  // Fetch staff pending tasks if admin or editor with students.view permission
-  useEffect(() => {
-    if (isAdmin || (isEditor && hasPermission('students.view'))) {
-      fetchPendingStudents();
-    }
-  }, [isAdmin, isEditor]);
-
-  // Real-time WebSocket connection
-  const { socket, isConnected, realtimeNotice, clearRealtimeNotice } = useSocket();
-
-  // Fetch saved papers count and membership status if user is authenticated and approved
-  useEffect(() => {
-    if (isApproved) {
-      fetchUserSavedCount();
-      fetchMembershipStatus();
-    }
-  }, [isApproved]);
-
-  // Real-time WebSocket synchronization for catalog and administrative states
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleThesisCreated = (newThesis) => {
-      if (isApproved) {
-        setTheses((prev) => [
-          newThesis,
-          ...prev.filter((t) => (t._id || t.id) !== (newThesis._id || newThesis.id)),
-        ]);
-      }
-    };
-
-    const handleThesisUpdated = (updatedThesis) => {
-      setTheses((prev) =>
-        prev.map((t) =>
-          ((t._id || t.id) === (updatedThesis._id || updatedThesis.id) ? { ...t, ...updatedThesis } : t)
-        )
-      );
-    };
-
-    const handleThesisPinned = ({ thesisId, isPinned }) => {
-      setTheses((prev) =>
-        prev.map((t) => ((t._id || t.id) === thesisId ? { ...t, isPinned } : t))
-      );
-    };
-
-    const handleThesisDeleted = ({ thesisId }) => {
-      setTheses((prev) => prev.filter((t) => (t._id || t.id) !== thesisId));
-    };
-
-    const handleAdminUpdate = () => {
-      if (isAdmin || (isEditor && hasPermission('students.view'))) {
-        fetchPendingStudents();
-      }
-    };
-
-    const handleMembershipUpdate = () => {
-      fetchMembershipStatus();
-    };
-
-    socket.on('thesis:created', handleThesisCreated);
-    socket.on('thesis:updated', handleThesisUpdated);
-    socket.on('thesis:pinned', handleThesisPinned);
-    socket.on('thesis:deleted', handleThesisDeleted);
-    socket.on('admin:new_student_application', handleAdminUpdate);
-    socket.on('admin:student_profile_updated', handleAdminUpdate);
-    socket.on('admin:student_updated', handleAdminUpdate);
-    socket.on('membership:updated', handleMembershipUpdate);
-
-    return () => {
-      socket.off('thesis:created', handleThesisCreated);
-      socket.off('thesis:updated', handleThesisUpdated);
-      socket.off('thesis:pinned', handleThesisPinned);
-      socket.off('thesis:deleted', handleThesisDeleted);
-      socket.off('admin:new_student_application', handleAdminUpdate);
-      socket.off('admin:student_profile_updated', handleAdminUpdate);
-      socket.off('admin:student_updated', handleAdminUpdate);
-      socket.off('membership:updated', handleMembershipUpdate);
-    };
-  }, [socket, isApproved, isAdmin]);
+  // ==========================================
+  // Fetcher Functions
+  // ==========================================
 
   const fetchTheses = async (pageOverride) => {
     if (abortControllerRef.current) {
@@ -460,12 +350,6 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (activeTab === 'datasets') {
-      fetchGlobalDatasets();
-    }
-  }, [activeTab, datasetQuery, datasetPage]);
-
   const fetchUserSavedCount = async () => {
     try {
       const res = await axios.get('/api/user/saved-papers');
@@ -504,6 +388,128 @@ export default function App() {
       setEvaluating(false);
     }
   };
+
+  // ==========================================
+  // Synchronization Effects
+  // ==========================================
+
+  // Fetch theses whenever user is approved and search criteria changes
+  useEffect(() => {
+    if (isApproved) {
+      fetchTheses();
+    }
+  }, [
+    isApproved,
+    selectedCategory,
+    selectedSubjectId,
+    selectedFieldId,
+    selectedInstitution,
+    institutionMode,
+    academicOnly,
+    selectedCountries,
+    selectedAuthorFilter,
+    minCitations,
+    sortOrder,
+    searchQuery,
+    selectedPublisher,
+    selectedPublicationType,
+    hasPdfOnly,
+    isOpenAccessOnly,
+    yearMin,
+    yearMax,
+    currentPage,
+    paperLimit,
+  ]);
+
+  // Fetch publishers directory
+  useEffect(() => {
+    if (isApproved) {
+      fetchPublishers();
+    }
+  }, [isApproved]);
+
+  // Fetch staff pending tasks if admin or editor with students.view permission
+  useEffect(() => {
+    if (isAdmin || (isEditor && hasPermission('students.view'))) {
+      fetchPendingStudents();
+    }
+  }, [isAdmin, isEditor, hasPermission]);
+
+  // Fetch saved papers count and membership status if user is authenticated and approved
+  useEffect(() => {
+    if (isApproved) {
+      fetchUserSavedCount();
+      fetchMembershipStatus();
+    }
+  }, [isApproved]);
+
+  useEffect(() => {
+    if (activeTab === 'datasets') {
+      fetchGlobalDatasets();
+    }
+  }, [activeTab, datasetQuery, datasetPage]);
+
+  // Real-time WebSocket synchronization for catalog and administrative states
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleThesisCreated = (newThesis) => {
+      if (isApproved) {
+        setTheses((prev) => [
+          newThesis,
+          ...prev.filter((t) => (t._id || t.id) !== (newThesis._id || newThesis.id)),
+        ]);
+      }
+    };
+
+    const handleThesisUpdated = (updatedThesis) => {
+      setTheses((prev) =>
+        prev.map((t) =>
+          ((t._id || t.id) === (updatedThesis._id || updatedThesis.id) ? { ...t, ...updatedThesis } : t)
+        )
+      );
+    };
+
+    const handleThesisPinned = ({ thesisId, isPinned }) => {
+      setTheses((prev) =>
+        prev.map((t) => ((t._id || t.id) === thesisId ? { ...t, isPinned } : t))
+      );
+    };
+
+    const handleThesisDeleted = ({ thesisId }) => {
+      setTheses((prev) => prev.filter((t) => (t._id || t.id) !== thesisId));
+    };
+
+    const handleAdminUpdate = () => {
+      if (isAdmin || (isEditor && hasPermission('students.view'))) {
+        fetchPendingStudents();
+      }
+    };
+
+    const handleMembershipUpdate = () => {
+      fetchMembershipStatus();
+    };
+
+    socket.on('thesis:created', handleThesisCreated);
+    socket.on('thesis:updated', handleThesisUpdated);
+    socket.on('thesis:pinned', handleThesisPinned);
+    socket.on('thesis:deleted', handleThesisDeleted);
+    socket.on('admin:new_student_application', handleAdminUpdate);
+    socket.on('admin:student_profile_updated', handleAdminUpdate);
+    socket.on('admin:student_updated', handleAdminUpdate);
+    socket.on('membership:updated', handleMembershipUpdate);
+
+    return () => {
+      socket.off('thesis:created', handleThesisCreated);
+      socket.off('thesis:updated', handleThesisUpdated);
+      socket.off('thesis:pinned', handleThesisPinned);
+      socket.off('thesis:deleted', handleThesisDeleted);
+      socket.off('admin:new_student_application', handleAdminUpdate);
+      socket.off('admin:student_profile_updated', handleAdminUpdate);
+      socket.off('admin:student_updated', handleAdminUpdate);
+      socket.off('membership:updated', handleMembershipUpdate);
+    };
+  }, [socket, isApproved, isAdmin, isEditor, hasPermission]);
 
   const handleToggleCompare = (paper) => {
     const paperId = paper._id || paper.id || paper.paperId;

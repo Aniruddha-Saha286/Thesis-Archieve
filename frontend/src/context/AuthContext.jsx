@@ -3,6 +3,11 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
+// Configure API base URL for production deployments (e.g. Vercel -> Render backend)
+if (import.meta.env.VITE_API_URL) {
+  axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+}
+
 // Global Axios request interceptor: guarantees Bearer token is attached to every single request
 axios.interceptors.request.use((config) => {
   const savedToken = localStorage.getItem('thesis_vault_token');
@@ -17,20 +22,6 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('thesis_vault_token') || null);
   const [loading, setLoading] = useState(true);
 
-  // Set default axios authorization header whenever token changes
-  useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      localStorage.setItem('thesis_vault_token', token);
-      fetchCurrentUser();
-    } else {
-      delete axios.defaults.headers.common['Authorization'];
-      localStorage.removeItem('thesis_vault_token');
-      setUser(null);
-      setLoading(false);
-    }
-  }, [token]);
-
   const fetchCurrentUser = async () => {
     try {
       setLoading(true);
@@ -44,6 +35,20 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
   };
+
+  // Set default axios authorization header whenever token changes
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      localStorage.setItem('thesis_vault_token', token);
+      fetchCurrentUser();
+    } else {
+      delete axios.defaults.headers.common['Authorization'];
+      localStorage.removeItem('thesis_vault_token');
+      setUser(null);
+      setLoading(false);
+    }
+  }, [token]);
 
   const login = async (email, password) => {
     const res = await axios.post('/api/auth/login', { email, password });

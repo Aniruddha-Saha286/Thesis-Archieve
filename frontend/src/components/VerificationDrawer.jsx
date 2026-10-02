@@ -37,7 +37,7 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
           </div>
 
           {/* List of Applications */}
-          {pendingStudents.length === 0 ? (
+          {(!pendingStudents || pendingStudents.length === 0) ? (
             <div className="py-12 text-center text-xs font-mono-meta text-[#737067] space-y-2">
               <div className="text-2xl">✓</div>
               <p>No student applications currently pending review.</p>
@@ -45,7 +45,7 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
             </div>
           ) : (
             <div className="space-y-4">
-              {pendingStudents.map((candidate) => (
+              {(pendingStudents || []).map((candidate) => (
                 <div
                   key={candidate._id}
                   className="border border-[#E2DFD8] p-4 rounded-sm space-y-3 bg-[#FAF9F5]"
