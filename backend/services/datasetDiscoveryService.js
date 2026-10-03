@@ -436,6 +436,247 @@ async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 })
 }
 
 /**
+ * Searches Figshare for open scientific datasets
+ */
+async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 }) {
+  try {
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    if (process.env.OFFLINE_MODE === 'true') {
+      const records = [
+        {
+          id: `figshare_offline_${pageNum}_1`,
+          title: `Figshare Open Dataset for ${query || doi || 'Research Artifacts'}`,
+          url: 'https://figshare.com/articles/dataset/offline_sample/12345678',
+          doi: '10.6084/m9.figshare.12345678',
+          publisher: 'Figshare Open Repository',
+          publicationYear: 2024,
+          description: 'Deterministic offline fixture dataset for regression tests.',
+          formats: ['DATASET'],
+          size: '250 MB',
+          license: 'Unknown / Not specified',
+          isLinked: false,
+          relationType: 'Topic Similarity Discovery',
+          relationshipDirection: 'topic',
+          relationEvidence: 'Deterministic offline Figshare fixture without verified relation.',
+          source: 'Figshare',
+          sourceUrl: 'https://figshare.com/articles/dataset/offline_sample/12345678',
+        },
+      ];
+      return { records, totalCount: 1, hasMore: false, error: null };
+    }
+
+    const searchTerm = (doi || query || '').trim();
+    if (!searchTerm) {
+      return { records: [], totalCount: 0, hasMore: false, error: null };
+    }
+
+    const body = {
+      search_for: searchTerm,
+      page: pageNum,
+      page_size: Math.min(size, 20),
+      item_type: 3, // Datasets
+    };
+
+    const res = await fetch('https://api.figshare.com/v2/articles/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'ThesisArchive/1.0 (academic open research; contact@thesisarchive.org)',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      return { records: [], totalCount: 0, hasMore: false, error: `Figshare HTTP ${res.status}` };
+    }
+
+    const items = await res.json();
+    if (!Array.isArray(items)) {
+      return { records: [], totalCount: 0, hasMore: false, error: null };
+    }
+
+    const mapped = items
+      .map((it) => {
+        const itemDoi = it.doi ? it.doi.toLowerCase().trim() : null;
+        const itemUrl =
+          it.url_public_html ||
+          (itemDoi ? `https://doi.org/${itemDoi}` : `https://figshare.com/articles/dataset/${it.id}`);
+
+        // Verify genuine relational evidence from Figshare metadata
+        const hasVerifiedRel = Boolean(
+          doi && it.resource_doi && compareDois(it.resource_doi, doi)
+        );
+
+        let license = 'Unknown / Not specified';
+        if (it.license) {
+          license = typeof it.license === 'object' ? it.license.name || it.license.title || 'Unknown / Not specified' : String(it.license);
+        }
+
+        return {
+          id: `figshare_${it.id}`,
+          title: it.title || 'Figshare Research Dataset',
+          url: itemUrl,
+          doi: itemDoi,
+          publisher: 'Figshare Open Repository',
+          publicationYear: it.published_date ? new Date(it.published_date).getFullYear() : null,
+          description: null,
+          formats: ['DATASET'],
+          size: null,
+          license,
+          isLinked: hasVerifiedRel,
+          relationType: hasVerifiedRel ? 'Direct Supplemental Dataset' : 'Topic Similarity Discovery',
+          relationshipDirection: hasVerifiedRel ? 'supplemental' : 'topic',
+          relationEvidence: hasVerifiedRel
+            ? 'Verified Figshare resource_doi matches publication DOI.'
+            : 'Discovered through search against Figshare repository without verified relation.',
+          source: 'Figshare',
+          sourceUrl: itemUrl,
+        };
+      })
+      .filter((d) => d.url && isSafeDatasetUrl(d.url));
+
+    return {
+      records: mapped,
+      totalCount: mapped.length,
+      hasMore: items.length >= size,
+      error: null,
+    };
+  } catch (err) {
+    return { records: [], totalCount: 0, hasMore: false, error: err.message };
+  }
+}
+
+/**
+ * Searches Dryad for curated scientific data packages
+ */
+async function queryDryad({ query, doi, isLinked = false, page = 1, size = 5 }) {
+  try {
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    if (process.env.OFFLINE_MODE === 'true') {
+      const records = [
+        {
+          id: `dryad_offline_${pageNum}_1`,
+          title: `Dryad Open Dataset for ${query || doi || 'Scientific Repository'}`,
+          url: 'https://datadryad.org/stash/dataset/doi:10.5061/dryad.offline',
+          doi: '10.5061/dryad.offline',
+          publisher: 'Dryad Digital Repository',
+          publicationYear: 2024,
+          description: 'Deterministic offline fixture dataset for regression tests.',
+          formats: ['DATASET'],
+          size: '50 MB',
+          license: 'CC0 1.0 Universal',
+          isLinked: false,
+          relationType: 'Topic Similarity Discovery',
+          relationshipDirection: 'topic',
+          relationEvidence: 'Deterministic offline Dryad fixture without verified relation.',
+          source: 'Dryad',
+          sourceUrl: 'https://datadryad.org/stash/dataset/doi:10.5061/dryad.offline',
+        },
+      ];
+      return { records, totalCount: 1, hasMore: false, error: null };
+    }
+
+    const searchTerm = (doi || query || '').trim();
+    if (!searchTerm) {
+      return { records: [], totalCount: 0, hasMore: false, error: null };
+    }
+
+    const url = `https://datadryad.org/api/v2/search?q=${encodeURIComponent(searchTerm)}&page=${pageNum}&per_page=${Math.min(size, 20)}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        'User-Agent': 'ThesisArchive/1.0 (academic open research; contact@thesisarchive.org)',
+      },
+    });
+
+    if (!res.ok) {
+      return { records: [], totalCount: 0, hasMore: false, error: `Dryad HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    const items = data._embedded?.['stash:datasets'] || [];
+    const totalCount = typeof data.total === 'number' ? data.total : items.length;
+
+    const mapped = items
+      .map((it) => {
+        const rawId = (it.identifier || '').replace(/^doi:/i, '').trim();
+        const itemDoi = rawId ? rawId.toLowerCase() : null;
+        let itemUrl = itemDoi ? `https://doi.org/${itemDoi}` : null;
+        if (!itemUrl && it.sharingLink) {
+          itemUrl = it.sharingLink.replace(/^http:\/\//, 'https://');
+        }
+        if (!itemUrl) {
+          itemUrl = `https://datadryad.org/stash/dataset/doi:${itemDoi || it.id}`;
+        }
+
+        let sizeFormatted = null;
+        if (typeof it.storageSize === 'number' && it.storageSize > 0) {
+          if (it.storageSize > 1024 * 1024 * 1024) {
+            sizeFormatted = `${(it.storageSize / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+          } else if (it.storageSize > 1024 * 1024) {
+            sizeFormatted = `${(it.storageSize / (1024 * 1024)).toFixed(1)} MB`;
+          } else {
+            sizeFormatted = `${(it.storageSize / 1024).toFixed(0)} KB`;
+          }
+        }
+
+        let license = 'CC0 1.0 Universal';
+        if (it.license && typeof it.license === 'string') {
+          if (it.license.includes('CC0')) license = 'CC0 1.0 Universal';
+          else license = it.license;
+        }
+
+        // Strict relationship verification: verify that Dryad metadata explicitly links to the queried DOI
+        let hasVerifiedRel = false;
+        if (doi && Array.isArray(it.relatedWorks)) {
+          hasVerifiedRel = it.relatedWorks.some((rw) => {
+            const isRelType =
+              rw.relationship === 'primary_article' ||
+              rw.relationship === 'supplemental_material';
+            const cleanId = (rw.identifier || '')
+              .replace(/^https?:\/\/doi\.org\//i, '')
+              .replace(/^doi:/i, '')
+              .trim();
+            return isRelType && compareDois(cleanId, doi);
+          });
+        }
+
+        return {
+          id: `dryad_${it.id || (itemDoi ? itemDoi.replace(/[^a-zA-Z0-9]/g, '_') : Math.random().toString(36).substring(7))}`,
+          title: it.title || 'Dryad Open Research Dataset',
+          url: itemUrl,
+          doi: itemDoi,
+          publisher: 'Dryad Digital Repository',
+          publicationYear: it.publicationDate ? new Date(it.publicationDate).getFullYear() : null,
+          description: it.abstract ? it.abstract.replace(/<[^>]*>/g, '').slice(0, 300) : null,
+          formats: ['DATASET'],
+          size: sizeFormatted,
+          license,
+          isLinked: hasVerifiedRel,
+          relationType: hasVerifiedRel ? 'Direct Supplemental Dataset' : 'Topic Similarity Discovery',
+          relationshipDirection: hasVerifiedRel ? 'supplemental' : 'topic',
+          relationEvidence: hasVerifiedRel
+            ? 'Declared primary article relationship in Dryad metadata matches publication DOI.'
+            : 'Discovered through search against Dryad repository without verified relation.',
+          source: 'Dryad',
+          sourceUrl: itemUrl,
+        };
+      })
+      .filter((d) => d.url && isSafeDatasetUrl(d.url));
+
+    return {
+      records: mapped,
+      totalCount,
+      hasMore: totalCount > pageNum * size,
+      error: null,
+    };
+  } catch (err) {
+    return { records: [], totalCount: 0, hasMore: false, error: err.message };
+  }
+}
+
+/**
  * Enriches a specific paper with authentic Linked Datasets (explicit DOI relations)
  * and complementary Related Datasets (topic similarity discovery)
  */
@@ -476,7 +717,7 @@ async function enrichPaperDatasets({
       publicationYear: null,
       formats,
       size: explicitDatasetSize || null,
-      license: 'Unknown / Not specified', // Honest: do not assume or invent open access license
+      license: 'Unknown / Not specified',
       isLinked: true,
       relationType: 'Primary Associated Dataset',
       relationshipDirection: 'supplemental',
@@ -489,15 +730,24 @@ async function enrichPaperDatasets({
 
   // 2. Fetch linked datasets via DOI relations if DOI is present
   if (doi) {
-    const [dcLinkedRes, zenodoLinkedRes] = await Promise.all([
+    const [dcLinkedRes, zenodoLinkedRes, figshareLinkedRes, dryadLinkedRes] = await Promise.all([
       queryDataCite({ doi, isLinked: true, page: 1, size: 5 }),
       queryZenodo({ doi, isLinked: true, page: 1, size: 5 }),
+      queryFigshare({ doi, isLinked: true, page: 1, size: 5 }),
+      queryDryad({ doi, isLinked: true, page: 1, size: 5 }),
     ]);
 
     if (dcLinkedRes.error) providerErrors.DataCite = dcLinkedRes.error;
     if (zenodoLinkedRes.error) providerErrors.Zenodo = zenodoLinkedRes.error;
+    if (figshareLinkedRes.error) providerErrors.Figshare = figshareLinkedRes.error;
+    if (dryadLinkedRes.error) providerErrors.Dryad = dryadLinkedRes.error;
 
-    for (const d of [...dcLinkedRes.records, ...zenodoLinkedRes.records]) {
+    for (const d of [
+      ...dcLinkedRes.records,
+      ...zenodoLinkedRes.records,
+      ...figshareLinkedRes.records,
+      ...dryadLinkedRes.records,
+    ]) {
       const dKey = d.doi ? d.doi.toLowerCase() : d.url.toLowerCase();
       if (!seenDois.has(dKey) && !seenUrls.has(d.url.toLowerCase())) {
         if (d.doi) seenDois.add(d.doi.toLowerCase());
@@ -523,15 +773,24 @@ async function enrichPaperDatasets({
       .join(' ');
 
     if (cleanWords) {
-      const [dcRelatedRes, zenodoRelatedRes] = await Promise.all([
-        queryDataCite({ query: cleanWords, isLinked: false, page: 1, size: 4 }),
-        queryZenodo({ query: cleanWords, isLinked: false, page: 1, size: 4 }),
+      const [dcRelatedRes, zenodoRelatedRes, figshareRelatedRes, dryadRelatedRes] = await Promise.all([
+        queryDataCite({ query: cleanWords, isLinked: false, page: 1, size: 3 }),
+        queryZenodo({ query: cleanWords, isLinked: false, page: 1, size: 3 }),
+        queryFigshare({ query: cleanWords, isLinked: false, page: 1, size: 3 }),
+        queryDryad({ query: cleanWords, isLinked: false, page: 1, size: 3 }),
       ]);
 
       if (dcRelatedRes.error && !providerErrors.DataCite) providerErrors.DataCite = dcRelatedRes.error;
       if (zenodoRelatedRes.error && !providerErrors.Zenodo) providerErrors.Zenodo = zenodoRelatedRes.error;
+      if (figshareRelatedRes.error && !providerErrors.Figshare) providerErrors.Figshare = figshareRelatedRes.error;
+      if (dryadRelatedRes.error && !providerErrors.Dryad) providerErrors.Dryad = dryadRelatedRes.error;
 
-      for (const d of [...dcRelatedRes.records, ...zenodoRelatedRes.records]) {
+      for (const d of [
+        ...dcRelatedRes.records,
+        ...zenodoRelatedRes.records,
+        ...figshareRelatedRes.records,
+        ...dryadRelatedRes.records,
+      ]) {
         const dKey = d.doi ? d.doi.toLowerCase() : d.url.toLowerCase();
         if (!seenDois.has(dKey) && !seenUrls.has(d.url.toLowerCase())) {
           if (d.doi) seenDois.add(d.doi.toLowerCase());
@@ -544,8 +803,12 @@ async function enrichPaperDatasets({
   }
 
   const hasOutage = Boolean(
-    (doi && providerErrors.DataCite && providerErrors.Zenodo) ||
-    Object.keys(providerErrors).length >= 2
+    (doi &&
+      providerErrors.DataCite &&
+      providerErrors.Zenodo &&
+      providerErrors.Figshare &&
+      providerErrors.Dryad) ||
+      Object.keys(providerErrors).length >= 4
   );
 
   const result = {
@@ -565,7 +828,7 @@ async function enrichPaperDatasets({
 }
 
 /**
- * Searches across official open science data repositories (DataCite and Zenodo)
+ * Searches across official open science data repositories (DataCite, Zenodo, Figshare, Dryad)
  * Genuine page-based pagination with provider cursor forwarding.
  */
 async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
@@ -577,21 +840,30 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const halfLimit = Math.ceil(limitNum / 2);
-  const [dcRes, zenodoRes] = await Promise.all([
-    queryDataCite({ query: cleanQ, isLinked: false, page: pageNum, size: halfLimit }),
-    queryZenodo({ query: cleanQ, isLinked: false, page: pageNum, size: halfLimit }),
+  const quarterLimit = Math.max(2, Math.ceil(limitNum / 4));
+  const [dcRes, zenodoRes, figshareRes, dryadRes] = await Promise.all([
+    queryDataCite({ query: cleanQ, isLinked: false, page: pageNum, size: quarterLimit }),
+    queryZenodo({ query: cleanQ, isLinked: false, page: pageNum, size: quarterLimit }),
+    queryFigshare({ query: cleanQ, isLinked: false, page: pageNum, size: quarterLimit }),
+    queryDryad({ query: cleanQ, isLinked: false, page: pageNum, size: quarterLimit }),
   ]);
 
   const providerErrors = {};
   if (dcRes.error) providerErrors.DataCite = dcRes.error;
   if (zenodoRes.error) providerErrors.Zenodo = zenodoRes.error;
+  if (figshareRes.error) providerErrors.Figshare = figshareRes.error;
+  if (dryadRes.error) providerErrors.Dryad = dryadRes.error;
 
   const combined = [];
   const seenDois = new Set();
   const seenUrls = new Set();
 
-  for (const d of [...dcRes.records, ...zenodoRes.records]) {
+  for (const d of [
+    ...dcRes.records,
+    ...zenodoRes.records,
+    ...figshareRes.records,
+    ...dryadRes.records,
+  ]) {
     const dKey = d.doi ? d.doi.toLowerCase() : d.url.toLowerCase();
     if (!seenDois.has(dKey) && !seenUrls.has(d.url.toLowerCase())) {
       if (d.doi) seenDois.add(d.doi.toLowerCase());
@@ -600,7 +872,13 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
     }
   }
 
-  const hasMore = Boolean(dcRes.hasMore || zenodoRes.hasMore || combined.length >= limitNum);
+  const hasMore = Boolean(
+    dcRes.hasMore ||
+      zenodoRes.hasMore ||
+      figshareRes.hasMore ||
+      dryadRes.hasMore ||
+      combined.length >= limitNum
+  );
 
   const result = {
     datasets: combined,
@@ -611,7 +889,7 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
       hasMore,
     },
     providerErrors: Object.keys(providerErrors).length > 0 ? providerErrors : null,
-    hasOutage: Object.keys(providerErrors).length >= 2,
+    hasOutage: Object.keys(providerErrors).length >= 4,
     retrievedAt: new Date().toISOString(),
   };
 
@@ -626,6 +904,8 @@ module.exports = {
   isSafeDatasetUrl,
   queryDataCite,
   queryZenodo,
+  queryFigshare,
+  queryDryad,
   enrichPaperDatasets,
   searchGlobalDatasets,
 };

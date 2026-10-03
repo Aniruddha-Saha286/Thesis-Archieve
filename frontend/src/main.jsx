@@ -7,18 +7,22 @@ import { AuthProvider } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
+import { ThemeProvider } from './context/ThemeContext';
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '1234567890-placeholder.apps.googleusercontent.com';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <AuthProvider>
-          <SocketProvider>
-            <App />
-          </SocketProvider>
-        </AuthProvider>
-      </GoogleOAuthProvider>
+      <ThemeProvider>
+        <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+          <AuthProvider>
+            <SocketProvider>
+              <App />
+            </SocketProvider>
+          </AuthProvider>
+        </GoogleOAuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

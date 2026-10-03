@@ -15,6 +15,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
   const [step, setStep] = useState('edit'); // 'edit' | 'review'
   const [loading, setLoading] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
   const [error, setError] = useState('');
   const [currentMembership, setCurrentMembership] = useState(student?.membership || null);
 
@@ -140,10 +141,8 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
     setStep('review');
   };
 
-  const handleRevokeCurrent = async () => {
-    if (!window.confirm(`Revoke current active access for ${student.name}? Their account will return to Standard Free.`)) {
-      return;
-    }
+  const handleConfirmRevoke = async () => {
+    setShowRevokeConfirm(false);
     try {
       setRevoking(true);
       setError('');
@@ -201,23 +200,23 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
         onClick={onClose}
       />
 
-      <div className="relative bg-white border border-[#D5D1C7] rounded-sm shadow-2xl max-w-xl w-full max-h-[95vh] flex flex-col overflow-hidden z-10 font-mono-meta text-xs">
+      <div className="relative bg-white dark:bg-neutral-900 border border-[#D5D1C7] dark:border-neutral-800 rounded-sm shadow-2xl max-w-xl w-full max-h-[95vh] flex flex-col overflow-hidden z-10 font-mono-meta text-xs text-[#1C1B18] dark:text-neutral-100">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#E2DFD8] bg-[#FAF9F5]">
+        <div className="flex items-center justify-between p-4 border-b border-[#E2DFD8] dark:border-neutral-800 bg-[#FAF9F5] dark:bg-neutral-950">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-amber-700" />
+            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <div>
-              <h3 className="text-sm font-bold text-[#1C1B18]">
+              <h3 className="text-sm font-bold text-[#1C1B18] dark:text-neutral-100">
                 Grant Manual Research Access
               </h3>
-              <p className="text-[10px] text-[#737067]">
+              <p className="text-[10px] text-[#737067] dark:text-neutral-400">
                 Depository Director Override • Asia/Dhaka Calendar Timestamps
               </p>
             </div>
           </div>
 
-          <button onClick={onClose} className="p-1 text-[#737067] hover:text-[#1C1B18] cursor-pointer">
+          <button onClick={onClose} className="p-1 text-[#737067] dark:text-neutral-400 hover:text-[#1C1B18] dark:hover:text-white cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -226,33 +225,33 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
         <div className="p-6 overflow-y-auto space-y-4">
           
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 flex items-start gap-2">
+            <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Student Info Box */}
-          <div className="bg-[#FAF9F5] border border-[#E5E2DA] p-3 rounded-sm space-y-1">
+          <div className="bg-[#FAF9F5] dark:bg-neutral-800/80 border border-[#E5E2DA] dark:border-neutral-700 p-3 rounded-sm space-y-1">
             <div className="flex justify-between">
-              <span className="text-[#8C887E]">TARGET SCHOLAR:</span>
-              <strong className="text-[#1C1B18]">{student.name}</strong>
+              <span className="text-[#8C887E] dark:text-neutral-400">TARGET SCHOLAR:</span>
+              <strong className="text-[#1C1B18] dark:text-neutral-100">{student.name}</strong>
             </div>
             <div className="flex justify-between text-[11px]">
-              <span className="text-[#8C887E]">EMAIL:</span>
-              <span className="text-[#524F47]">{student.email}</span>
+              <span className="text-[#8C887E] dark:text-neutral-400">EMAIL:</span>
+              <span className="text-[#524F47] dark:text-neutral-300">{student.email}</span>
             </div>
             <div className="flex justify-between text-[11px] items-center">
-              <span className="text-[#8C887E]">CURRENT ACCESS:</span>
+              <span className="text-[#8C887E] dark:text-neutral-400">CURRENT ACCESS:</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-emerald-800">
+                <span className="font-semibold text-emerald-800 dark:text-emerald-400">
                   {currentMembership?.label || 'Standard Free'}
                   {currentMembership?.formattedExpiry ? ` (Expires: ${currentMembership.formattedExpiry})` : ''}
                 </span>
                 {currentMembership?.plan && currentMembership.plan !== 'free' && (
                   <button
                     type="button"
-                    onClick={handleRevokeCurrent}
+                    onClick={() => setShowRevokeConfirm(true)}
                     disabled={revoking}
                     className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xs text-[10px] font-bold cursor-pointer transition disabled:opacity-50"
                   >
@@ -580,6 +579,39 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
           )}
 
         </div>
+
+        {/* In-App Revoke Confirmation Modal */}
+        {showRevokeConfirm && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-neutral-950/60 backdrop-blur-xs" onClick={() => setShowRevokeConfirm(false)} />
+            <div className="relative bg-white dark:bg-neutral-900 border border-[#D5D1C7] dark:border-neutral-800 rounded-sm p-5 max-w-sm w-full shadow-2xl z-10 font-mono-meta text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-neutral-800 mb-3">
+                <h3 className="font-bold text-rose-700 dark:text-rose-400">Revoke Access Grant</h3>
+                <button onClick={() => setShowRevokeConfirm(false)} className="cursor-pointer text-[#737067] hover:text-[#1C1B18] dark:hover:text-white">✕</button>
+              </div>
+              <p className="text-[#605D55] dark:text-neutral-400 mb-4">
+                Revoke current active access for <strong className="text-[#1C1B18] dark:text-neutral-100">{student?.name}</strong>? Their account will return to Standard Free.
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRevokeConfirm(false)}
+                  className="px-3 py-1.5 border border-[#D5D1C7] dark:border-neutral-700 text-[#737067] dark:text-neutral-400 hover:bg-[#FAF9F5] dark:hover:bg-neutral-800 rounded-sm cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmRevoke}
+                  disabled={revoking}
+                  className="px-3 py-1.5 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-sm cursor-pointer disabled:opacity-50"
+                >
+                  {revoking ? 'Revoking...' : 'Revoke Access'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

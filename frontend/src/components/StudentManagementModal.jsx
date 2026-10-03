@@ -2,14 +2,21 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Users, Shield, Ban, CheckCircle, Search, ExternalLink, Trash2, X, AlertTriangle, Eye } from 'lucide-react';
 import DocumentViewerModal from './DocumentViewerModal';
+import { useSocket } from '../context/SocketContext';
 
 export default function StudentManagementModal({ isOpen, onClose, onRefreshStats }) {
+  const { showNotice } = useSocket();
   const [students, setStudents] = useState([]);
   const [filterTab, setFilterTab] = useState('all'); // 'all', 'approved', 'pending', 'banned'
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [inspectingStudent, setInspectingStudent] = useState(null);
+
+  // In-app modals
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [promptModal, setPromptModal] = useState(null);
+  const [promptInput, setPromptInput] = useState('');
 
   const fetchStudents = async () => {
     try {
@@ -35,27 +42,36 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
       await axios.post(`/api/admin/verify-student/${id}`, { decision });
       await fetchStudents();
       if (onRefreshStats) onRefreshStats();
+      showNotice(decision === 'approve' ? 'Student verified and approved.' : 'Student rejected.', 'info');
     } catch (err) {
-      alert('Error updating student verification.');
+      showNotice(err.response?.data?.message || 'Error updating student verification.', 'error');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleBan = async (id, studentName) => {
-    const reason = window.prompt(`Enter suspension reason for student ${studentName}:`, 'Violation of academic terms / suspicious activity');
-    if (reason === null) return; // cancelled
-
-    try {
-      setActionLoading(id);
-      await axios.post(`/api/admin/student/${id}/ban`, { reason });
-      await fetchStudents();
-      if (onRefreshStats) onRefreshStats();
-    } catch (err) {
-      alert('Failed to ban student.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleBan = (id, studentName) => {
+    setPromptInput('Violation of academic terms / suspicious activity');
+    setPromptModal({
+      title: 'Suspend Student Account',
+      message: `Enter suspension reason for student ${studentName}:`,
+      placeholder: 'Suspension reason...',
+      confirmText: 'Suspend Account',
+      danger: true,
+      onConfirm: async (reason) => {
+        try {
+          setActionLoading(id);
+          await axios.post(`/api/admin/student/${id}/ban`, { reason });
+          await fetchStudents();
+          if (onRefreshStats) onRefreshStats();
+          showNotice(`Student ${studentName} was suspended.`, 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to ban student.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleUnban = async (id) => {
@@ -64,28 +80,34 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
       await axios.post(`/api/admin/student/${id}/unban`);
       await fetchStudents();
       if (onRefreshStats) onRefreshStats();
+      showNotice('Student suspension lifted.', 'info');
     } catch (err) {
-      alert('Failed to unban student.');
+      showNotice(err.response?.data?.message || 'Failed to unban student.', 'error');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleDelete = async (id, studentName) => {
-    if (!window.confirm(`Are you sure you want to permanently delete the account of ${studentName}? This cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setActionLoading(id);
-      await axios.delete(`/api/admin/student/${id}`);
-      await fetchStudents();
-      if (onRefreshStats) onRefreshStats();
-    } catch (err) {
-      alert('Failed to delete student account.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleDelete = (id, studentName) => {
+    setConfirmModal({
+      title: 'Delete Student Account',
+      message: `Are you sure you want to permanently delete the account of ${studentName}? This cannot be undone.`,
+      confirmText: 'Permanently Delete',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(id);
+          await axios.delete(`/api/admin/student/${id}`);
+          await fetchStudents();
+          if (onRefreshStats) onRefreshStats();
+          showNotice(`Student ${studentName} was permanently deleted.`, 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to delete student account.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   if (!isOpen) return null;
@@ -116,19 +138,19 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white border border-[#D5D1C7] rounded-sm w-full max-w-4xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col">
+      <div className="bg-white dark:bg-neutral-900 border border-[#D5D1C7] dark:border-neutral-800 rounded-sm w-full max-w-4xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col text-[#1C1B18] dark:text-neutral-100">
         
         {/* Top Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8]">
+        <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-neutral-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-sm bg-amber-600 text-white flex items-center justify-center">
+            <div className="w-8 h-8 rounded-sm bg-amber-600 dark:bg-amber-500 text-white dark:text-neutral-950 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-xl font-serif-title text-[#1C1B18]">
+              <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-neutral-100">
                 Student & Researcher Access Administration
               </h2>
-              <p className="text-xs font-mono-meta text-[#737067]">
+              <p className="text-xs font-mono-meta text-[#737067] dark:text-neutral-400">
                 Manage enrollments, grant unmetered access, or suspend student privileges
               </p>
             </div>
@@ -136,7 +158,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
 
           <button
             onClick={onClose}
-            className="text-[#737067] hover:text-[#1C1B18] font-mono-meta text-xs cursor-pointer"
+            className="text-[#737067] dark:text-neutral-400 hover:text-[#1C1B18] dark:hover:text-white font-mono-meta text-xs cursor-pointer"
           >
             [✕ CLOSE]
           </button>
@@ -146,11 +168,11 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
         <div className="flex flex-wrap items-center justify-between gap-3 my-4">
           
           {/* Tabs */}
-          <div className="flex items-center gap-1 text-xs font-mono-meta bg-[#FAF9F5] p-1 border border-[#E2DFD8] rounded-sm">
+          <div className="flex items-center gap-1 text-xs font-mono-meta bg-[#FAF9F5] dark:bg-neutral-800 p-1 border border-[#E2DFD8] dark:border-neutral-700 rounded-sm">
             <button
               onClick={() => setFilterTab('all')}
               className={`px-3 py-1 rounded-sm transition cursor-pointer ${
-                filterTab === 'all' ? 'bg-[#1C1B18] text-white font-bold' : 'text-[#737067] hover:text-[#1C1B18]'
+                filterTab === 'all' ? 'bg-[#1C1B18] dark:bg-neutral-100 text-white dark:text-neutral-950 font-bold' : 'text-[#737067] dark:text-neutral-400 hover:text-[#1C1B18] dark:hover:text-white'
               }`}
             >
               All ({students.length})
@@ -158,7 +180,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
             <button
               onClick={() => setFilterTab('approved')}
               className={`px-3 py-1 rounded-sm transition cursor-pointer ${
-                filterTab === 'approved' ? 'bg-[#2C6B3F] text-white font-bold' : 'text-[#737067] hover:text-[#2C6B3F]'
+                filterTab === 'approved' ? 'bg-[#2C6B3F] text-white font-bold' : 'text-[#737067] dark:text-neutral-400 hover:text-[#2C6B3F] dark:hover:text-emerald-400'
               }`}
             >
               Active ({countApproved})
@@ -166,7 +188,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
             <button
               onClick={() => setFilterTab('pending')}
               className={`px-3 py-1 rounded-sm transition cursor-pointer ${
-                filterTab === 'pending' ? 'bg-amber-600 text-white font-bold' : 'text-[#737067] hover:text-amber-800'
+                filterTab === 'pending' ? 'bg-amber-600 text-white font-bold' : 'text-[#737067] dark:text-neutral-400 hover:text-amber-800 dark:hover:text-amber-400'
               }`}
             >
               Pending ({countPending})
@@ -174,7 +196,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
             <button
               onClick={() => setFilterTab('banned')}
               className={`px-3 py-1 rounded-sm transition cursor-pointer ${
-                filterTab === 'banned' ? 'bg-red-700 text-white font-bold' : 'text-[#737067] hover:text-red-700'
+                filterTab === 'banned' ? 'bg-red-700 text-white font-bold' : 'text-[#737067] dark:text-neutral-400 hover:text-red-700 dark:hover:text-red-400'
               }`}
             >
               Banned ({countBanned})
@@ -188,26 +210,26 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, ID, university..."
-              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 pl-8 text-xs text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+              className="w-full bg-[#FAF9F5] dark:bg-neutral-800 border border-[#D5D1C7] dark:border-neutral-700 px-3 py-1.5 pl-8 text-xs text-[#1C1B18] dark:text-neutral-100 rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400"
             />
-            <Search className="w-3.5 h-3.5 text-[#8C887E] absolute left-2.5 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#8C887E] dark:text-neutral-400 absolute left-2.5 top-2.5" />
           </div>
 
         </div>
 
         {/* Student Roster Table */}
-        <div className="overflow-y-auto flex-1 border border-[#E2DFD8] rounded-sm">
+        <div className="overflow-y-auto flex-1 border border-[#E2DFD8] dark:border-neutral-800 rounded-sm">
           {loading ? (
-            <div className="py-16 text-center text-xs font-mono-meta text-[#737067]">
+            <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-neutral-400">
               Loading students registry...
             </div>
           ) : filteredStudents.length === 0 ? (
-            <div className="py-16 text-center text-xs font-mono-meta text-[#737067]">
+            <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-neutral-400">
               No student records found.
             </div>
           ) : (
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[11px] font-mono-meta text-[#605D55] uppercase sticky top-0">
+              <thead className="bg-[#FAF9F5] dark:bg-neutral-800/90 border-b border-[#E2DFD8] dark:border-neutral-700 text-[11px] font-mono-meta text-[#605D55] dark:text-neutral-300 uppercase sticky top-0">
                 <tr>
                   <th className="p-3">Student & Academic Identity</th>
                   <th className="p-3">University & Student ID</th>
@@ -216,19 +238,19 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
                   <th className="p-3 text-right">Administrative Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E5E2DA] font-sans">
+              <tbody className="divide-y divide-[#E5E2DA] dark:divide-neutral-800 font-sans">
                 {filteredStudents.map((s) => (
-                  <tr key={s._id} className="hover:bg-[#FAF9F5]/70 transition-colors">
+                  <tr key={s._id} className="hover:bg-[#FAF9F5]/70 dark:hover:bg-neutral-800/50 transition-colors">
                     
                     {/* Student Identity */}
                     <td className="p-3">
-                      <div className="font-bold text-[#1C1B18]">{s.name}</div>
-                      <div className="text-[11px] font-mono-meta text-[#737067]">{s.email}</div>
+                      <div className="font-bold text-[#1C1B18] dark:text-neutral-100">{s.name}</div>
+                      <div className="text-[11px] font-mono-meta text-[#737067] dark:text-neutral-400">{s.email}</div>
                       {(s.hasVerificationDocument || s.idCardProof) && (
                         <button
                           type="button"
                           onClick={() => setInspectingStudent(s)}
-                          className="inline-flex items-center gap-1 text-[10px] text-blue-700 hover:text-blue-900 hover:underline font-mono-meta mt-1 cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-400 hover:underline font-mono-meta mt-1 cursor-pointer"
                         >
                           <Eye className="w-2.5 h-2.5" />
                           <span>View ID Proof</span>
@@ -238,9 +260,9 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
 
                     {/* University & ID */}
                     <td className="p-3 text-[11px]">
-                      <div className="font-medium text-[#1C1B18]">{s.university || 'Not Provided'}</div>
-                      <div className="font-mono-meta text-[#737067]">ID: {s.studentId || 'N/A'}</div>
-                      <div className="text-[10px] text-[#8C887E]">{s.degreeProgram}</div>
+                      <div className="font-medium text-[#1C1B18] dark:text-neutral-200">{s.university || 'Not Provided'}</div>
+                      <div className="font-mono-meta text-[#737067] dark:text-neutral-400">ID: {s.studentId || 'N/A'}</div>
+                      <div className="text-[10px] text-[#8C887E] dark:text-neutral-500">{s.degreeProgram}</div>
                     </td>
 
                     {/* Domain & Thesis Inquiry */}
@@ -371,6 +393,109 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
           studentId={inspectingStudent._id || inspectingStudent.id}
           studentName={inspectingStudent.name}
         />
+      )}
+
+      {/* In-App Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-60 overflow-hidden flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-neutral-950/60 backdrop-blur-xs" onClick={() => setConfirmModal(null)} />
+          <div className="relative bg-white border border-[#D5D1C7] rounded-sm shadow-2xl max-w-md w-full p-6 z-10 font-mono-meta text-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8]">
+              <h3 className={`text-sm font-bold ${confirmModal.danger ? 'text-red-700' : 'text-[#1C1B18]'}`}>
+                {confirmModal.title}
+              </h3>
+              <button onClick={() => setConfirmModal(null)} className="cursor-pointer text-[#737067] hover:text-[#1C1B18]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[#524F47] text-xs leading-relaxed font-sans">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E2DFD8]">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="px-3 py-1.5 border border-[#D5D1C7] rounded-xs cursor-pointer text-[#737067] hover:bg-[#F2EFE8]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const fn = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  if (fn) await fn();
+                }}
+                className={`px-4 py-1.5 rounded-xs font-bold cursor-pointer text-white ${
+                  confirmModal.danger ? 'bg-red-700 hover:bg-red-800' : 'bg-[#1C1B18] hover:bg-black'
+                }`}
+              >
+                {confirmModal.confirmText || 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Prompt Modal */}
+      {promptModal && (
+        <div className="fixed inset-0 z-60 overflow-hidden flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-neutral-950/60 backdrop-blur-xs" onClick={() => setPromptModal(null)} />
+          <div className="relative bg-white border border-[#D5D1C7] rounded-sm shadow-2xl max-w-md w-full p-6 z-10 font-mono-meta text-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8]">
+              <h3 className={`text-sm font-bold ${promptModal.danger ? 'text-red-700' : 'text-[#1C1B18]'}`}>
+                {promptModal.title}
+              </h3>
+              <button onClick={() => setPromptModal(null)} className="cursor-pointer text-[#737067] hover:text-[#1C1B18]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[#524F47] text-xs leading-relaxed font-sans">
+              {promptModal.message}
+            </p>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const fn = promptModal.onConfirm;
+                const val = promptInput;
+                setPromptModal(null);
+                if (fn) await fn(val);
+              }}
+              className="space-y-3"
+            >
+              <textarea
+                required
+                rows="3"
+                value={promptInput}
+                onChange={(e) => setPromptInput(e.target.value)}
+                placeholder={promptModal.placeholder || 'Enter details...'}
+                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] p-2 text-xs font-mono-meta rounded-xs text-[#1C1B18] focus:outline-none focus:border-[#1C1B18]"
+              />
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E2DFD8]">
+                <button
+                  type="button"
+                  onClick={() => setPromptModal(null)}
+                  className="px-3 py-1.5 border border-[#D5D1C7] rounded-xs cursor-pointer text-[#737067] hover:bg-[#F2EFE8]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`px-4 py-1.5 rounded-xs font-bold cursor-pointer text-white ${
+                    promptModal.danger ? 'bg-red-700 hover:bg-red-800' : 'bg-[#1C1B18] hover:bg-black'
+                  }`}
+                >
+                  {promptModal.confirmText || 'Submit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -61,27 +61,27 @@ export default function AuthorProfileModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white border border-[#D5D1C7] rounded-sm w-full max-w-4xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto space-y-5">
+    <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-4xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto space-y-5">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#737067] hover:text-[#1C1B18] font-mono-meta text-xs cursor-pointer"
+          className="absolute top-4 right-4 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer"
         >
           [✕ CLOSE]
         </button>
 
         {loading && !author ? (
-          <div className="py-20 text-center space-y-3 font-mono-meta text-xs text-[#737067]">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1C1B18]" />
+          <div className="py-20 text-center space-y-3 font-mono-meta text-xs text-[#737067] dark:text-[#9C988F]">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1C1B18] dark:text-[#F0EDE6]" />
             <p>Retrieving author bibliometrics and publication record...</p>
           </div>
         ) : error && !author ? (
-          <div className="py-12 text-center space-y-3 font-mono-meta text-xs text-red-700">
+          <div className="py-12 text-center space-y-3 font-mono-meta text-xs text-red-700 dark:text-red-400">
             <p>{error}</p>
             <button
               onClick={onClose}
-              className="bg-[#1C1B18] text-white px-3 py-1.5 rounded-sm"
+              className="bg-[#1C1B18] dark:bg-[#2C2A26] text-white px-3 py-1.5 rounded-sm"
             >
               Close
             </button>
@@ -89,9 +89,9 @@ export default function AuthorProfileModal({
         ) : (
           <>
             {/* Header: Author Name, Institution, Provenance & Links */}
-            <div className="border-b border-[#E2DFD8] pb-4 space-y-2">
-              <div className="flex items-center gap-2 text-[10px] font-mono-meta uppercase tracking-wider text-[#737067]">
-                <span className="bg-[#1C1B18] text-white px-2 py-0.5 rounded-xs font-bold">
+            <div className="border-b border-[#E2DFD8] dark:border-[#2C2A26] pb-4 space-y-2">
+              <div className="flex items-center gap-2 text-[10px] font-mono-meta uppercase tracking-wider text-[#737067] dark:text-[#9C988F]">
+                <span className="bg-[#1C1B18] dark:bg-[#383530] text-white px-2 py-0.5 rounded-xs font-bold">
                   Researcher Profile
                 </span>
                 <span>Verified Provider: OpenAlex</span>
@@ -102,26 +102,26 @@ export default function AuthorProfileModal({
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                 <div>
-                  <h2 className="text-2xl font-serif-title font-medium text-[#1C1B18] leading-tight">
+                  <h2 className="text-2xl font-serif-title font-medium text-[#1C1B18] dark:text-[#F0EDE6] leading-tight">
                     {author?.name || 'Academic Researcher'}
                   </h2>
 
                   {/* Name Alternatives */}
                   {author?.nameAlternatives && author.nameAlternatives.length > 0 && (
-                    <p className="text-xs text-[#737067] font-mono-meta mt-0.5">
+                    <p className="text-xs text-[#737067] dark:text-[#9C988F] font-mono-meta mt-0.5">
                       Also published as: {author.nameAlternatives.slice(0, 3).join(', ')}
                     </p>
                   )}
 
                   {/* Affiliation */}
                   {author?.lastKnownInstitution && (
-                    <div className="flex items-center gap-1.5 text-xs text-[#524F47] mt-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-amber-800" />
-                      <span className="font-semibold text-[#1C1B18]">
+                    <div className="flex items-center gap-1.5 text-xs text-[#524F47] dark:text-[#B0ACA2] mt-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-amber-800 dark:text-amber-500" />
+                      <span className="font-semibold text-[#1C1B18] dark:text-[#F0EDE6]">
                         {author.lastKnownInstitution.name}
                       </span>
                       {author.lastKnownInstitution.countryCode && (
-                        <span className="bg-[#FAF9F5] border border-[#D5D1C7] text-[#1C1B18] px-1.5 py-0.2 rounded-xs text-[10px] font-mono-meta font-bold">
+                        <span className="bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-1.5 py-0.2 rounded-xs text-[10px] font-mono-meta font-bold">
                           {author.lastKnownInstitution.countryCode}
                         </span>
                       )}
@@ -136,9 +136,9 @@ export default function AuthorProfileModal({
                       href={author.orcid.startsWith('http') ? author.orcid : `https://orcid.org/${author.orcid}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 px-2.5 py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center gap-1.5"
+                      className="bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 px-2.5 py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center gap-1.5"
                     >
-                      <Globe className="w-3.5 h-3.5 text-emerald-700" />
+                      <Globe className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                       <span>ORCID Record</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
@@ -149,7 +149,7 @@ export default function AuthorProfileModal({
                       href={author.openAlexId}
                       target="_blank"
                       rel="noreferrer"
-                      className="bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] px-2.5 py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center gap-1.5"
+                      className="bg-[#FAF9F5] dark:bg-[#24221E] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-2.5 py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center gap-1.5"
                     >
                       <span>OpenAlex</span>
                       <ExternalLink className="w-3 h-3" />
@@ -163,9 +163,9 @@ export default function AuthorProfileModal({
                         onSelectAuthorPublications(author);
                         onClose();
                       }}
-                      className="bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-3 py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      className="bg-[#1C1B18] dark:bg-amber-600 hover:bg-[#2E2C28] dark:hover:bg-amber-700 text-white px-3 py-1.5 rounded-sm text-xs font-mono-meta transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
                     >
-                      <Search className="w-3.5 h-3.5 text-amber-300" />
+                      <Search className="w-3.5 h-3.5 text-amber-300 dark:text-amber-100" />
                       <span>Explore in Search Feed</span>
                     </button>
                   )}
@@ -175,64 +175,64 @@ export default function AuthorProfileModal({
 
             {/* Metrics Dashboard Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono-meta">
-              <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] text-[10px] uppercase">
+              <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
                   <span>Total Works</span>
-                  <BookOpen className="w-3.5 h-3.5 text-[#1C1B18]" />
+                  <BookOpen className="w-3.5 h-3.5 text-[#1C1B18] dark:text-[#F0EDE6]" />
                 </div>
-                <div className="text-xl font-bold text-[#1C1B18]">
+                <div className="text-xl font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                   {author?.worksCount ? author.worksCount.toLocaleString() : '0'}
                 </div>
-                <div className="text-[10px] text-[#737067]">Indexed publications</div>
+                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">Indexed publications</div>
               </div>
 
-              <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] text-[10px] uppercase">
+              <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
                   <span>Total Citations</span>
-                  <Quote className="w-3.5 h-3.5 text-[#2C6B3F]" />
+                  <Quote className="w-3.5 h-3.5 text-[#2C6B3F] dark:text-emerald-400" />
                 </div>
-                <div className="text-xl font-bold text-[#2C6B3F]">
+                <div className="text-xl font-bold text-[#2C6B3F] dark:text-emerald-400">
                   {author?.citationCount !== undefined && author?.citationCount !== null
                     ? author.citationCount.toLocaleString()
                     : '—'}
                 </div>
-                <div className="text-[10px] text-[#737067]">Source: OpenAlex</div>
+                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">Source: OpenAlex</div>
               </div>
 
-              <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] text-[10px] uppercase">
+              <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
                   <span>h-index</span>
-                  <Award className="w-3.5 h-3.5 text-amber-700" />
+                  <Award className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                 </div>
-                <div className="text-xl font-bold text-[#1C1B18]">
+                <div className="text-xl font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                   {author?.hIndex !== null && author?.hIndex !== undefined ? author.hIndex : '—'}
                 </div>
-                <div className="text-[10px] text-[#737067]">Impact metric</div>
+                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">Impact metric</div>
               </div>
 
-              <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] text-[10px] uppercase">
+              <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
                   <span>i10-index</span>
-                  <TrendingUp className="w-3.5 h-3.5 text-purple-700" />
+                  <TrendingUp className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
                 </div>
-                <div className="text-xl font-bold text-[#1C1B18]">
+                <div className="text-xl font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                   {author?.i10Index !== null && author?.i10Index !== undefined ? author.i10Index : '—'}
                 </div>
-                <div className="text-[10px] text-[#737067]">≥10 citations</div>
+                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">≥10 citations</div>
               </div>
             </div>
 
             {/* Research Topics */}
             {author?.topics && author.topics.length > 0 && (
               <div className="space-y-1.5">
-                <span className="text-[10px] font-mono-meta font-bold uppercase tracking-wider text-[#737067] block">
+                <span className="text-[10px] font-mono-meta font-bold uppercase tracking-wider text-[#737067] dark:text-[#9C988F] block">
                   Core Research Topics & Concepts:
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {author.topics.map((t, idx) => (
                     <span
                       key={idx}
-                      className="bg-white border border-[#D5D1C7] text-[#1C1B18] px-2 py-0.5 rounded-xs text-xs font-mono-meta"
+                      className="bg-white dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] text-[#1C1B18] dark:text-[#E8E6E1] px-2 py-0.5 rounded-xs text-xs font-mono-meta"
                     >
                       {t}
                     </span>
@@ -243,12 +243,12 @@ export default function AuthorProfileModal({
 
             {/* Works List with Filter-Within */}
             <div className="space-y-3 pt-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#E2DFD8]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-serif-title font-bold text-[#1C1B18]">
+                  <h3 className="text-sm font-serif-title font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                     Selected Publications & Theses ({filteredWorks.length})
                   </h3>
-                  {loading && <Loader2 className="w-3.5 h-3.5 text-blue-700 animate-spin" />}
+                  {loading && <Loader2 className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400 animate-spin" />}
                 </div>
 
                 {/* Filter within works */}
@@ -258,12 +258,12 @@ export default function AuthorProfileModal({
                     placeholder="Filter papers by keyword, venue, year..."
                     value={filterQuery}
                     onChange={(e) => setFilterQuery(e.target.value)}
-                    className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-2.5 py-1 text-xs rounded-sm focus:outline-none focus:border-[#1C1B18] font-mono-meta"
+                    className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-2.5 py-1 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta"
                   />
                   {filterQuery && (
                     <button
                       onClick={() => setFilterQuery('')}
-                      className="absolute right-2 top-1.5 text-[#737067] text-xs"
+                      className="absolute right-2 top-1.5 text-[#737067] dark:text-[#9C988F] text-xs cursor-pointer"
                     >
                       ✕
                     </button>
@@ -272,9 +272,9 @@ export default function AuthorProfileModal({
               </div>
 
               {profile?.worksStatus === 'error' ? (
-                <div className="bg-amber-50 border border-amber-200 p-6 text-center rounded-sm font-mono-meta text-xs text-amber-900 space-y-2">
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-6 text-center rounded-sm font-mono-meta text-xs text-amber-900 dark:text-amber-300 space-y-2">
                   <p className="font-bold">Author publications could not be retrieved from provider at this time.</p>
-                  <p className="text-[11px] text-amber-800">{profile.worksError || 'Technical communication timeout with OpenAlex'}</p>
+                  <p className="text-[11px] text-amber-800 dark:text-amber-400">{profile.worksError || 'Technical communication timeout with OpenAlex'}</p>
                   {onSelectAuthorPublications && (
                     <button
                       type="button"
@@ -282,15 +282,15 @@ export default function AuthorProfileModal({
                         onSelectAuthorPublications(author);
                         onClose();
                       }}
-                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1C1B18] text-white rounded-xs font-mono-meta hover:bg-[#2E2C28] cursor-pointer"
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1C1B18] dark:bg-amber-600 text-white rounded-xs font-mono-meta hover:bg-[#2E2C28] dark:hover:bg-amber-700 cursor-pointer"
                     >
-                      <Search className="w-3.5 h-3.5 text-amber-300" />
+                      <Search className="w-3.5 h-3.5 text-amber-300 dark:text-amber-100" />
                       <span>Search Publications in Main Feed</span>
                     </button>
                   )}
                 </div>
               ) : filteredWorks.length === 0 ? (
-                <div className="bg-[#FAF9F5] border border-[#E2DFD8] p-8 text-center rounded-sm font-mono-meta text-xs text-[#737067]">
+                <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#E2DFD8] dark:border-[#2C2A26] p-8 text-center rounded-sm font-mono-meta text-xs text-[#737067] dark:text-[#9C988F]">
                   {works.length === 0
                     ? 'No publication records currently indexed for this author.'
                     : 'No publications match your filter keyword.'}
@@ -300,12 +300,12 @@ export default function AuthorProfileModal({
                   {filteredWorks.map((work) => (
                     <div
                       key={work.id || work.doi || work.title}
-                      className="bg-white border border-[#E2DFD8] hover:border-[#1C1B18] p-4 rounded-sm transition space-y-2 group"
+                      className="bg-white dark:bg-[#201F1C] border border-[#E2DFD8] dark:border-[#2C2A26] hover:border-[#1C1B18] dark:hover:border-[#E8E6E1] p-4 rounded-sm transition space-y-2 group"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2 text-[10px] font-mono-meta text-[#737067] flex-wrap">
-                            <span className="bg-[#FAF9F5] border border-[#D5D1C7] px-1.5 py-0.2 rounded-xs font-bold uppercase text-[#1C1B18]">
+                          <div className="flex items-center gap-2 text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex-wrap">
+                            <span className="bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] px-1.5 py-0.2 rounded-xs font-bold uppercase text-[#1C1B18] dark:text-[#E8E6E1]">
                               {work.publicationType || 'Publication'}
                             </span>
                             {work.publishedYear && <span>{work.publishedYear}</span>}
@@ -315,7 +315,7 @@ export default function AuthorProfileModal({
                               </span>
                             )}
                             {work.citationCount !== null && work.citationCount !== undefined && (
-                              <span className="text-[#2C6B3F] font-bold">
+                              <span className="text-[#2C6B3F] dark:text-emerald-400 font-bold">
                                 ★ {work.citationCount} {work.citationCount === 1 ? 'citation' : 'citations'} · OpenAlex
                               </span>
                             )}
@@ -323,13 +323,13 @@ export default function AuthorProfileModal({
 
                           <h4
                             onClick={() => onViewThesisDetail && onViewThesisDetail(work)}
-                            className="text-sm font-serif-title font-medium text-[#1C1B18] group-hover:text-amber-900 group-hover:underline cursor-pointer leading-snug"
+                            className="text-sm font-serif-title font-medium text-[#1C1B18] dark:text-[#F0EDE6] group-hover:text-amber-900 dark:group-hover:text-amber-400 group-hover:underline cursor-pointer leading-snug"
                           >
                             {work.title}
                           </h4>
 
                           {work.authorDisplay && (
-                            <p className="text-xs text-[#524F47]">
+                            <p className="text-xs text-[#524F47] dark:text-[#B0ACA2]">
                               {work.authorDisplay}
                             </p>
                           )}
@@ -342,10 +342,10 @@ export default function AuthorProfileModal({
                               href={work.pdfUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-2.5 py-1 rounded-sm text-[11px] transition flex items-center gap-1"
+                              className="bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] px-2.5 py-1 rounded-sm text-[11px] transition flex items-center gap-1"
                               title="Open PDF full-text"
                             >
-                              <FileText className="w-3 h-3 text-amber-300" />
+                              <FileText className="w-3 h-3 text-amber-300 dark:text-amber-700" />
                               <span>PDF</span>
                             </a>
                           )}
@@ -353,7 +353,7 @@ export default function AuthorProfileModal({
                           <button
                             type="button"
                             onClick={() => onViewThesisDetail && onViewThesisDetail(work)}
-                            className="bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] px-2.5 py-1 rounded-sm text-[11px] transition cursor-pointer"
+                            className="bg-[#FAF9F5] dark:bg-[#24221E] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-2.5 py-1 rounded-sm text-[11px] transition cursor-pointer"
                           >
                             Details
                           </button>
@@ -370,9 +370,9 @@ export default function AuthorProfileModal({
                           onSelectAuthorPublications(author);
                           onClose();
                         }}
-                        className="w-full py-2.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] text-xs font-mono-meta rounded-sm transition flex items-center justify-center gap-2 cursor-pointer font-bold"
+                        className="w-full py-2.5 bg-[#FAF9F5] dark:bg-[#201F1C] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] border border-[#D5D1C7] dark:border-[#2C2A26] text-[#1C1B18] dark:text-[#F0EDE6] text-xs font-mono-meta rounded-sm transition flex items-center justify-center gap-2 cursor-pointer font-bold"
                       >
-                        <Search className="w-3.5 h-3.5 text-[#1C1B18]" />
+                        <Search className="w-3.5 h-3.5 text-[#1C1B18] dark:text-[#F0EDE6]" />
                         <span>Explore all {author?.worksCount?.toLocaleString() || ''} publications in Search Feed</span>
                       </button>
                     </div>

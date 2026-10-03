@@ -146,7 +146,7 @@ export default function PublicationDetailModal({
       if (onRequireAuth) {
         onRequireAuth('Sign in with your student account to save papers to your personal library.');
       } else {
-        alert('Sign in with your student account to save papers.');
+        console.warn('Sign in with your student account to save papers.');
       }
       return;
     }
@@ -421,28 +421,28 @@ export default function PublicationDetailModal({
       role="dialog"
       aria-labelledby="modal-paper-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-neutral-950/70 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm w-full max-w-4xl shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden text-[#1C1B18]">
+      <div className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-4xl shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden text-[#1C1B18] dark:text-[#F0EDE6]">
         {/* ========================================================================= */}
         {/* 1. STICKY SUMMARY HEADER                                                  */}
         {/* ========================================================================= */}
-        <div className="p-4 sm:p-5 bg-white border-b border-[#E2DFD8] shrink-0 space-y-3">
+        <div className="p-4 sm:p-5 bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] shrink-0 space-y-3">
           {/* Top Meta Badges & Close Button */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap text-xs font-mono-meta">
               <span
                 className={`px-2 py-0.5 rounded-sm font-bold uppercase text-[11px] ${
                   isThesisType
-                    ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                    ? 'bg-blue-100 dark:bg-blue-950/70 text-blue-900 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
                     : isPreprint
-                    ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                    ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
                     : isConference
-                    ? 'bg-purple-100 text-purple-900 border border-purple-300'
-                    : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                    ? 'bg-purple-100 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                    : 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
                 }`}
               >
                 {isThesisType
@@ -455,19 +455,19 @@ export default function PublicationDetailModal({
               </span>
 
               {thesis.publishedYear && (
-                <span className="bg-[#FAF9F5] border border-[#D5D1C7] text-[#605D55] px-2 py-0.5 rounded-sm text-[11px]">
+                <span className="bg-[#FAF9F5] dark:bg-[#272521] border border-[#D5D1C7] dark:border-[#383530] text-[#605D55] dark:text-[#9C988F] px-2 py-0.5 rounded-sm text-[11px]">
                   {thesis.publishedYear}
                 </span>
               )}
 
               {thesis.isPeerReviewed === true && (
-                <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-sm text-[11px] font-bold">
+                <span className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-sm text-[11px] font-bold">
                   ✓ Peer-Reviewed
                 </span>
               )}
 
               {thesis.source && (
-                <span className="bg-[#1C1B18] text-white px-2 py-0.5 rounded-sm font-bold uppercase text-[10px]">
+                <span className="bg-[#1C1B18] dark:bg-[#383530] text-white px-2 py-0.5 rounded-sm font-bold uppercase text-[10px]">
                   {thesis.source}
                 </span>
               )}
@@ -476,8 +476,8 @@ export default function PublicationDetailModal({
                 <span
                   className={`px-2 py-0.5 rounded-sm text-[11px] font-semibold ${
                     thesis.isOpenAccess
-                      ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                      : 'bg-neutral-100 text-neutral-800 border border-neutral-300'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      : 'bg-neutral-100 dark:bg-neutral-900/60 text-neutral-800 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-700'
                   }`}
                 >
                   {thesis.isOpenAccess ? 'Open Access' : 'Subscription'}
@@ -485,7 +485,7 @@ export default function PublicationDetailModal({
               )}
 
               {thesis.citationCount !== undefined && thesis.citationCount !== null && (
-                <span className="bg-emerald-50/80 border border-emerald-200 text-[#2C6B3F] font-bold px-2 py-0.5 rounded-sm text-[11px]">
+                <span className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[#2C6B3F] dark:text-emerald-400 font-bold px-2 py-0.5 rounded-sm text-[11px]">
                   ★ {thesis.citationCount.toLocaleString()} {thesis.citationCount === 1 ? 'Citation' : 'Citations'}
                 </span>
               )}
@@ -494,7 +494,7 @@ export default function PublicationDetailModal({
             <button
               onClick={onClose}
               aria-label="Close publication details"
-              className="text-[#737067] hover:text-[#1C1B18] font-mono-meta text-xs cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2 px-2 transition"
+              className="text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2 px-2 transition"
             >
               <span className="font-bold">[✕ CLOSE]</span>
             </button>
@@ -503,22 +503,22 @@ export default function PublicationDetailModal({
           {/* Paper Title */}
           <h2
             id="modal-paper-title"
-            className="text-lg sm:text-xl md:text-2xl font-serif-title font-normal text-[#1C1B18] leading-snug tracking-tight"
+            className="text-lg sm:text-xl md:text-2xl font-serif-title font-normal text-[#1C1B18] dark:text-[#F0EDE6] leading-snug tracking-tight"
           >
             {thesis.title}
           </h2>
 
           {/* Primary Action Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#F0ECE1]">
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#F0ECE1] dark:border-[#2C2A26]">
             {/* Direct PDF / Repository Access */}
             {isDirectPdf && thesis.pdfUrl && (
               <a
                 href={thesis.pdfUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="min-h-[44px] px-3.5 py-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white rounded-sm font-mono-meta text-xs uppercase tracking-wider font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
+                className="min-h-[44px] px-3.5 py-2 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] rounded-sm font-mono-meta text-xs uppercase tracking-wider font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
               >
-                <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                <FileText className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
                 <span>Direct PDF ↗</span>
               </a>
             )}
@@ -528,9 +528,9 @@ export default function PublicationDetailModal({
                 href={thesis.pdfUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#FAF9F5] border border-[#1C1B18] text-[#1C1B18] rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
+                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#FAF9F5] border border-[#1C1B18] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
               >
-                <Globe className="w-4 h-4 text-blue-700 shrink-0" />
+                <Globe className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" />
                 <span>Repository Page ↗</span>
               </a>
             )}
@@ -540,9 +540,9 @@ export default function PublicationDetailModal({
                 href={`https://doi.org/${thesis.doi}`}
                 target="_blank"
                 rel="noreferrer"
-                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#FAF9F5] border border-[#D5D1C7] text-blue-900 rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#FAF9F5] border border-[#D5D1C7] text-blue-900 dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-blue-300 rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 cursor-pointer"
               >
-                <ExternalLink className="w-4 h-4 text-blue-800 shrink-0" />
+                <ExternalLink className="w-4 h-4 text-blue-800 dark:text-blue-400 shrink-0" />
                 <span>Publisher DOI ↗</span>
               </a>
             )}
@@ -554,18 +554,18 @@ export default function PublicationDetailModal({
               disabled={savingPaper}
               className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 isSaved
-                  ? 'bg-amber-100 text-amber-950 border border-amber-300 hover:bg-amber-200/70'
-                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18]'
+                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-200/70'
+                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
               }`}
             >
               {isSaved ? (
                 <>
-                  <BookmarkCheck className="w-4 h-4 text-amber-800" />
+                  <BookmarkCheck className="w-4 h-4 text-amber-800 dark:text-amber-400" />
                   <span>Saved in Library</span>
                 </>
               ) : (
                 <>
-                  <Bookmark className="w-4 h-4 text-[#737067]" />
+                  <Bookmark className="w-4 h-4 text-[#737067] dark:text-[#9C988F]" />
                   <span>Save to Library</span>
                 </>
               )}
@@ -575,9 +575,9 @@ export default function PublicationDetailModal({
             <button
               type="button"
               onClick={() => onCite && onCite(thesis)}
-              className="min-h-[44px] px-3.5 py-2 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer"
             >
-              <Quote className="w-4 h-4 text-[#2C6B3F]" />
+              <Quote className="w-4 h-4 text-[#2C6B3F] dark:text-emerald-400" />
               <span>Cite</span>
             </button>
 
@@ -587,8 +587,8 @@ export default function PublicationDetailModal({
               onClick={() => onAddToCompare && onAddToCompare(thesis)}
               className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
                 inComparison
-                  ? 'bg-purple-100 text-purple-900 border border-purple-300 font-bold'
-                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18]'
+                  ? 'bg-purple-100 dark:bg-purple-950/50 text-purple-900 dark:text-purple-300 border border-purple-300 dark:border-purple-800 font-bold'
+                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
               }`}
             >
               <Scale className="w-4 h-4" />
@@ -601,11 +601,11 @@ export default function PublicationDetailModal({
               onClick={handleFindDatasetsClick}
               className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'datasets'
-                  ? 'bg-emerald-50 text-emerald-950 border border-emerald-300 font-bold'
-                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18]'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold'
+                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
               }`}
             >
-              <Database className="w-4 h-4 text-[#2C6B3F]" />
+              <Database className="w-4 h-4 text-[#2C6B3F] dark:text-emerald-400" />
               <span>
                 Datasets {totalDatasetsCount > 0 ? `(${totalDatasetsCount})` : ''}
               </span>
@@ -617,11 +617,11 @@ export default function PublicationDetailModal({
               onClick={handleQuickSummaryClick}
               className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'summary'
-                  ? 'bg-amber-100 text-amber-950 border border-amber-400 font-bold'
-                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18]'
+                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-950 dark:text-amber-300 border border-amber-400 dark:border-amber-800 font-bold'
+                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
               }`}
             >
-              <Sparkles className="w-4 h-4 text-amber-600" />
+              <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>Quick Summary</span>
             </button>
 
@@ -630,7 +630,7 @@ export default function PublicationDetailModal({
               <button
                 type="button"
                 onClick={() => onReportIssue(thesis)}
-                className="min-h-[44px] min-w-[44px] px-2.5 py-2 text-[#8C887E] hover:text-red-700 transition flex items-center justify-center cursor-pointer ml-auto"
+                className="min-h-[44px] min-w-[44px] px-2.5 py-2 text-[#8C887E] dark:text-[#9C988F] hover:text-red-700 dark:hover:text-red-400 transition flex items-center justify-center cursor-pointer ml-auto"
                 title="Report issue or broken metadata"
                 aria-label="Report issue"
               >
@@ -643,14 +643,14 @@ export default function PublicationDetailModal({
         {/* ========================================================================= */}
         {/* 2. TABBED NAVIGATION BAR                                                  */}
         {/* ========================================================================= */}
-        <div className="bg-white border-b border-[#E2DFD8] px-4 sm:px-5 flex gap-1 sm:gap-2 overflow-x-auto shrink-0 font-mono-meta text-xs">
+        <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] px-4 sm:px-5 flex gap-1 sm:gap-2 overflow-x-auto shrink-0 font-mono-meta text-xs">
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
             className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
               activeTab === 'overview'
-                ? 'border-[#1C1B18] text-[#1C1B18] bg-[#FAF9F5]'
-                : 'border-transparent text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5]/60'
+                ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
+                : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
@@ -662,11 +662,11 @@ export default function PublicationDetailModal({
             onClick={handleSummaryTabClick}
             className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
               activeTab === 'summary'
-                ? 'border-amber-600 text-amber-950 bg-amber-50/50'
-                : 'border-transparent text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5]/60'
+                ? 'border-amber-600 dark:border-amber-500 text-amber-950 dark:text-amber-300 bg-amber-50/50 dark:bg-amber-950/40'
+                : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span>Quick Summary</span>
           </button>
 
@@ -675,8 +675,8 @@ export default function PublicationDetailModal({
             onClick={() => setActiveTab('authors')}
             className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
               activeTab === 'authors'
-                ? 'border-[#1C1B18] text-[#1C1B18] bg-[#FAF9F5]'
-                : 'border-transparent text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5]/60'
+                ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
+                : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
@@ -690,8 +690,8 @@ export default function PublicationDetailModal({
             onClick={() => setActiveTab('datasets')}
             className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
               activeTab === 'datasets'
-                ? 'border-[#1C1B18] text-[#1C1B18] bg-[#FAF9F5]'
-                : 'border-transparent text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5]/60'
+                ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
+                : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
             <Database className="w-3.5 h-3.5" />
@@ -705,8 +705,8 @@ export default function PublicationDetailModal({
             onClick={() => setActiveTab('citations')}
             className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
               activeTab === 'citations'
-                ? 'border-[#1C1B18] text-[#1C1B18] bg-[#FAF9F5]'
-                : 'border-transparent text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5]/60'
+                ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
+                : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
             <Quote className="w-3.5 h-3.5" />
@@ -1927,8 +1927,8 @@ export default function PublicationDetailModal({
         {/* ========================================================================= */}
         {/* 4. ANCHORED ACTION FOOTER                                                 */}
         {/* ========================================================================= */}
-        <div className="px-4 sm:px-6 py-3 border-t border-[#E2DFD8] bg-white flex items-center justify-between gap-3 font-mono-meta text-xs shrink-0 flex-wrap">
-          <div className="flex items-center gap-2 text-[#737067] text-[11px]">
+        <div className="px-4 sm:px-6 py-3 border-t border-[#E2DFD8] dark:border-[#2C2A26] bg-white dark:bg-[#201F1C] flex items-center justify-between gap-3 font-mono-meta text-xs shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 text-[#737067] dark:text-[#9C988F] text-[11px]">
             <span>Panther Scholarly Archive</span>
             {thesis.doi && (
               <>
@@ -1942,15 +1942,15 @@ export default function PublicationDetailModal({
             <button
               type="button"
               onClick={() => onCite && onCite(thesis)}
-              className="min-h-[44px] bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] px-3.5 py-2 rounded-sm transition cursor-pointer flex items-center gap-1.5"
+              className="min-h-[44px] bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] px-3.5 py-2 rounded-sm transition cursor-pointer flex items-center gap-1.5"
             >
-              <Quote className="w-3.5 h-3.5 text-[#2C6B3F]" />
+              <Quote className="w-3.5 h-3.5 text-[#2C6B3F] dark:text-emerald-400" />
               <span className="font-bold">Cite</span>
             </button>
 
             <button
               onClick={onClose}
-              className="min-h-[44px] bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-5 py-2 rounded-sm uppercase tracking-wider font-bold transition cursor-pointer shadow-2xs"
+              className="min-h-[44px] bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] px-5 py-2 rounded-sm uppercase tracking-wider font-bold transition cursor-pointer shadow-2xs"
             >
               Close
             </button>

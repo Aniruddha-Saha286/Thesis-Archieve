@@ -40,7 +40,10 @@ export const SocketProvider = ({ children }) => {
 
       if (currentUserId === targetStudentId) {
         if (payload.status === 'deleted') {
-          alert('Your academic account has been removed by an administrator.');
+          setRealtimeNotice({
+            type: 'error',
+            message: 'Your academic account has been removed by an administrator.',
+          });
           logout();
           return;
         }
@@ -116,6 +119,9 @@ export const SocketProvider = ({ children }) => {
     isConnected,
     realtimeNotice,
     clearRealtimeNotice: () => setRealtimeNotice(null),
+    setRealtimeNotice,
+    showNotice: (msg, type = 'info') =>
+      setRealtimeNotice(typeof msg === 'string' ? { type, message: msg } : msg),
   };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
@@ -124,7 +130,14 @@ export const SocketProvider = ({ children }) => {
 export const useSocket = () => {
   const context = useContext(SocketContext);
   if (!context) {
-    return { socket: null, isConnected: false, realtimeNotice: null, clearRealtimeNotice: () => {} };
+    return {
+      socket: null,
+      isConnected: false,
+      realtimeNotice: null,
+      clearRealtimeNotice: () => {},
+      setRealtimeNotice: () => {},
+      showNotice: () => {},
+    };
   }
   return context;
 };

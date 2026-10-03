@@ -47,29 +47,29 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white border border-[#D5D1C7] rounded-sm w-full max-w-xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#737067] hover:text-[#1C1B18] font-mono-meta text-xs cursor-pointer"
+          className="absolute top-4 right-4 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer"
         >
           [✕ CLOSE]
         </button>
 
-        <div className="mb-4 pb-2 border-b border-[#E2DFD8]">
-          <span className="text-[10px] font-mono-meta text-[#737067] uppercase tracking-wider block">
+        <div className="mb-4 pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+          <span className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] uppercase tracking-wider block">
             Archival Intake
           </span>
-          <h3 className="text-xl font-serif-title text-[#1C1B18] mt-0.5">
+          <h3 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] mt-0.5">
             Deposit Thesis & Empirical Dataset
           </h3>
-          <p className="text-xs text-[#737067] font-light">
+          <p className="text-xs text-[#737067] dark:text-[#9C988F] font-light">
             Share approved academic research to assist upcoming student cohorts.
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-mono-meta flex items-center gap-2">
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-mono-meta flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -77,7 +77,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div>
-            <label className="block font-medium text-[#1C1B18] mb-1">Thesis Title *</label>
+            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Thesis Title *</label>
             <input
               type="text"
               name="title"
@@ -85,18 +85,18 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
               value={formData.title}
               onChange={handleChange}
               placeholder="e.g. Degradation Kinetics of Lead-Free Perovskite Absorbers..."
-              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+              className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Research Domain *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Research Domain *</label>
               <select
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               >
                 <option>Renewable Energy & Materials</option>
                 <option>Computer Science & NLP</option>
@@ -107,12 +107,12 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
               </select>
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Degree Level *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Degree Level *</label>
               <select
                 name="degreeType"
                 value={formData.degreeType}
                 onChange={handleChange}
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               >
                 <option>B.Sc. Capstone</option>
                 <option>M.Sc. Thesis</option>
@@ -124,7 +124,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">University / Institute *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">University / Institute *</label>
               <input
                 type="text"
                 name="university"
@@ -132,11 +132,11 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
                 value={formData.university}
                 onChange={handleChange}
                 placeholder="e.g. University of Dhaka"
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Department / Faculty *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Department / Faculty *</label>
               <input
                 type="text"
                 name="department"
@@ -144,14 +144,14 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
                 value={formData.department}
                 onChange={handleChange}
                 placeholder="e.g. Computer Science & Eng."
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Author / Researcher *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Author / Researcher *</label>
               <input
                 type="text"
                 name="author"
@@ -159,34 +159,34 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
                 value={formData.author}
                 onChange={handleChange}
                 placeholder="e.g. Rafiul Islam"
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Faculty Advisor</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Faculty Advisor</label>
               <input
                 type="text"
                 name="advisor"
                 value={formData.advisor}
                 onChange={handleChange}
                 placeholder="e.g. Dr. N. H. Chowdhury"
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Year</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Year</label>
               <input
                 type="number"
                 name="publishedYear"
                 value={formData.publishedYear}
                 onChange={handleChange}
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-medium text-[#1C1B18] mb-1">Abstract Summary *</label>
+            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Abstract Summary *</label>
             <textarea
               name="abstract"
               rows="3"
@@ -194,60 +194,60 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
               value={formData.abstract}
               onChange={handleChange}
               placeholder="Provide background, methodology, experimental setup, and main findings..."
-              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+              className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
             ></textarea>
           </div>
 
           <div>
-            <label className="block font-medium text-[#1C1B18] mb-1">Direct PDF Document URL (Optional)</label>
+            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Direct PDF Document URL (Optional)</label>
             <input
               type="url"
               name="pdfUrl"
               value={formData.pdfUrl}
               onChange={handleChange}
               placeholder="e.g. https://arxiv.org/pdf/2301.12345.pdf or https://zenodo.org/records/.../files/manuscript.pdf"
-              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18] text-xs font-mono-meta"
+              className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] text-xs font-mono-meta"
             />
-            <p className="text-[10px] text-[#737067] mt-1 font-mono-meta">
+            <p className="text-[10px] text-[#737067] dark:text-[#9C988F] mt-1 font-mono-meta">
               Direct URL to full manuscript. If left blank, users can search full-text citations via Google Scholar & Semantic Scholar mirrors.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Dataset Repository URL (Optional)</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset Repository URL (Optional)</label>
               <input
                 type="url"
                 name="datasetUrl"
                 value={formData.datasetUrl}
                 onChange={handleChange}
                 placeholder="https://zenodo.org/... or https://dataverse.harvard.edu/..."
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18] text-xs font-mono-meta"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] text-xs font-mono-meta"
               />
-              <p className="text-[10px] text-[#737067] mt-1 font-mono-meta">
+              <p className="text-[10px] text-[#737067] dark:text-[#9C988F] mt-1 font-mono-meta">
                 Approved scholarly repositories only (Zenodo, Harvard Dataverse, Dryad, Figshare, OSF, Hugging Face). Arbitrary cloud drives are rejected.
               </p>
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Dataset Size</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset Size</label>
               <input
                 type="text"
                 name="datasetSize"
                 value={formData.datasetSize}
                 onChange={handleChange}
                 placeholder="e.g. 42 MB"
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] mb-1">Dataset Format</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset Format</label>
               <input
                 type="text"
                 name="datasetFormat"
                 value={formData.datasetFormat}
                 onChange={handleChange}
                 placeholder="CSV / Parquet / HDF5"
-                className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18]"
+                className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
           </div>
@@ -256,7 +256,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#1C1B18] hover:bg-[#2E2C28] text-white font-medium py-2 rounded-sm transition text-xs shadow-sm cursor-pointer disabled:opacity-50"
+              className="w-full bg-[#1C1B18] dark:bg-amber-600 hover:bg-[#2E2C28] dark:hover:bg-amber-700 text-white font-medium py-2 rounded-sm transition text-xs shadow-sm cursor-pointer disabled:opacity-50"
             >
               {loading ? 'Depositing Document...' : 'Index Thesis to Archive'}
             </button>

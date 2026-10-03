@@ -1759,4 +1759,65 @@ router.post('/memberships/grants/:id/revoke', requireAdmin, adminActionLimiter, 
   }
 });
 
+// ==========================================
+// 12. System Settings & Maintenance Controls
+// ==========================================
+
+const { getMaintenanceStatus, setMaintenanceStatus } = require('../services/systemSettingService');
+const { getIO } = require('../socket');
+
+router.get('/system/maintenance', requireAdmin, async (req, res) => {
+  try {
+    const status = await getMaintenanceStatus();
+    return res.json(status);
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to retrieve maintenance status.' });
+  }
+});
+
+router.put('/system/maintenance', requireAdmin, async (req, res) => {
+  try {
+    const { enabled, message } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ message: 'Field "enabled" (boolean) is required.' });
+    }
+
+    const updated = await setMaintenanceStatus({
+      enabled,
+      message: message || undefined,
+      updatedBy: req.user.email || String(req.user._id),
+    });
+
+    await AuditEvent.create({
+      actor: req.user._id,
+      action: enabled ? 'system:maintenance_enabled' : 'system:maintenance_disabled',
+      targetType: 'SystemSetting',
+      targetId: 'site_config',
+      metadata: {
+        enabled,
+        message: updated.message,
+      },
+      ipAddress: req.ip || '',
+    });
+
+    const io = getIO();
+    if (io) {
+      io.emit('system:maintenance_changed', {
+        enabled: updated.enabled,
+        message: updated.message,
+      });
+    }
+
+    return res.json({
+      message: enabled
+        ? 'Maintenance mode enabled successfully.'
+        : 'Maintenance mode disabled successfully.',
+      status: updated,
+    });
+  } catch (err) {
+    console.error('Error updating maintenance status:', err);
+    return res.status(500).json({ message: 'Failed to update maintenance status.' });
+  }
+});
+
 module.exports = router;

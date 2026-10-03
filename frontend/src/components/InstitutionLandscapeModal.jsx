@@ -247,29 +247,29 @@ export default function InstitutionLandscapeModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="landscape-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 dark:bg-black/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
     >
       <div
-        className="bg-[#FAF9F5] border border-[#1C1B18] w-full max-w-4xl max-h-[92vh] flex flex-col rounded-sm shadow-2xl overflow-hidden my-auto"
+        className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#1C1B18] dark:border-[#2C2A26] w-full max-w-4xl max-h-[92vh] flex flex-col rounded-sm shadow-2xl overflow-hidden my-auto text-[#1C1B18] dark:text-[#F0EDE6]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ========================================================================= */}
         {/* MODAL HEADER                                                              */}
         {/* ========================================================================= */}
-        <div className="bg-white border-b border-[#E2DFD8] p-4 sm:p-5 shrink-0 flex items-start justify-between gap-4">
+        <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] p-4 sm:p-5 shrink-0 flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="bg-[#1C1B18] text-white text-[11px] font-mono-meta font-bold px-2 py-0.5 rounded-2xs uppercase tracking-wider flex items-center gap-1.5">
+              <span className="bg-[#1C1B18] dark:bg-[#383530] text-white text-[11px] font-mono-meta font-bold px-2 py-0.5 rounded-2xs uppercase tracking-wider flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" />
                 Institution Landscape
               </span>
               {data?.institution?.countryCode && (
-                <span className="bg-[#FAF9F5] border border-[#D5D1C7] text-[#1C1B18] text-[11px] font-mono-meta font-bold px-1.5 py-0.5 rounded-2xs">
+                <span className="bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] text-[11px] font-mono-meta font-bold px-1.5 py-0.5 rounded-2xs">
                   {data.institution.countryCode} {data.institution.countryName ? `· ${data.institution.countryName}` : ''}
                 </span>
               )}
               {data?.cached && (
-                <span className="text-[11px] font-mono-meta text-[#737067] bg-[#F2EFE8] px-2 py-0.5 rounded-2xs">
+                <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] bg-[#F2EFE8] dark:bg-[#2A2824] px-2 py-0.5 rounded-2xs">
                   Cached ({Math.floor((data.cacheAgeSeconds || 0) / 60)}m ago)
                 </span>
               )}
@@ -277,19 +277,19 @@ export default function InstitutionLandscapeModal({
 
             <h2
               id="landscape-modal-title"
-              className="text-xl sm:text-2xl font-serif-title font-normal text-[#1C1B18] leading-tight"
+              className="text-xl sm:text-2xl font-serif-title font-normal text-[#1C1B18] dark:text-[#F0EDE6] leading-tight"
             >
               {data?.institution?.name || institution?.name || 'Institution Research Landscape'}
             </h2>
 
             {/* Registry links */}
-            <div className="flex items-center gap-3 text-xs font-mono-meta text-[#737067] pt-0.5 flex-wrap">
+            <div className="flex items-center gap-3 text-xs font-mono-meta text-[#737067] dark:text-[#9C988F] pt-0.5 flex-wrap">
               {canonicalId && (
                 <a
                   href={`https://openalex.org/${canonicalId}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-[#1C1B18] underline inline-flex items-center gap-1"
+                  className="hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] underline inline-flex items-center gap-1"
                 >
                   <span>OpenAlex: {canonicalId}</span>
                   <ExternalLink className="w-3 h-3" />
@@ -300,7 +300,7 @@ export default function InstitutionLandscapeModal({
                   href={data.institution.ror}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-[#1C1B18] underline inline-flex items-center gap-1"
+                  className="hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] underline inline-flex items-center gap-1"
                 >
                   <span>ROR Registry</span>
                   <ExternalLink className="w-3 h-3" />
@@ -311,7 +311,7 @@ export default function InstitutionLandscapeModal({
                   href={data.institution.homepageUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-[#1C1B18] underline inline-flex items-center gap-1"
+                  className="hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] underline inline-flex items-center gap-1"
                 >
                   <span>Official Website</span>
                   <ExternalLink className="w-3 h-3" />
@@ -327,7 +327,7 @@ export default function InstitutionLandscapeModal({
               disabled={loading}
               title="Force refresh authoritative analytics"
               aria-label="Force refresh analytics"
-              className="min-h-[44px] min-w-[44px] p-2 text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5] border border-transparent hover:border-[#D5D1C7] rounded-sm transition flex items-center justify-center cursor-pointer disabled:opacity-50"
+              className="min-h-[44px] min-w-[44px] p-2 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5] dark:hover:bg-[#272521] border border-transparent hover:border-[#D5D1C7] dark:hover:border-[#383530] rounded-sm transition flex items-center justify-center cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -335,7 +335,7 @@ export default function InstitutionLandscapeModal({
               type="button"
               onClick={onClose}
               aria-label="Close institution landscape modal"
-              className="min-h-[44px] min-w-[44px] p-2 text-[#737067] hover:text-[#1C1B18] hover:bg-[#FAF9F5] border border-transparent hover:border-[#D5D1C7] rounded-sm transition flex items-center justify-center cursor-pointer"
+              className="min-h-[44px] min-w-[44px] p-2 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5] dark:hover:bg-[#272521] border border-transparent hover:border-[#D5D1C7] dark:hover:border-[#383530] rounded-sm transition flex items-center justify-center cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -345,13 +345,13 @@ export default function InstitutionLandscapeModal({
         {/* ========================================================================= */}
         {/* STRICT AFFILIATION SCOPE BANNER                                           */}
         {/* ========================================================================= */}
-        <div className="bg-[#FAF9F5] border-b border-[#E2DFD8] px-4 py-2.5 sm:px-5 flex items-start gap-2.5 text-xs text-[#524F47]">
-          <Info className="w-4 h-4 text-[#8C887E] shrink-0 mt-0.5" />
+        <div className="bg-[#FAF9F5] dark:bg-[#181715] border-b border-[#E2DFD8] dark:border-[#2C2A26] px-4 py-2.5 sm:px-5 flex items-start gap-2.5 text-xs text-[#524F47] dark:text-[#B0ACA2]">
+          <Info className="w-4 h-4 text-[#8C887E] dark:text-[#9C988F] shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong className="text-[#1C1B18] font-semibold">Affiliation Scope: </strong>
+            <strong className="text-[#1C1B18] dark:text-[#F0EDE6] font-semibold">Affiliation Scope: </strong>
             {data?.scopeNote ||
               'OpenAlex-indexed works with at least one author affiliated with this institution.'}{' '}
-            <span className="text-[#737067]">
+            <span className="text-[#737067] dark:text-[#9C988F]">
               This represents collaborative research footprint, not works publisher-owned or exclusively produced by this university.
             </span>
           </p>
@@ -830,12 +830,12 @@ export default function InstitutionLandscapeModal({
         {/* ========================================================================= */}
         {/* MODAL FOOTER                                                              */}
         {/* ========================================================================= */}
-        <div className="bg-white border-t border-[#E2DFD8] p-3 sm:p-4 shrink-0 flex items-center justify-between gap-3 text-xs font-mono-meta text-[#737067]">
+        <div className="bg-white dark:bg-[#201F1C] border-t border-[#E2DFD8] dark:border-[#2C2A26] p-3 sm:p-4 shrink-0 flex items-center justify-between gap-3 text-xs font-mono-meta text-[#737067] dark:text-[#9C988F]">
           <span>Source: OpenAlex Open Scholarly Knowledge Graph</span>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] px-4 py-2 bg-[#1C1B18] hover:bg-[#2E2C28] text-white rounded-sm font-bold uppercase tracking-wider cursor-pointer transition"
+            className="min-h-[44px] px-4 py-2 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] rounded-sm font-bold uppercase tracking-wider cursor-pointer transition"
           >
             Close Landscape
           </button>

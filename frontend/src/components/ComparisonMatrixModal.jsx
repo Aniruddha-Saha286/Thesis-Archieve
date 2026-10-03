@@ -18,6 +18,13 @@ export default function ComparisonMatrixModal({
   const [editableNotes, setEditableNotes] = useState({});
   const [savedMatrices, setSavedMatrices] = useState([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const showNotice = (message, type = 'info') => {
+    setNotice({ message, type });
+    setTimeout(() => setNotice(null), 3500);
+  };
 
   const fetchSavedMatrices = async () => {
     try {
@@ -74,7 +81,7 @@ export default function ComparisonMatrixModal({
       fetchSavedMatrices();
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save comparison matrix.');
+      showNotice(err.response?.data?.message || 'Failed to save comparison matrix.', 'error');
     } finally {
       setSaving(false);
     }
@@ -104,16 +111,23 @@ export default function ComparisonMatrixModal({
     setViewTab('matrix');
   };
 
-  const handleDeleteMatrix = async (id, title) => {
-    if (!window.confirm(`Delete comparison matrix "${title}"?`)) return;
+  const handleDeleteMatrix = (id, title) => {
+    setDeleteConfirm({ id, title });
+  };
+
+  const confirmDeleteMatrix = async () => {
+    if (!deleteConfirm) return;
+    const { id } = deleteConfirm;
+    setDeleteConfirm(null);
     try {
       await axios.delete(`/api/user/comparisons/${id}`);
       setSavedMatrices((prev) => prev.filter((m) => m._id !== id));
       if (currentMatrixId === id) {
         setCurrentMatrixId(null);
       }
+      showNotice('Comparison matrix deleted.', 'success');
     } catch (err) {
-      alert('Failed to delete comparison matrix.');
+      showNotice('Failed to delete comparison matrix.', 'error');
     }
   };
 
@@ -145,22 +159,22 @@ export default function ComparisonMatrixModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white border border-[#D5D1C7] rounded-sm w-full max-w-6xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-6xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8]">
+        <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
           <div className="flex items-center gap-3">
-            <Scale className="w-5 h-5 text-purple-700" />
+            <Scale className="w-5 h-5 text-purple-700 dark:text-purple-400" />
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-serif-title text-[#1C1B18]">Literature Review Comparison Matrix</h2>
+                <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Literature Review Comparison Matrix</h2>
                 {currentMatrixId && (
-                  <span className="bg-purple-100 text-purple-900 text-[10px] font-mono-meta px-2 py-0.5 rounded-sm font-bold">
+                  <span className="bg-purple-100 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[10px] font-mono-meta px-2 py-0.5 rounded-sm font-bold">
                     Editing Saved Matrix
                   </span>
                 )}
               </div>
-              <span className="text-xs font-mono-meta text-[#737067]">
+              <span className="text-xs font-mono-meta text-[#737067] dark:text-[#9C988F]">
                 Side-by-side synthesis of methodologies, empirical benchmarks, findings, and limitations
               </span>
             </div>
@@ -168,12 +182,14 @@ export default function ComparisonMatrixModal({
 
           <div className="flex items-center gap-2 font-mono-meta text-xs">
             {/* View Switcher */}
-            <div className="flex border border-[#D5D1C7] rounded-sm mr-2">
+            <div className="flex border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm mr-2">
               <button
                 type="button"
                 onClick={() => setViewTab('matrix')}
                 className={`px-3 py-1 text-xs cursor-pointer transition ${
-                  viewTab === 'matrix' ? 'bg-[#1C1B18] text-white font-bold' : 'bg-white text-[#737067] hover:bg-[#FAF9F5]'
+                  viewTab === 'matrix'
+                    ? 'bg-[#1C1B18] dark:bg-[#F0EDE6] text-white dark:text-[#141412] font-bold'
+                    : 'bg-white dark:bg-[#201F1C] text-[#737067] dark:text-[#9C988F] hover:bg-[#FAF9F5] dark:hover:bg-[#272521]'
                 }`}
               >
                 Active Matrix
@@ -182,7 +198,9 @@ export default function ComparisonMatrixModal({
                 type="button"
                 onClick={() => setViewTab('saved')}
                 className={`px-3 py-1 text-xs cursor-pointer transition flex items-center gap-1 ${
-                  viewTab === 'saved' ? 'bg-[#1C1B18] text-white font-bold' : 'bg-white text-[#737067] hover:bg-[#FAF9F5]'
+                  viewTab === 'saved'
+                    ? 'bg-[#1C1B18] dark:bg-[#F0EDE6] text-white dark:text-[#141412] font-bold'
+                    : 'bg-white dark:bg-[#201F1C] text-[#737067] dark:text-[#9C988F] hover:bg-[#FAF9F5] dark:hover:bg-[#272521]'
                 }`}
               >
                 <FolderOpen className="w-3.5 h-3.5" />
@@ -195,10 +213,10 @@ export default function ComparisonMatrixModal({
                 <button
                   type="button"
                   onClick={handleExportCsv}
-                  className="bg-white hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] px-3 py-1.5 rounded-sm flex items-center gap-1.5 transition cursor-pointer"
+                  className="bg-white dark:bg-[#201F1C] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-3 py-1.5 rounded-sm flex items-center gap-1.5 transition cursor-pointer"
                   title="Export comparison matrix as CSV table"
                 >
-                  <Download className="w-3.5 h-3.5 text-blue-700" />
+                  <Download className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
                   <span>Export CSV</span>
                 </button>
 
@@ -206,7 +224,7 @@ export default function ComparisonMatrixModal({
                   type="button"
                   onClick={() => handleSaveMatrix(false)}
                   disabled={saving}
-                  className="bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-3 py-1.5 rounded-sm flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
+                  className="bg-[#1C1B18] dark:bg-purple-700 hover:bg-[#2E2C28] dark:hover:bg-purple-800 text-white px-3 py-1.5 rounded-sm flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
                 >
                   {savedSuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Save className="w-3.5 h-3.5" />}
                   <span>{savedSuccess ? 'Saved!' : currentMatrixId ? 'Update Matrix' : 'Save Matrix'}</span>
@@ -217,7 +235,7 @@ export default function ComparisonMatrixModal({
                     type="button"
                     onClick={() => handleSaveMatrix(true)}
                     disabled={saving}
-                    className="bg-white hover:bg-[#FAF9F5] border border-[#D5D1C7] text-[#1C1B18] px-2.5 py-1.5 rounded-sm transition cursor-pointer"
+                    className="bg-white dark:bg-[#201F1C] hover:bg-[#FAF9F5] dark:hover:bg-[#2A2824] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-2.5 py-1.5 rounded-sm transition cursor-pointer"
                     title="Save copy as new matrix"
                   >
                     Save Copy
@@ -227,7 +245,7 @@ export default function ComparisonMatrixModal({
                 <button
                   type="button"
                   onClick={onClear}
-                  className="text-red-700 hover:underline px-2 py-1 cursor-pointer"
+                  className="text-red-700 dark:text-red-400 hover:underline px-2 py-1 cursor-pointer"
                 >
                   Clear All
                 </button>
@@ -236,36 +254,47 @@ export default function ComparisonMatrixModal({
 
             <button
               onClick={onClose}
-              className="text-[#737067] hover:text-[#1C1B18] cursor-pointer ml-2"
+              className="text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer ml-2"
             >
               [✕ CLOSE]
             </button>
           </div>
         </div>
 
+        {notice && (
+          <div className={`mt-3 px-3 py-2 text-xs font-mono-meta flex items-center justify-between rounded-sm border ${
+            notice.type === 'error'
+              ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+          }`}>
+            <span>{notice.message}</span>
+            <button onClick={() => setNotice(null)} className="cursor-pointer text-xs ml-2 hover:opacity-75">✕</button>
+          </div>
+        )}
+
         {/* View 1: Saved Matrices List Flow */}
         {viewTab === 'saved' ? (
-          <div className="flex-1 overflow-auto my-3 border border-[#E2DFD8] rounded-sm p-4 bg-[#FAF9F5]">
+          <div className="flex-1 overflow-auto my-3 border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm p-4 bg-[#FAF9F5] dark:bg-[#141412]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-serif-title text-base text-[#1C1B18]">
+              <h3 className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6]">
                 Your Saved Literature Review Matrices ({savedMatrices.length})
               </h3>
               <button
                 onClick={() => setViewTab('matrix')}
-                className="bg-[#1C1B18] text-white text-xs px-3 py-1.5 rounded-sm font-mono-meta flex items-center gap-1 cursor-pointer"
+                className="bg-[#1C1B18] dark:bg-[#2C2A26] text-white text-xs px-3 py-1.5 rounded-sm font-mono-meta flex items-center gap-1 cursor-pointer hover:bg-[#2E2C28] dark:hover:bg-[#383530]"
               >
                 <Plus className="w-3 h-3" /> Create / Return to Active
               </button>
             </div>
 
             {loadingSaved ? (
-              <div className="p-8 text-center text-xs font-mono-meta text-[#737067]">
+              <div className="p-8 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9C988F]">
                 Loading saved comparison matrices...
               </div>
             ) : savedMatrices.length === 0 ? (
-              <div className="p-12 text-center text-xs font-mono-meta text-[#737067] space-y-2">
+              <div className="p-12 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9C988F] space-y-2">
                 <FolderOpen className="w-8 h-8 mx-auto text-[#8C887E] opacity-60" />
-                <p className="font-medium text-[#1C1B18]">No saved comparison matrices yet.</p>
+                <p className="font-medium text-[#1C1B18] dark:text-[#F0EDE6]">No saved comparison matrices yet.</p>
                 <p className="text-[11px]">Synthesize papers in the Active Matrix tab and click "Save Matrix" to preserve your literature notes.</p>
               </div>
             ) : (
@@ -273,32 +302,32 @@ export default function ComparisonMatrixModal({
                 {savedMatrices.map((matrix) => (
                   <div
                     key={matrix._id}
-                    className="p-4 bg-white border border-[#D5D1C7] rounded-sm flex flex-col justify-between space-y-3 hover:border-[#1C1B18] transition"
+                    className="p-4 bg-white dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#33302A] rounded-sm flex flex-col justify-between space-y-3 hover:border-[#1C1B18] dark:hover:border-[#E8E6E1] transition"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="font-serif-title text-base text-[#1C1B18] line-clamp-1">{matrix.title}</h4>
-                        <span className="text-[10px] font-mono-meta bg-purple-50 text-purple-900 border border-purple-200 px-1.5 py-0.5 rounded-xs shrink-0 font-bold">
+                        <h4 className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6] line-clamp-1">{matrix.title}</h4>
+                        <span className="text-[10px] font-mono-meta bg-purple-50 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded-xs shrink-0 font-bold">
                           {matrix.paperIds?.length || 0} papers
                         </span>
                       </div>
-                      <div className="text-[11px] font-mono-meta text-[#737067] flex items-center gap-1 mt-1">
+                      <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center gap-1 mt-1">
                         <Clock className="w-3 h-3" />
                         <span>Last modified: {new Date(matrix.updatedAt || matrix.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#EAE7DF] pt-2 text-xs font-mono-meta">
+                    <div className="flex items-center justify-between border-t border-[#EAE7DF] dark:border-[#2C2A26] pt-2 text-xs font-mono-meta">
                       <button
                         onClick={() => handleReopenMatrix(matrix)}
-                        className="bg-[#1C1B18] text-white hover:bg-[#2E2C28] px-3 py-1 rounded-sm flex items-center gap-1 cursor-pointer"
+                        className="bg-[#1C1B18] dark:bg-[#2C2A26] text-white hover:bg-[#2E2C28] dark:hover:bg-[#383530] px-3 py-1 rounded-sm flex items-center gap-1 cursor-pointer"
                       >
                         <ExternalLink className="w-3 h-3" /> Reopen & Edit
                       </button>
 
                       <button
                         onClick={() => handleDeleteMatrix(matrix._id, matrix.title)}
-                        className="text-red-700 hover:text-red-900 flex items-center gap-1 cursor-pointer"
+                        className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 flex items-center gap-1 cursor-pointer"
                       >
                         <Trash2 className="w-3 h-3" /> Delete
                       </button>
@@ -313,24 +342,24 @@ export default function ComparisonMatrixModal({
           <>
             {/* Matrix Title Input */}
             <div className="py-2 flex items-center gap-3">
-              <label className="text-xs font-mono-meta text-[#737067] uppercase font-bold shrink-0">
+              <label className="text-xs font-mono-meta text-[#737067] dark:text-[#9C988F] uppercase font-bold shrink-0">
                 Synthesis Topic:
               </label>
               <input
                 type="text"
                 value={matrixTitle}
                 onChange={(e) => setMatrixTitle(e.target.value)}
-                className="flex-1 bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1 text-xs text-[#1C1B18] rounded-sm font-sans focus:outline-none focus:border-[#1C1B18]"
+                className="flex-1 bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#33302A] px-3 py-1 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm font-sans focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
                 placeholder="e.g. Deep Learning Approaches for Climate Prediction Benchmarks"
               />
             </div>
 
             {/* Matrix Table Area */}
-            <div className="flex-1 overflow-auto border border-[#E2DFD8] rounded-sm my-2 bg-white">
+            <div className="flex-1 overflow-auto border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm my-2 bg-white dark:bg-[#1A1916]">
               {comparisonPapers.length === 0 ? (
-                <div className="p-16 text-center text-xs font-mono-meta text-[#737067] space-y-2">
+                <div className="p-16 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9C988F] space-y-2">
                   <Scale className="w-8 h-8 mx-auto text-[#8C887E] opacity-60" />
-                  <p className="font-medium text-[#1C1B18]">No publications selected for comparison.</p>
+                  <p className="font-medium text-[#1C1B18] dark:text-[#F0EDE6]">No publications selected for comparison.</p>
                   <p className="text-[11px] max-w-md mx-auto">
                     Click <strong>"Compare"</strong> on any thesis or research paper in the discovery catalog to add up to 5 papers side-by-side, or load a saved matrix from the <strong>Saved</strong> tab above.
                   </p>
@@ -338,24 +367,24 @@ export default function ComparisonMatrixModal({
               ) : (
                 <table className="w-full border-collapse text-xs text-left">
                   <thead>
-                    <tr className="bg-[#FAF9F5] border-b border-[#E2DFD8]">
-                      <th className="p-3 font-mono-meta font-bold uppercase text-[#605D55] text-[11px] w-48 border-r border-[#E2DFD8] sticky left-0 bg-[#FAF9F5] z-10">
+                    <tr className="bg-[#FAF9F5] dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+                      <th className="p-3 font-mono-meta font-bold uppercase text-[#605D55] dark:text-[#9C988F] text-[11px] w-48 border-r border-[#E2DFD8] dark:border-[#2C2A26] sticky left-0 bg-[#FAF9F5] dark:bg-[#201F1C] z-10">
                         Criterion
                       </th>
                       {comparisonPapers.map((paper) => {
                         const pId = paper._id || paper.id || paper.paperId;
                         return (
-                          <th key={pId} className="p-3 font-serif-title font-normal text-base text-[#1C1B18] min-w-[240px] max-w-[320px] border-r border-[#E2DFD8] last:border-r-0 relative align-top">
+                          <th key={pId} className="p-3 font-serif-title font-normal text-base text-[#1C1B18] dark:text-[#F0EDE6] min-w-[240px] max-w-[320px] border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 relative align-top">
                             <div className="pr-6">
                               <div className="line-clamp-2 leading-snug">{paper.title}</div>
-                              <div className="text-[10px] font-mono-meta text-[#737067] font-normal mt-1">
+                              <div className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] font-normal mt-1">
                                 {paper.publishedYear || paper.year || 'N/A'} • {paper.publicationType || paper.degreeType || 'Article'}
                               </div>
                             </div>
                             <button
                               type="button"
                               onClick={() => onRemovePaper && onRemovePaper(pId)}
-                              className="absolute top-3 right-2 text-[#8C887E] hover:text-red-700 p-0.5 cursor-pointer"
+                              className="absolute top-3 right-2 text-[#8C887E] hover:text-red-700 dark:hover:text-red-400 p-0.5 cursor-pointer"
                               title="Remove from comparison"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -365,14 +394,14 @@ export default function ComparisonMatrixModal({
                       })}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E2DFD8] text-xs">
+                  <tbody className="divide-y divide-[#E2DFD8] dark:divide-[#2C2A26] text-xs">
                     {/* 1. Authors & Institution */}
                     <tr>
-                      <td className="p-3 font-mono-meta font-bold text-[#605D55] text-[11px] border-r border-[#E2DFD8] bg-[#FAF9F5] sticky left-0 z-10">
+                      <td className="p-3 font-mono-meta font-bold text-[#605D55] dark:text-[#9C988F] text-[11px] border-r border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C] sticky left-0 z-10">
                         Primary Authors
                       </td>
                       {comparisonPapers.map((paper) => (
-                        <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] last:border-r-0 text-[#1C1B18]">
+                        <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#1C1B18] dark:text-[#E8E6E1]">
                           {paper.author || (Array.isArray(paper.authors) ? paper.authors.map(a => a.name).join(', ') : 'Unspecified')}
                         </td>
                       ))}
@@ -380,11 +409,11 @@ export default function ComparisonMatrixModal({
 
                     {/* 2. Venue / Publisher / Institution */}
                     <tr>
-                      <td className="p-3 font-mono-meta font-bold text-[#605D55] text-[11px] border-r border-[#E2DFD8] bg-[#FAF9F5] sticky left-0 z-10">
+                      <td className="p-3 font-mono-meta font-bold text-[#605D55] dark:text-[#9C988F] text-[11px] border-r border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C] sticky left-0 z-10">
                         Venue / Institution
                       </td>
                       {comparisonPapers.map((paper) => (
-                        <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] last:border-r-0 text-[#524F47]">
+                        <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#524F47] dark:text-[#B0ACA2]">
                           {paper.venue || paper.publisher || paper.university || 'Scholarly Repository'}
                         </td>
                       ))}
@@ -392,20 +421,20 @@ export default function ComparisonMatrixModal({
 
                     {/* 3. Methodological Approach */}
                     <tr>
-                      <td className="p-3 font-mono-meta font-bold text-[#605D55] text-[11px] border-r border-[#E2DFD8] bg-[#FAF9F5] sticky left-0 z-10">
+                      <td className="p-3 font-mono-meta font-bold text-[#605D55] dark:text-[#9C988F] text-[11px] border-r border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C] sticky left-0 z-10">
                         Methodological Approach
                       </td>
                       {comparisonPapers.map((paper) => {
                         const pId = paper._id || paper.id || paper.paperId;
                         const key = `${pId}_methodology`;
                         return (
-                          <td key={pId} className="p-3 border-r border-[#E2DFD8] last:border-r-0">
+                          <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
                             <textarea
                               rows="3"
                               value={editableNotes[key] !== undefined ? editableNotes[key] : (paper.abstract ? paper.abstract.slice(0, 150) + '...' : '')}
                               onChange={(e) => handleNoteChange(pId, 'methodology', e.target.value)}
                               placeholder="Synthesize methodology (e.g. Quasi-experiment, Transformer, LSTM, Case study)..."
-                              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] p-2 text-xs text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18] font-mono-meta"
+                              className="w-full bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] p-2 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta"
                             ></textarea>
                           </td>
                         );
@@ -414,16 +443,16 @@ export default function ComparisonMatrixModal({
 
                     {/* 4. Empirical Dataset / Benchmark */}
                     <tr>
-                      <td className="p-3 font-mono-meta font-bold text-[#605D55] text-[11px] border-r border-[#E2DFD8] bg-[#FAF9F5] sticky left-0 z-10">
+                      <td className="p-3 font-mono-meta font-bold text-[#605D55] dark:text-[#9C988F] text-[11px] border-r border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C] sticky left-0 z-10">
                         Empirical Dataset / Benchmark
                       </td>
                       {comparisonPapers.map((paper) => {
                         const pId = paper._id || paper.id || paper.paperId;
                         const key = `${pId}_dataset`;
                         return (
-                          <td key={pId} className="p-3 border-r border-[#E2DFD8] last:border-r-0">
+                          <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
                             {paper.datasetUrl && (
-                              <div className="mb-1 text-[11px] text-[#2C6B3F] font-mono-meta font-bold">
+                              <div className="mb-1 text-[11px] text-[#2C6B3F] dark:text-emerald-400 font-mono-meta font-bold">
                                 ✓ Raw Dataset Available ({paper.datasetFormat || 'CSV'})
                               </div>
                             )}
@@ -432,7 +461,7 @@ export default function ComparisonMatrixModal({
                               value={editableNotes[key] || ''}
                               onChange={(e) => handleNoteChange(pId, 'dataset', e.target.value)}
                               placeholder="Enter dataset details, sample size (N), or evaluation benchmarks..."
-                              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] p-2 text-xs text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18] font-mono-meta"
+                              className="w-full bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] p-2 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta"
                             ></textarea>
                           </td>
                         );
@@ -441,20 +470,20 @@ export default function ComparisonMatrixModal({
 
                     {/* 5. Key Findings & Contributions */}
                     <tr>
-                      <td className="p-3 font-mono-meta font-bold text-[#605D55] text-[11px] border-r border-[#E2DFD8] bg-[#FAF9F5] sticky left-0 z-10">
+                      <td className="p-3 font-mono-meta font-bold text-[#605D55] dark:text-[#9C988F] text-[11px] border-r border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C] sticky left-0 z-10">
                         Key Findings & Contributions
                       </td>
                       {comparisonPapers.map((paper) => {
                         const pId = paper._id || paper.id || paper.paperId;
                         const key = `${pId}_findings`;
                         return (
-                          <td key={pId} className="p-3 border-r border-[#E2DFD8] last:border-r-0">
+                          <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
                             <textarea
                               rows="3"
                               value={editableNotes[key] || ''}
                               onChange={(e) => handleNoteChange(pId, 'findings', e.target.value)}
                               placeholder="Synthesize empirical findings, accuracy scores, or theoretical contributions..."
-                              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] p-2 text-xs text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18] font-mono-meta"
+                              className="w-full bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] p-2 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta"
                             ></textarea>
                           </td>
                         );
@@ -463,20 +492,20 @@ export default function ComparisonMatrixModal({
 
                     {/* 6. Limitations & Gaps */}
                     <tr>
-                      <td className="p-3 font-mono-meta font-bold text-[#605D55] text-[11px] border-r border-[#E2DFD8] bg-[#FAF9F5] sticky left-0 z-10">
+                      <td className="p-3 font-mono-meta font-bold text-[#605D55] dark:text-[#9C988F] text-[11px] border-r border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C] sticky left-0 z-10">
                         Limitations & Research Gaps
                       </td>
                       {comparisonPapers.map((paper) => {
                         const pId = paper._id || paper.id || paper.paperId;
                         const key = `${pId}_limitations`;
                         return (
-                          <td key={pId} className="p-3 border-r border-[#E2DFD8] last:border-r-0">
+                          <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
                             <textarea
                               rows="3"
                               value={editableNotes[key] || ''}
                               onChange={(e) => handleNoteChange(pId, 'limitations', e.target.value)}
                               placeholder="Note study limitations, computational constraints, or avenues for thesis extension..."
-                              className="w-full bg-[#FAF9F5] border border-[#D5D1C7] p-2 text-xs text-[#1C1B18] rounded-sm focus:outline-none focus:border-[#1C1B18] font-mono-meta"
+                              className="w-full bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] p-2 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta"
                             ></textarea>
                           </td>
                         );
@@ -487,6 +516,38 @@ export default function ComparisonMatrixModal({
               )}
             </div>
           </>
+        )}
+
+        {/* In-App Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-neutral-950/60 backdrop-blur-xs" onClick={() => setDeleteConfirm(null)} />
+            <div className="relative bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm p-5 max-w-sm w-full shadow-2xl z-10 font-mono-meta text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26] mb-3">
+                <h3 className="font-bold text-red-700 dark:text-red-400">Delete Comparison Matrix</h3>
+                <button onClick={() => setDeleteConfirm(null)} className="cursor-pointer text-[#737067] hover:text-[#1C1B18] dark:hover:text-white">✕</button>
+              </div>
+              <p className="text-[#605D55] dark:text-[#9C988F] mb-4">
+                Are you sure you want to delete <strong className="text-[#1C1B18] dark:text-[#F0EDE6]">"{deleteConfirm.title}"</strong>? This action cannot be undone.
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-3 py-1.5 border border-[#D5D1C7] dark:border-[#383530] text-[#737067] dark:text-[#9C988F] hover:bg-[#FAF9F5] dark:hover:bg-[#201F1C] rounded-sm cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteMatrix}
+                  className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white font-bold rounded-sm cursor-pointer"
+                >
+                  Delete Matrix
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

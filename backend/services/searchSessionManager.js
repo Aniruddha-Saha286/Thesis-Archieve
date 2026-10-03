@@ -6,6 +6,8 @@ const { searchCrossref } = require('./providers/crossref');
 const { searchEuropePmc } = require('./providers/europePmc');
 const { searchHal } = require('./providers/hal');
 const { searchDoaj } = require('./providers/doaj');
+const { searchSemanticScholar } = require('./providers/semanticScholar');
+const { searchOpenAire } = require('./providers/openaire');
 const { mergeTwoRecords, cleanTitleForMatching, getFirstAuthorSurname } = require('./deduplicator');
 const { mapToCanonicalSubject, getSubjectById } = require('./subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('./institutionService');
@@ -20,6 +22,8 @@ const PROVIDER_NAMES = {
   europepmc: 'Europe PMC',
   hal: 'HAL Open Science',
   doaj: 'DOAJ',
+  semanticscholar: 'Semantic Scholar',
+  openaire: 'OpenAIRE',
 };
 
 const PROVIDER_CAPABILITIES = {
@@ -114,6 +118,36 @@ const PROVIDER_CAPABILITIES = {
     supportsAwardingInstitution: false,
   },
   doaj: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
+  semanticscholar: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: true,
+    supportsAwardingInstitution: false,
+  },
+  openaire: {
     supportsQuery: true,
     supportsYear: true,
     supportsPubType: true,
@@ -581,6 +615,8 @@ function createNewSession(sessionId, scope, query, filters, sort, sessionHash) {
       europepmc: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
       hal: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
       doaj: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
+      semanticscholar: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+      openaire: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
     },
     pageBoundaries: new Map(),
     allProvidersExhausted: false,
@@ -721,6 +757,28 @@ async function executeSearchSessionLocked(session, {
         searchDoaj({ query: subjectAugmentedQuery, page: curPage, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'DOAJ', key: 'doaj', ...res, nextPage: curPage + 1 }))
           .catch((err) => ({ name: 'DOAJ', key: 'doaj', records: [], rawCount: 0, hasMore: false, error: err.message }))
+      );
+    }
+
+    // Semantic Scholar
+    if (isProviderEligible('semanticscholar', filters, subjectAugmentedQuery) && session.providerStates.semanticscholar.hasMore) {
+      const curOffset = session.providerStates.semanticscholar.offset || 0;
+      const batchSize = Math.max(limitNum, 20);
+      fetchPromises.push(
+        searchSemanticScholar({ query: subjectAugmentedQuery, offset: curOffset, limit: batchSize, filters, sort })
+          .then((res) => ({ name: 'Semantic Scholar', key: 'semanticscholar', ...res, nextOffset: curOffset + (res.rawCount ?? res.records?.length ?? 0) }))
+          .catch((err) => ({ name: 'Semantic Scholar', key: 'semanticscholar', records: [], rawCount: 0, hasMore: false, error: err.message }))
+      );
+    }
+
+    // OpenAIRE
+    if (isProviderEligible('openaire', filters, subjectAugmentedQuery) && session.providerStates.openaire.hasMore) {
+      const curPage = session.providerStates.openaire.page || 1;
+      const batchSize = Math.max(limitNum, 20);
+      fetchPromises.push(
+        searchOpenAire({ query: subjectAugmentedQuery, page: curPage, limit: batchSize, filters, sort })
+          .then((res) => ({ name: 'OpenAIRE', key: 'openaire', ...res, nextPage: curPage + 1 }))
+          .catch((err) => ({ name: 'OpenAIRE', key: 'openaire', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
     }
 

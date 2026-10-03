@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useSocket } from '../context/SocketContext';
 import axios from 'axios';
 import {
@@ -27,6 +28,8 @@ import {
   ArrowRight,
   LogOut,
   UserPlus,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import ProposeThesisModal from './ProposeThesisModal';
 import PublicationDetailModal from './PublicationDetailModal';
@@ -36,6 +39,8 @@ import EditorManagementModal from './EditorManagementModal';
 
 export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const { user, logout, isAdmin, isEditor, hasPermission } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const { socket, showNotice } = useSocket();
 
   // Permission helpers
   const canViewStudents = hasPermission('students.view');
@@ -47,14 +52,14 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const canModeratePublications = hasPermission('publications.moderate');
   const canModerateReports = hasPermission('reports.moderate');
 
-  // Active admin tab: 'pending' | 'roster' | 'publications' | 'payments' | 'reports' | 'staff'
+  // Active admin tab: 'pending' | 'roster' | 'publications' | 'payments' | 'reports' | 'staff' | 'system'
   const permittedTabs = useMemo(() => {
     const tabs = [];
     if (canViewStudents) tabs.push('pending', 'roster');
     if (canModeratePublications || isAdmin) tabs.push('publications');
     if (canViewPayments) tabs.push('payments');
     if (canModerateReports) tabs.push('reports');
-    if (isAdmin) tabs.push('staff');
+    if (isAdmin) tabs.push('staff', 'system');
     return tabs;
   }, [canViewStudents, canModeratePublications, canViewPayments, canModerateReports, isAdmin]);
 
@@ -114,8 +119,15 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const [loadingReports, setLoadingReports] = useState(false);
   const [reportFilter, setReportFilter] = useState('all'); // 'all', 'open', 'resolved', 'dismissed'
 
-  // Real-time WebSocket connection
-  const { socket, isConnected } = useSocket();
+  // System Maintenance State
+  const [maintenanceState, setMaintenanceState] = useState({ enabled: false, message: '' });
+  const [loadingMaintenance, setLoadingMaintenance] = useState(false);
+  const [savingMaintenance, setSavingMaintenance] = useState(false);
+
+  // In-app Modals (confirm & prompt)
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [promptModal, setPromptModal] = useState(null);
+  const [promptInput, setPromptInput] = useState('');
 
   // ==========================================
   // API Fetchers
@@ -192,6 +204,26 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   };
 
+  const fetchMaintenance = async () => {
+    try {
+      setLoadingMaintenance(true);
+      const res = await axios.get('/api/admin/system/maintenance');
+      if (res.data?.maintenance) {
+        setMaintenanceState(res.data.maintenance);
+      }
+    } catch (err) {
+      console.error('Error fetching maintenance settings:', err);
+    } finally {
+      setLoadingMaintenance(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchMaintenance();
+    }
+  }, [isAdmin]);
+
   // Lazy-load active tab data
   useEffect(() => {
     if (activeTab === 'pending' || activeTab === 'roster') {
@@ -204,6 +236,8 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       if (canModerateReports) fetchReports();
     } else if (activeTab === 'staff') {
       if (isAdmin) fetchStaff();
+    } else if (activeTab === 'system') {
+      if (isAdmin) fetchMaintenance();
     }
   }, [activeTab]);
 
@@ -233,6 +267,10 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       if (canModeratePublications || isAdmin) fetchPublications();
     };
 
+    const handleMaintenanceEvent = (status) => {
+      if (status) setMaintenanceState(status);
+    };
+
     socket.on('admin:student_updated', handleStudentEvent);
     socket.on('admin:new_student_application', handleStudentEvent);
     socket.on('admin:student_profile_updated', handleStudentEvent);
@@ -242,6 +280,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     socket.on('admin:report_updated', handleReportEvent);
     socket.on('thesis:updated', handleThesisEvent);
     socket.on('admin:thesis_submitted', handleThesisEvent);
+    socket.on('system:maintenance_changed', handleMaintenanceEvent);
 
     return () => {
       socket.off('admin:student_updated', handleStudentEvent);
@@ -253,6 +292,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       socket.off('admin:report_updated', handleReportEvent);
       socket.off('thesis:updated', handleThesisEvent);
       socket.off('admin:thesis_submitted', handleThesisEvent);
+      socket.off('system:maintenance_changed', handleMaintenanceEvent);
     };
   }, [socket, canViewStudents, canViewPayments, canModerateReports, canModeratePublications, isAdmin]);
 
@@ -265,29 +305,35 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       setActionLoading(studentId);
       await axios.post(`/api/admin/verify-student/${studentId}`, { decision });
       await fetchStudents();
+      showNotice(decision === 'approve' ? 'Student verified and approved.' : 'Student application rejected.', 'info');
     } catch (err) {
-      alert(err.response?.data?.message || 'Error updating student verification.');
+      showNotice(err.response?.data?.message || 'Error updating student verification.', 'error');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleBanStudent = async (studentId, studentName) => {
-    const reason = window.prompt(
-      `Enter administrative suspension reason for ${studentName}:`,
-      'Violation of depository terms'
-    );
-    if (reason === null) return;
-
-    try {
-      setActionLoading(studentId);
-      await axios.post(`/api/admin/student/${studentId}/ban`, { reason });
-      await fetchStudents();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to suspend student.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleBanStudent = (studentId, studentName) => {
+    setPromptInput('Violation of depository terms / academic honor policy');
+    setPromptModal({
+      title: 'Suspend Student Account',
+      message: `Enter administrative suspension reason for ${studentName}:`,
+      placeholder: 'Suspension reason...',
+      confirmText: 'Suspend Account',
+      danger: true,
+      onConfirm: async (reason) => {
+        try {
+          setActionLoading(studentId);
+          await axios.post(`/api/admin/student/${studentId}/ban`, { reason });
+          await fetchStudents();
+          showNotice(`Student ${studentName} was suspended.`, 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to suspend student.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleUnbanStudent = async (studentId) => {
@@ -295,47 +341,58 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       setActionLoading(studentId);
       await axios.post(`/api/admin/student/${studentId}/unban`);
       await fetchStudents();
+      showNotice('Student suspension lifted successfully.', 'info');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to unban student.');
+      showNotice(err.response?.data?.message || 'Failed to unban student.', 'error');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleDeleteStudent = async (studentId, studentName) => {
-    if (!window.confirm(`Permanently remove student account for ${studentName}? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setActionLoading(studentId);
-      await axios.delete(`/api/admin/student/${studentId}`);
-      await fetchStudents();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete student.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleDeleteStudent = (studentId, studentName) => {
+    setConfirmModal({
+      title: 'Delete Student Account',
+      message: `Permanently remove student account for ${studentName}? This action cannot be undone.`,
+      confirmText: 'Permanently Delete',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(studentId);
+          await axios.delete(`/api/admin/student/${studentId}`);
+          await fetchStudents();
+          showNotice(`Student account for ${studentName} has been deleted.`, 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to delete student.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
-  const handleRevokeMembership = async (studentId, studentName) => {
-    const reason = window.prompt(
-      `Enter reason for revoking membership access for ${studentName}:`,
-      'Test period completed'
-    );
-    if (reason === null) return;
-
-    try {
-      setActionLoading(studentId);
-      await axios.post(`/api/admin/membership/${studentId}/revoke`, {
-        reason: reason.trim() || 'Administrative revocation by staff',
-      });
-      await fetchStudents();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to revoke membership access.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleRevokeMembership = (studentId, studentName) => {
+    setPromptInput('Trial completed / administrative revocation');
+    setPromptModal({
+      title: 'Revoke Membership Access',
+      message: `Enter reason for revoking membership access for ${studentName}:`,
+      placeholder: 'Revocation reason...',
+      confirmText: 'Revoke Access',
+      danger: true,
+      onConfirm: async (reason) => {
+        try {
+          setActionLoading(studentId);
+          await axios.post(`/api/admin/membership/${studentId}/revoke`, {
+            reason: (reason || '').trim() || 'Administrative revocation by staff',
+          });
+          await fetchStudents();
+          showNotice(`Membership access revoked for ${studentName}.`, 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to revoke membership access.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleAppointEditorFromStudent = (student) => {
@@ -346,21 +403,26 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     setIsEditorModalOpen(true);
   };
 
-  const handleRevokeEditorRole = async (userId, userName) => {
-    if (!window.confirm(`Revoke editor privileges for ${userName}? Account will return to standard student status.`)) {
-      return;
-    }
-
-    try {
-      setActionLoading(userId);
-      await axios.delete(`/api/admin/editors/${userId}`);
-      await fetchStudents();
-      await fetchStaff();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to revoke editor privileges.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleRevokeEditorRole = (userId, userName) => {
+    setConfirmModal({
+      title: 'Revoke Editor Privileges',
+      message: `Revoke editor privileges for ${userName}? Account will return to standard student status.`,
+      confirmText: 'Revoke Privileges',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(userId);
+          await axios.delete(`/api/admin/editors/${userId}`);
+          await fetchStudents();
+          await fetchStaff();
+          showNotice(`Editor privileges revoked for ${userName}.`, 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to revoke editor privileges.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   // ==========================================
@@ -371,15 +433,16 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     try {
       await axios.put(`/api/admin/publications/${thesisId}/approve`);
       await fetchPublications(thesesPage);
+      showNotice('Publication approved and cataloged.', 'info');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to approve publication.');
+      showNotice(err.response?.data?.message || 'Failed to approve publication.', 'error');
     }
   };
 
   const handleRejectPublicationSubmit = async (e) => {
     e.preventDefault();
     if (!thesisRejectionReason || !thesisRejectionReason.trim()) {
-      alert('A mandatory rejection reason is required.');
+      showNotice('A mandatory rejection reason is required.', 'error');
       return;
     }
 
@@ -390,22 +453,28 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       setRejectingThesis(null);
       setThesisRejectionReason('');
       await fetchPublications(thesesPage);
+      showNotice('Publication proposal rejected.', 'info');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reject publication.');
+      showNotice(err.response?.data?.message || 'Failed to reject publication.', 'error');
     }
   };
 
-  const handleDeletePublication = async (thesisId, title) => {
-    if (!window.confirm(`Permanently delete "${title}" from the local repository?`)) {
-      return;
-    }
-
-    try {
-      await axios.delete(`/api/admin/publications/${thesisId}`);
-      await fetchPublications(thesesPage);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete publication.');
-    }
+  const handleDeletePublication = (thesisId, title) => {
+    setConfirmModal({
+      title: 'Delete Repository Record',
+      message: `Permanently delete "${title}" from the local repository? This action cannot be undone.`,
+      confirmText: 'Delete Publication',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await axios.delete(`/api/admin/publications/${thesisId}`);
+          await fetchPublications(thesesPage);
+          showNotice('Publication removed from repository.', 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to delete publication.', 'error');
+        }
+      },
+    });
   };
 
   // ==========================================
@@ -414,7 +483,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
 
   const handleApprovePayment = async (paymentId) => {
     if (!statementVerified) {
-      alert('Verification requirement: Please reconcile the transaction against the bKash merchant statement first.');
+      showNotice('Verification requirement: Please reconcile the transaction against the bKash merchant statement first.', 'error');
       return;
     }
 
@@ -428,52 +497,109 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       setAdminReviewNotes('');
       setStatementVerified(false);
       await fetchPayments();
+      showNotice('Payment claim verified and membership granted.', 'info');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to approve payment claim.');
+      showNotice(err.response?.data?.message || 'Failed to approve payment claim.', 'error');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleRejectPayment = async (paymentId) => {
-    const rejectionReason = window.prompt(
-      'Enter reason for rejecting this payment claim (will be sent to student):',
-      'Transaction ID not found in bKash merchant statement'
-    );
-    if (rejectionReason === null) return;
-
-    try {
-      setActionLoading(paymentId);
-      await axios.post(`/api/admin/payments/${paymentId}/reject`, {
-        rejectionReason,
-      });
-      setReviewingPayment(null);
-      await fetchPayments();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reject payment.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleRejectPayment = (paymentId) => {
+    setPromptInput('Transaction ID not found in bKash merchant statement');
+    setPromptModal({
+      title: 'Reject Payment Claim',
+      message: 'Enter reason for rejecting this payment claim (will be sent to student):',
+      placeholder: 'Rejection reason...',
+      confirmText: 'Reject Claim',
+      danger: true,
+      onConfirm: async (rejectionReason) => {
+        try {
+          setActionLoading(paymentId);
+          await axios.post(`/api/admin/payments/${paymentId}/reject`, {
+            rejectionReason: (rejectionReason || '').trim() || 'Payment details could not be verified in merchant statement.',
+          });
+          setReviewingPayment(null);
+          await fetchPayments();
+          showNotice('Payment claim rejected.', 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to reject payment.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
-  const handleRequestCorrection = async (paymentId) => {
-    const adminInstructions = window.prompt(
-      'Enter correction instructions for student:',
-      'Please verify your bKash Transaction ID and resubmit.'
-    );
-    if (!adminInstructions) return;
+  const handleRequestCorrection = (paymentId) => {
+    setPromptInput('Please verify your bKash Transaction ID and resubmit.');
+    setPromptModal({
+      title: 'Request Payment Update',
+      message: 'Enter correction instructions for student:',
+      placeholder: 'Instructions for student...',
+      confirmText: 'Send Request',
+      danger: false,
+      onConfirm: async (adminInstructions) => {
+        try {
+          setActionLoading(paymentId);
+          await axios.post(`/api/admin/payments/${paymentId}/request-correction`, {
+            adminInstructions: (adminInstructions || '').trim() || 'Please verify your bKash transaction and resubmit.',
+          });
+          setReviewingPayment(null);
+          await fetchPayments();
+          showNotice('Correction instructions sent to student.', 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to request correction.', 'error');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
+  };
 
+  // ==========================================
+  // System Maintenance Handlers
+  // ==========================================
+
+  const handleToggleMaintenance = (newEnabled) => {
+    setConfirmModal({
+      title: newEnabled ? 'Enable Platform Maintenance Mode' : 'Disable Maintenance Mode',
+      message: newEnabled
+        ? 'Enabling maintenance mode will immediately lock scholarly search for students and public visitors (returning HTTP 503). Active sessions will receive a real-time push event. Only administrators retain access. Proceed?'
+        : 'Disabling maintenance mode will restore public access to federated scholarly search and datasets. Proceed?',
+      confirmText: newEnabled ? 'Enable Maintenance Mode' : 'Resume Public Operations',
+      danger: newEnabled,
+      onConfirm: async () => {
+        try {
+          setSavingMaintenance(true);
+          const res = await axios.put('/api/admin/system/maintenance', {
+            enabled: newEnabled,
+            message: maintenanceState.message,
+          });
+          setMaintenanceState(res.data?.maintenance || { enabled: newEnabled, message: maintenanceState.message });
+          showNotice(res.data?.message || 'Maintenance settings updated.', 'info');
+        } catch (err) {
+          showNotice(err.response?.data?.message || 'Failed to update maintenance settings.', 'error');
+        } finally {
+          setSavingMaintenance(false);
+        }
+      },
+    });
+  };
+
+  const handleSaveMaintenanceMessage = async () => {
     try {
-      setActionLoading(paymentId);
-      await axios.post(`/api/admin/payments/${paymentId}/request-correction`, {
-        adminInstructions,
+      setSavingMaintenance(true);
+      const res = await axios.put('/api/admin/system/maintenance', {
+        enabled: maintenanceState.enabled,
+        message: maintenanceState.message,
       });
-      setReviewingPayment(null);
-      await fetchPayments();
+      setMaintenanceState(res.data?.maintenance || maintenanceState);
+      showNotice('Maintenance notice message saved successfully.', 'info');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to request correction.');
+      showNotice(err.response?.data?.message || 'Failed to update maintenance notice.', 'error');
     } finally {
-      setActionLoading(null);
+      setSavingMaintenance(false);
     }
   };
 
@@ -497,7 +623,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   });
 
   return (
-    <div className="min-h-screen bg-[#FAF9F5] text-[#1C1B18] flex flex-col justify-between">
+    <div className="min-h-screen bg-[#FAF9F5] dark:bg-neutral-950 text-[#1C1B18] dark:text-neutral-100 flex flex-col justify-between transition-colors">
       
       {/* Top Banner Navigation */}
       <header className="bg-[#1C1B18] text-[#FAF9F5] border-b border-[#38352E] sticky top-0 z-30 shadow-xs">
@@ -621,23 +747,51 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             )}
 
             {isAdmin && (
-              <button
-                onClick={() => setActiveTab('staff')}
-                className={`px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'staff'
-                    ? 'bg-amber-500 text-neutral-950 font-bold'
-                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
-                }`}
-              >
-                <Shield className="w-3.5 h-3.5" />
-                <span>Team & Access</span>
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveTab('staff')}
+                  className={`px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'staff'
+                      ? 'bg-amber-500 text-neutral-950 font-bold'
+                      : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
+                  }`}
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Team & Access</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('system')}
+                  className={`px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === 'system'
+                      ? 'bg-amber-500 text-neutral-950 font-bold'
+                      : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>System Status</span>
+                  {maintenanceState?.enabled && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-red-600 text-white font-bold">
+                      MAINTENANCE
+                    </span>
+                  )}
+                </button>
+              </>
             )}
 
           </div>
 
-          {/* Right: Open Research Library & Sign Out */}
+          {/* Right: Open Research Library, Theme Toggle & Sign Out */}
           <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-sm border border-neutral-700 bg-neutral-900 text-neutral-300 hover:text-white transition cursor-pointer"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-neutral-300" />}
+            </button>
+
             <button
               onClick={onSwitchToStudentPreview}
               className="bg-amber-500 hover:bg-amber-400 text-neutral-950 px-3.5 py-1.5 rounded-xs transition font-mono-meta text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -1484,6 +1638,123 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
           </div>
         )}
 
+        {/* TAB 7: SYSTEM STATUS & MAINTENANCE MODE (Admin Only) */}
+        {activeTab === 'system' && isAdmin && (
+          <div className="bg-white dark:bg-[#161513] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm shadow-xs p-6 space-y-6 transition-colors">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+              <div>
+                <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  <span>Platform Operations & Maintenance Mode</span>
+                </h2>
+                <p className="text-xs text-[#737067] dark:text-[#9A968D] font-mono-meta mt-1">
+                  Global repository traffic gates, upstream protection, and public availability controls.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchMaintenance}
+                  disabled={loadingMaintenance}
+                  className="px-3 py-1.5 bg-[#FAF9F5] dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-xs font-mono-meta rounded-xs text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingMaintenance ? 'animate-spin' : ''}`} />
+                  <span>Refresh Status</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Current Status Card */}
+            <div className={`p-5 rounded-sm border ${
+              maintenanceState.enabled
+                ? 'bg-red-50/70 dark:bg-red-950/30 border-red-300 dark:border-red-800'
+                : 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-full ${maintenanceState.enabled ? 'bg-red-600 animate-pulse' : 'bg-emerald-600'}`} />
+                    <span className="font-serif-title font-bold text-base text-[#1C1B18] dark:text-[#F0EDE6]">
+                      {maintenanceState.enabled ? 'MAINTENANCE MODE IS CURRENTLY ACTIVE' : 'SYSTEM IS FULLY OPERATIONAL'}
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono-meta text-[#524F47] dark:text-[#A8A49C]">
+                    {maintenanceState.enabled
+                      ? 'Public and student search queries are currently returning HTTP 503 (Maintenance). Quota counters are paused. Only administrators retain system access.'
+                      : 'All student accounts and public visitors have normal access to federated search, datasets, and catalog services.'}
+                  </p>
+                  {maintenanceState.updatedAt && (
+                    <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9A968D] pt-1">
+                      Last toggled: {new Date(maintenanceState.updatedAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleMaintenance(!maintenanceState.enabled)}
+                    disabled={savingMaintenance}
+                    className={`px-5 py-2.5 rounded-sm text-xs font-mono-meta font-bold cursor-pointer transition shadow-2xs ${
+                      maintenanceState.enabled
+                        ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                        : 'bg-red-700 hover:bg-red-800 text-white'
+                    }`}
+                  >
+                    {savingMaintenance
+                      ? 'Updating System...'
+                      : maintenanceState.enabled
+                      ? 'Resume Public Operations'
+                      : 'Enable Maintenance Mode'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Maintenance Notice Configuration */}
+            <div className="space-y-3 pt-2">
+              <label className="block text-xs font-mono-meta font-bold uppercase tracking-wider text-[#1C1B18] dark:text-[#F0EDE6]">
+                Maintenance Notice Message (Public Facing)
+              </label>
+              <p className="text-xs text-[#737067] dark:text-[#9A968D]">
+                This explanation will be displayed to scholars, students, and visitors when maintenance mode is active:
+              </p>
+              <textarea
+                rows="3"
+                value={maintenanceState.message || ''}
+                onChange={(e) => setMaintenanceState((prev) => ({ ...prev, message: e.target.value }))}
+                placeholder="The Thesis Archive is currently undergoing scheduled platform upgrades and database maintenance..."
+                className="w-full bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] p-3 text-xs font-mono-meta text-[#1C1B18] dark:text-[#F0EDE6] rounded-xs focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveMaintenanceMessage}
+                  disabled={savingMaintenance}
+                  className="px-4 py-2 bg-[#1C1B18] hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 text-xs font-mono-meta font-bold rounded-xs cursor-pointer shadow-2xs disabled:opacity-50"
+                >
+                  {savingMaintenance ? 'Saving...' : 'Save Public Notice'}
+                </button>
+              </div>
+            </div>
+
+            {/* Policy & Operational Invariants */}
+            <div className="pt-4 border-t border-[#E2DFD8] dark:border-[#2C2A26] space-y-2 text-xs font-mono-meta text-[#737067] dark:text-[#9A968D]">
+              <div className="font-bold text-[#1C1B18] dark:text-[#F0EDE6] uppercase tracking-wider text-[11px]">
+                Platform Maintenance Invariants:
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-[11px] leading-relaxed">
+                <li>Non-admin searches and dataset inquiries are rejected with <code>503 Service Unavailable</code> before any quota is consumed.</li>
+                <li>Exempt routes (<code>/api/system/status</code>, <code>/api/health</code>, <code>/api/auth/*</code>) remain active so administrators can log in.</li>
+                <li>Changes are persisted to MongoDB and broadcasted instantaneously over WebSocket to all open client sessions.</li>
+                <li>Admin operations within the management console are never interrupted.</li>
+              </ul>
+            </div>
+
+          </div>
+        )}
+
       </main>
 
       {/* ========================================== */}
@@ -1746,6 +2017,113 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
           </div>
         );
       })()}
+
+      {/* In-App Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-neutral-950/60 backdrop-blur-xs" onClick={() => setConfirmModal(null)} />
+          <div className="relative bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm shadow-2xl max-w-md w-full p-6 z-10 font-mono-meta text-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+              <h3 className={`text-sm font-bold ${confirmModal.danger ? 'text-red-700 dark:text-red-400' : 'text-[#1C1B18] dark:text-[#F0EDE6]'}`}>
+                {confirmModal.title}
+              </h3>
+              <button onClick={() => setConfirmModal(null)} className="cursor-pointer text-[#737067] hover:text-[#1C1B18] dark:hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[#524F47] dark:text-[#A8A49C] text-xs leading-relaxed font-sans">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E2DFD8] dark:border-[#2C2A26]">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="px-3 py-1.5 border border-[#D5D1C7] dark:border-[#38352F] rounded-xs cursor-pointer text-[#737067] dark:text-[#9A968D] hover:bg-[#F2EFE8] dark:hover:bg-[#282622]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const fn = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  if (fn) await fn();
+                }}
+                className={`px-4 py-1.5 rounded-xs font-bold cursor-pointer text-white ${
+                  confirmModal.danger
+                    ? 'bg-red-700 hover:bg-red-800'
+                    : 'bg-[#1C1B18] hover:bg-black dark:bg-amber-400 dark:text-neutral-950'
+                }`}
+              >
+                {confirmModal.confirmText || 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Prompt Modal */}
+      {promptModal && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-neutral-950/60 backdrop-blur-xs" onClick={() => setPromptModal(null)} />
+          <div className="relative bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm shadow-2xl max-w-md w-full p-6 z-10 font-mono-meta text-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+              <h3 className={`text-sm font-bold ${promptModal.danger ? 'text-red-700 dark:text-red-400' : 'text-[#1C1B18] dark:text-[#F0EDE6]'}`}>
+                {promptModal.title}
+              </h3>
+              <button onClick={() => setPromptModal(null)} className="cursor-pointer text-[#737067] hover:text-[#1C1B18] dark:hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[#524F47] dark:text-[#A8A49C] text-xs leading-relaxed font-sans">
+              {promptModal.message}
+            </p>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const fn = promptModal.onConfirm;
+                const val = promptInput;
+                setPromptModal(null);
+                if (fn) await fn(val);
+              }}
+              className="space-y-3"
+            >
+              <textarea
+                required
+                rows="3"
+                value={promptInput}
+                onChange={(e) => setPromptInput(e.target.value)}
+                placeholder={promptModal.placeholder || 'Enter details...'}
+                className="w-full bg-[#FAF9F5] dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#38352F] p-2 text-xs font-mono-meta rounded-xs text-[#1C1B18] dark:text-[#F0EDE6] focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400"
+              />
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E2DFD8] dark:border-[#2C2A26]">
+                <button
+                  type="button"
+                  onClick={() => setPromptModal(null)}
+                  className="px-3 py-1.5 border border-[#D5D1C7] dark:border-[#38352F] rounded-xs cursor-pointer text-[#737067] dark:text-[#9A968D] hover:bg-[#F2EFE8] dark:hover:bg-[#282622]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`px-4 py-1.5 rounded-xs font-bold cursor-pointer text-white ${
+                    promptModal.danger
+                      ? 'bg-red-700 hover:bg-red-800'
+                      : 'bg-[#1C1B18] hover:bg-black dark:bg-amber-400 dark:text-neutral-950'
+                  }`}
+                >
+                  {promptModal.confirmText || 'Submit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="max-w-7xl mx-auto px-6 py-4 w-full border-t border-[#E2DFD8] text-center text-xs font-mono-meta text-[#737067]">

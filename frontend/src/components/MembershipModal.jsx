@@ -23,7 +23,7 @@ import {
 
 export default function MembershipModal({ isOpen, onClose }) {
   const { user } = useAuth();
-  const { socket } = useSocket();
+  const { socket, showNotice } = useSocket();
 
   const [activeTab, setActiveTab] = useState('plans'); // 'plans' | 'bkash' | 'history'
   const [plans, setPlans] = useState([]);
@@ -147,10 +147,10 @@ export default function MembershipModal({ isOpen, onClose }) {
     try {
       setActionLoading(true);
       const res = await axios.post('/api/membership/trial');
-      alert(res.data.message || '7-Day Research Trial activated!');
+      showNotice(res.data.message || '7-Day Research Trial activated!', 'info');
       await fetchStatus();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to activate trial.');
+      showNotice(err.response?.data?.message || 'Failed to activate trial.', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -166,7 +166,7 @@ export default function MembershipModal({ isOpen, onClose }) {
       setPaymentInstructions(res.data.paymentInstructions);
       setActiveTab('bkash');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to initiate membership order.');
+      showNotice(err.response?.data?.message || 'Failed to initiate membership order.', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -219,11 +219,11 @@ export default function MembershipModal({ isOpen, onClose }) {
         trxId: correctionTrxId.trim().toUpperCase(),
         senderNumber: correctionSender.trim(),
       });
-      alert('Payment details updated and re-queued for admin review.');
+      showNotice('Payment details updated and re-queued for admin review.', 'info');
       setEditingSubmission(null);
       await fetchHistory();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update payment.');
+      showNotice(err.response?.data?.message || 'Failed to update payment.', 'error');
     } finally {
       setCorrectionLoading(false);
     }
@@ -248,10 +248,10 @@ export default function MembershipModal({ isOpen, onClose }) {
     : 500;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col text-[#1C1B18] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col text-[#1C1B18] dark:text-[#F0EDE6] overflow-hidden">
         {/* Modal Header */}
-        <div className="bg-[#1C1B18] text-[#FAF9F5] px-6 py-4 flex items-center justify-between border-b border-neutral-800">
+        <div className="bg-[#1C1B18] dark:bg-[#141412] text-[#FAF9F5] px-6 py-4 flex items-center justify-between border-b border-neutral-800 dark:border-[#2C2A26]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-sm bg-amber-500 text-neutral-950 flex items-center justify-center font-bold">
               <Zap className="w-4 h-4 fill-current" />
@@ -260,14 +260,14 @@ export default function MembershipModal({ isOpen, onClose }) {
               <h2 className="text-lg font-serif-title tracking-tight leading-tight">
                 Academic Depository Membership
               </h2>
-              <p className="text-[11px] font-mono-meta text-neutral-300">
+              <p className="text-[11px] font-mono-meta text-neutral-300 dark:text-neutral-400">
                 Transparent Scholarly Pricing · 7-Day Research Trial · Manual Renewal via bKash (No Auto-Debit)
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-sm text-neutral-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer"
+            className="p-1 rounded-sm text-neutral-400 hover:text-white hover:bg-neutral-800 dark:hover:bg-[#272521] transition cursor-pointer"
             title="Close"
           >
             <X className="w-5 h-5" />
@@ -275,14 +275,14 @@ export default function MembershipModal({ isOpen, onClose }) {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="bg-white border-b border-[#E2DFD8] px-6 py-2 flex items-center justify-between text-xs font-mono-meta">
+        <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] px-6 py-2 flex items-center justify-between text-xs font-mono-meta">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('plans')}
               className={`px-3 py-1.5 rounded-sm transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'plans'
-                  ? 'bg-[#1C1B18] text-white font-bold'
-                  : 'text-[#737067] hover:bg-[#F2EFE8] hover:text-[#1C1B18]'
+                  ? 'bg-[#1C1B18] dark:bg-[#F0EDE6] text-white dark:text-[#141412] font-bold'
+                  : 'text-[#737067] dark:text-[#9C988F] hover:bg-[#F2EFE8] dark:hover:bg-[#272521] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6]'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -293,8 +293,8 @@ export default function MembershipModal({ isOpen, onClose }) {
               onClick={() => setActiveTab('bkash')}
               className={`px-3 py-1.5 rounded-sm transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'bkash'
-                  ? 'bg-[#1C1B18] text-white font-bold'
-                  : 'text-[#737067] hover:bg-[#F2EFE8] hover:text-[#1C1B18]'
+                  ? 'bg-[#1C1B18] dark:bg-[#F0EDE6] text-white dark:text-[#141412] font-bold'
+                  : 'text-[#737067] dark:text-[#9C988F] hover:bg-[#F2EFE8] dark:hover:bg-[#272521] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6]'
               }`}
             >
               <CreditCard className="w-3.5 h-3.5" />
@@ -308,14 +308,14 @@ export default function MembershipModal({ isOpen, onClose }) {
               onClick={() => setActiveTab('history')}
               className={`px-3 py-1.5 rounded-sm transition cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'history'
-                  ? 'bg-[#1C1B18] text-white font-bold'
-                  : 'text-[#737067] hover:bg-[#F2EFE8] hover:text-[#1C1B18]'
+                  ? 'bg-[#1C1B18] dark:bg-[#F0EDE6] text-white dark:text-[#141412] font-bold'
+                  : 'text-[#737067] dark:text-[#9C988F] hover:bg-[#F2EFE8] dark:hover:bg-[#272521] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6]'
               }`}
             >
               <History className="w-3.5 h-3.5" />
               <span>Payment History</span>
               {history.length > 0 && (
-                <span className="bg-[#FAF9F5] border border-[#D5D1C7] text-[#1C1B18] px-1.5 py-0.2 rounded-xs text-[10px]">
+                <span className="bg-[#FAF9F5] dark:bg-[#272521] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-1.5 py-0.2 rounded-xs text-[10px]">
                   {history.length}
                 </span>
               )}
@@ -324,20 +324,20 @@ export default function MembershipModal({ isOpen, onClose }) {
 
           {/* Current Status Pill */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#737067]">Current Tier:</span>
+            <span className="text-[11px] text-[#737067] dark:text-[#9C988F]">Current Tier:</span>
             <span
               className={`px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider ${
                 activePeriod?.source === 'manual_admin'
-                  ? 'bg-blue-100 text-blue-900 border border-blue-400'
+                  ? 'bg-blue-100 dark:bg-blue-950/70 text-blue-900 dark:text-blue-300 border border-blue-400 dark:border-blue-800'
                   : currentPlanCode === 'pro_max_12m'
-                  ? 'bg-amber-100 text-amber-900 border border-amber-400'
+                  ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-300 border border-amber-400 dark:border-amber-800'
                   : currentPlan === 'premium' || currentPlanCode === 'premium_6m'
-                  ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                  ? 'bg-purple-100 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
                   : effectiveIsTrial
-                  ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                  ? 'bg-blue-100 dark:bg-blue-950/70 text-blue-900 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
                   : currentPlan === 'admin'
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                  : 'bg-neutral-100 text-neutral-800 border border-neutral-300'
+                  ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                  : 'bg-neutral-100 dark:bg-neutral-900/60 text-neutral-800 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-700'
               }`}
             >
               {activePeriod?.source === 'manual_admin'
@@ -354,7 +354,7 @@ export default function MembershipModal({ isOpen, onClose }) {
         </div>
 
         {/* Tab Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 bg-[#FAF9F5] space-y-6">
+        <div className="p-6 overflow-y-auto flex-1 bg-[#FAF9F5] dark:bg-[#141412] space-y-6">
           {/* Action Feedback Banner */}
           {cancelFeedback.message && (
             <div

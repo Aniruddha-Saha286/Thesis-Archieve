@@ -15,6 +15,8 @@ const { runRbacAndGoogleAuthTests } = require('./rbacAndGoogleAuth.test');
 const { runE2EVerification } = require('./integrationE2E.test');
 const { runArchiveReviewRepairsRegressionTests } = require('./archiveReviewRepairs.test');
 const { runEmailNotificationTests } = require('./emailNotification.test');
+const { runProviderIntegrationTests } = require('./providerIntegration.test');
+const { runMaintenanceModeTests } = require('./maintenanceMode.test');
 
 console.log('===============================================================');
 console.log('  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   ');
@@ -59,9 +61,13 @@ async function main() {
     await runArchiveReviewRepairsRegressionTests();
     console.log('');
     await runEmailNotificationTests();
+    console.log('');
+    await runProviderIntegrationTests();
+    console.log('');
+    await runMaintenanceModeTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 17 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 19 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

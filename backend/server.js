@@ -94,8 +94,19 @@ app.get('/api/health', (req, res) => {
 // Apply API baseline rate limiter to all API endpoints
 app.use('/api', apiLimiter);
 
-// Mount Routes
+const systemRoutes = require('./routes/system');
+const { optionalAuth } = require('./middleware/auth');
+const { checkMaintenance } = require('./middleware/maintenanceMiddleware');
+
+// Mount public non-maintenance endpoints first
+app.use('/api/system', systemRoutes);
 app.use('/api/auth', authRoutes);
+
+// Identify user for administrative bypass, then apply maintenance check
+app.use(optionalAuth);
+app.use(checkMaintenance);
+
+// Mount administrative and research routes
 app.use('/api/admin', adminRoutes);
 app.use('/api/thesis', thesisRoutes);
 app.use('/api/upload', uploadRoutes);

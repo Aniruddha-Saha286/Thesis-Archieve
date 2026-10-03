@@ -56,9 +56,12 @@ async function runDatasetDiscoveryRegressionTests() {
     for (const ds of searchRes.datasets) {
       assert.ok(ds.url, 'Dataset must have valid access URL');
       assert.ok(isSafeDatasetUrl(ds.url), 'Dataset access URL must pass SSRF safety validation');
-      assert.ok(ds.source === 'DataCite' || ds.source === 'Zenodo', 'Source must be authentic repository');
+      assert.ok(
+        ['DataCite', 'Zenodo', 'Figshare', 'Dryad'].includes(ds.source),
+        `Source '${ds.source}' must be authentic repository`
+      );
     }
-    console.log('  ✓ [PASS] Global dataset discovery returns verified DataCite & Zenodo open science resources');
+    console.log('  ✓ [PASS] Global dataset discovery returns verified DataCite, Zenodo, Figshare & Dryad open science resources');
   }
 
   // --- Test 4: MembershipPeriod unique index on paymentSubmission ---
