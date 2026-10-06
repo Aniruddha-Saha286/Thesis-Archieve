@@ -25,10 +25,27 @@ export default function LoginView() {
         credential: credentialResponse.credential,
       });
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-        'Sign-in did not work. Please try again, or use a different Google account.'
-      );
+      console.error('Google sign-in error:', err);
+      const serverMessage = err.response?.data?.message;
+      if (serverMessage && typeof serverMessage === 'string') {
+        setError(serverMessage);
+      } else if (!err.response) {
+        setError(
+          'Cannot connect to the server (Network or CORS error). Please ensure the backend is running and reachable.'
+        );
+      } else if (err.response.status === 404 || err.response.status === 405) {
+        setError(
+          'API address not found (404/405). If running on Vercel, please ensure VITE_API_URL is configured in your Vercel Project Settings.'
+        );
+      } else if (err.response.status === 401 || err.response.status === 403) {
+        setError(
+          err.response?.data?.detail || 'Authentication was rejected by the depository server. Please verify your Google account.'
+        );
+      } else {
+        setError(
+          err.message || 'Sign-in did not work. Please try again, or use a different Google account.'
+        );
+      }
     } finally {
       setLoading(false);
     }

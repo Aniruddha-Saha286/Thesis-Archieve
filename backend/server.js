@@ -58,7 +58,14 @@ const ALLOWED_ORIGINS = new Set([
 
 function isAllowedOrigin(origin) {
   if (!origin) return true; // Allow same-origin / server-to-server / curl / test runners
-  return ALLOWED_ORIGINS.has(origin);
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname.endsWith('.vercel.app')) return true;
+  } catch {
+    // ignore invalid URL format
+  }
+  return false;
 }
 
 // HTTP Security Headers & Content Security Policy (compatible with Google sign-in and Vite)

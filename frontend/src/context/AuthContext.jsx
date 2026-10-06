@@ -5,7 +5,7 @@ const AuthContext = createContext();
 
 // Configure API base URL for production deployments (e.g. Vercel -> Render backend)
 if (import.meta.env.VITE_API_URL) {
-  axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+  axios.defaults.baseURL = import.meta.env.VITE_API_URL.replace(/\/+$/, '');
 }
 
 // Global Axios request interceptor: guarantees Bearer token is attached to every single request

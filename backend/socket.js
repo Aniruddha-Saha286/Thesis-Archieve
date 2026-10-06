@@ -16,7 +16,14 @@ const ALLOWED_ORIGINS = new Set([
 
 function isAllowedOrigin(origin) {
   if (!origin) return true;
-  return ALLOWED_ORIGINS.has(origin);
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname.endsWith('.vercel.app')) return true;
+  } catch {
+    // ignore invalid URL format
+  }
+  return false;
 }
 
 function assignSocketRooms(socket, user) {
