@@ -6,9 +6,11 @@ const { authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const AuditEvent = require('../models/AuditEvent');
-const { uploadLimiter } = require('../middleware/rateLimit');
+const { uploadLimiter, thesisPdfUploadLimiter } = require('../middleware/rateLimit');
+const Thesis = require('../models/Thesis');
 const { emitStudentProfileUpdated, emitToAdmins, emitToUser } = require('../socket');
 const emailService = require('../services/emailService');
+const thesisFileStorage = require('../services/thesisFileStorage');
 
 // Configure Cloudinary strictly from environment variables
 const hasCloudinary = Boolean(
@@ -225,6 +227,115 @@ router.delete('/id-card', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Delete ID proof error:', err);
     return res.status(500).json({ message: 'Failed to delete verification document.' });
+  }
+});
+
+// POST /api/upload/thesis-pdf
+// A student attaches the PDF of the thesis they are depositing. The file goes to storage and
+// the address comes back; the deposit form then sends that address with the thesis details.
+// Nothing is written to the database here.
+const THESIS_PDF_MAX_MB = thesisFileStorage.getMaxUploadMb();
+const thesisPdfUpload = multer({
+  storage,
+  limits: { fileSize: THESIS_PDF_MAX_MB * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      const err = new Error('Only PDF files can be uploaded.');
+      err.code = 'NOT_PDF';
+      cb(err);
+    }
+  },
+});
+
+function receiveThesisPdf(req, res, next) {
+  thesisPdfUpload.single('thesisPdf')(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ code: 'FILE_TOO_LARGE', message: `The PDF is larger than ${THESIS_PDF_MAX_MB} MB. Compress it or paste a link to the file instead.` });
+    }
+    if (err.code === 'NOT_PDF') {
+      return res.status(400).json({ code: 'NOT_PDF', message: 'Only PDF files can be uploaded.' });
+    }
+    console.error('[routes/upload.js] Thesis PDF upload was rejected:', err.message);
+    return res.status(400).json({ message: 'The file could not be received. Please try again.' });
+  });
+}
+
+router.post('/thesis-pdf', authenticateToken, thesisPdfUploadLimiter, receiveThesisPdf, async (req, res) => {
+  try {
+    const isStaff = req.user.role === 'admin' || req.user.role === 'editor';
+    if (!isStaff && req.user.status !== 'approved') {
+      return res.status(403).json({ message: 'Your account must be approved before you can deposit a thesis.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No PDF was attached.' });
+    }
+    if (!thesisFileStorage.looksLikePdf(req.file.buffer)) {
+      return res.status(400).json({ code: 'NOT_PDF', message: 'This file is not a real PDF. Export your thesis as PDF and try again.' });
+    }
+    if (!thesisFileStorage.hasStorage()) {
+      return res.status(503).json({
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'File upload is not available right now. You can paste a link to your PDF instead.',
+      });
+    }
+
+    let stored;
+    try {
+      stored = await thesisFileStorage.uploadThesisPdf(req.file.buffer, { ownerId: req.user._id });
+    } catch (storageErr) {
+      console.error('[routes/upload.js] Thesis PDF storage failed:', storageErr.message);
+      return res.status(503).json({
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'The file could not be stored right now. Try again, or paste a link to your PDF instead.',
+      });
+    }
+
+    await AuditEvent.create({
+      actor: req.user._id,
+      action: 'THESIS_PDF_UPLOADED',
+      targetType: 'User',
+      targetId: String(req.user._id),
+      metadata: { storageRef: stored.storageRef, sizeBytes: stored.sizeBytes },
+      ipAddress: req.ip || '',
+    }).catch((auditErr) => console.error('[routes/upload.js] Audit record for thesis PDF failed:', auditErr.message));
+
+    return res.status(201).json({
+      message: 'PDF uploaded.',
+      pdfUrl: stored.pdfUrl,
+      storageRef: stored.storageRef,
+      sizeBytes: stored.sizeBytes,
+      fileName: String(req.file.originalname || 'thesis.pdf').slice(0, 200),
+    });
+  } catch (err) {
+    console.error('[routes/upload.js] Thesis PDF upload failed:', err);
+    return res.status(500).json({ message: 'The PDF could not be uploaded.' });
+  }
+});
+
+// DELETE /api/upload/thesis-pdf   { storageRef }
+// The deposit form calls this when the student removes the file, picks another one, or closes
+// the form without submitting, so that files nobody will use do not stay in storage.
+// Only the member who uploaded the file may remove it, and only while no thesis record uses it.
+router.delete('/thesis-pdf', authenticateToken, async (req, res) => {
+  try {
+    const ref = req.body && typeof req.body.storageRef === 'string' ? req.body.storageRef.trim() : '';
+    if (!thesisFileStorage.isOwnStorageRef(ref)) {
+      return res.status(400).json({ message: 'That is not an uploaded thesis file.' });
+    }
+    if (!thesisFileStorage.isUploadedBy(ref, req.user._id)) {
+      return res.status(403).json({ message: 'You can only remove a file you uploaded yourself.' });
+    }
+    const outcome = await thesisFileStorage.destroyThesisPdfIfUnused(ref, Thesis);
+    if (outcome.stillUsed) {
+      return res.status(409).json({ message: 'This file belongs to a thesis that was already submitted.' });
+    }
+    return res.json({ removed: Boolean(outcome.removed) });
+  } catch (err) {
+    console.error('[routes/upload.js] Removing an uploaded thesis PDF failed:', err);
+    return res.status(500).json({ message: 'The file could not be removed.' });
   }
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useSocket } from '../context/SocketContext';
@@ -30,16 +30,25 @@ import {
   UserPlus,
   Sun,
   Moon,
+  MessageSquare,
+  MoreHorizontal,
 } from 'lucide-react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
+import { getPlanInfo } from '../utils/plan';
+import AdminFeedbackPanel from './AdminFeedbackPanel';
 import ProposeThesisModal from './ProposeThesisModal';
 import PublicationDetailModal from './PublicationDetailModal';
 import DocumentViewerModal from './DocumentViewerModal';
 import ManualGrantModal from './ManualGrantModal';
 import EditorManagementModal from './EditorManagementModal';
 
+// Students shown per page in the roster
+const ROSTER_PAGE_SIZE = 25;
+
 export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const { user, logout, isAdmin, isEditor, hasPermission } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const { socket, showNotice } = useSocket();
 
   // Permission helpers
@@ -58,7 +67,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     if (canViewStudents) tabs.push('pending', 'roster');
     if (canModeratePublications || isAdmin) tabs.push('publications');
     if (canViewPayments) tabs.push('payments');
-    if (canModerateReports) tabs.push('reports');
+    if (canModerateReports) tabs.push('reports', 'feedback');
     if (isAdmin) tabs.push('staff', 'system');
     return tabs;
   }, [canViewStudents, canModeratePublications, canViewPayments, canModerateReports, isAdmin]);
@@ -79,6 +88,19 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const [searchStudent, setSearchStudent] = useState('');
   const [rosterFilter, setRosterFilter] = useState('all'); // 'all', 'approved', 'pending', 'banned'
   const [actionLoading, setActionLoading] = useState(null);
+  const [rosterPage, setRosterPage] = useState(1);
+  const [openRowMenuId, setOpenRowMenuId] = useState(null);
+
+  // A row menu closes on Escape and on a click anywhere outside it
+  useEscapeToClose(() => setOpenRowMenuId(null), Boolean(openRowMenuId));
+  useEffect(() => {
+    if (!openRowMenuId) return undefined;
+    const close = (e) => {
+      if (!e.target.closest || !e.target.closest('[data-row-menu]')) setOpenRowMenuId(null);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openRowMenuId]);
 
   // Publications state (Depository Moderation)
   const [theses, setTheses] = useState([]);
@@ -117,7 +139,11 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   // Depository Reports State
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
-  const [reportFilter, setReportFilter] = useState('all'); // 'all', 'open', 'resolved', 'dismissed'
+  const [reportFilter, setReportFilter] = useState('pending'); // 'all', 'pending', 'resolved', 'dismissed'
+
+  // Messages from users (feedback): only the count of new ones lives here, the tab loads the rest itself
+  const [newFeedbackCount, setNewFeedbackCount] = useState(0);
+  const handleFeedbackCounts = useCallback((counts) => setNewFeedbackCount((counts && counts.new) || 0), []);
 
   // System Maintenance State
   const [maintenanceState, setMaintenanceState] = useState({ enabled: false, message: '' });
@@ -192,6 +218,44 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   };
 
+  const REPORT_TYPE_LABELS = {
+    'dead-link': 'Broken link or PDF',
+    paywall: 'Link asks for payment',
+    'metadata-inaccuracy': 'Wrong title, author or details',
+    'retraction-unflagged': 'Retracted or disputed paper',
+    'copyright-claim': 'Copyright concern',
+    other: 'Other',
+  };
+
+  const handleUpdateReport = (report, nextStatus) => {
+    const save = async (note) => {
+      try {
+        const body = { status: nextStatus };
+        if (typeof note === 'string' && note.trim()) body.adminNotes = note.trim();
+        const res = await axios.put(`/api/admin/reports/${report._id}`, body);
+        const updated = res.data?.report;
+        setReports((prev) => prev.map((r) => (r._id === report._id ? { ...r, ...(updated || { status: nextStatus }) } : r)));
+        showNotice(nextStatus === 'pending' ? 'Report reopened.' : nextStatus === 'resolved' ? 'Report marked as resolved.' : 'Report dismissed.', 'info');
+      } catch (err) {
+        showNotice(err.response?.data?.message || 'Failed to update the report.', 'error');
+      }
+    };
+
+    if (nextStatus === 'pending') {
+      save('');
+      return;
+    }
+    setPromptInput('');
+    setPromptModal({
+      title: nextStatus === 'resolved' ? 'Mark report as resolved' : 'Dismiss report',
+      message: `"${report.title || 'Publication issue'}". You can add a short note about what was done. The note is optional.`,
+      placeholder: nextStatus === 'resolved' ? 'e.g. Replaced the broken PDF link' : 'e.g. Could not reproduce the problem',
+      confirmText: nextStatus === 'resolved' ? 'Mark resolved' : 'Dismiss report',
+      optional: true,
+      onConfirm: save,
+    });
+  };
+
   const fetchStaff = async () => {
     try {
       setLoadingStaff(true);
@@ -224,8 +288,30 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   }, [isAdmin]);
 
-  // Lazy-load active tab data
+  // Load every list the signed-in staff member may see as soon as the console opens,
+  // so the counts on all tabs are right before any tab is clicked.
+  const didInitialLoadRef = useRef(false);
   useEffect(() => {
+    if (canViewStudents) fetchStudents();
+    if (canModeratePublications || isAdmin) fetchPublications();
+    if (canViewPayments) fetchPayments();
+    if (canModerateReports) fetchReports();
+    if (canModerateReports) {
+      // Only the number is needed up front; the Feedback tab loads the messages when opened
+      axios
+        .get('/api/feedback/admin', { params: { status: 'new', limit: 1 } })
+        .then((res) => handleFeedbackCounts(res.data?.counts))
+        .catch(() => {});
+    }
+    if (isAdmin) fetchStaff();
+  }, []);
+
+  // Refresh a tab's data when it is opened (skipped once, because the load above just ran)
+  useEffect(() => {
+    if (!didInitialLoadRef.current) {
+      didInitialLoadRef.current = true;
+      return;
+    }
     if (activeTab === 'pending' || activeTab === 'roster') {
       if (canViewStudents) fetchStudents();
     } else if (activeTab === 'publications') {
@@ -604,7 +690,8 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   };
 
   // Filters
-  const pendingStudents = students.filter((s) => s.status === 'pending');
+  // A signup that never finished the registration form has nothing to verify yet
+  const pendingStudents = students.filter((s) => s.status === 'pending' && s.isProfileComplete !== false);
   const filteredStudents = students.filter((s) => {
     const matchesFilter =
       rosterFilter === 'all' ||
@@ -637,16 +724,16 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-serif-title text-lg tracking-tight block leading-tight">
-                  {isAdmin ? 'Depository Administration Console' : 'Depository Moderator Console'}
+                  {isAdmin ? 'Admin console' : 'Staff console'}
                 </span>
-                <span className={`text-[10px] font-mono-meta font-bold px-1.5 py-0.2 rounded-xs uppercase ${
+                <span className={`text-[11px] font-mono-meta font-bold px-1.5 py-0.2 rounded-xs uppercase ${
                   isAdmin ? 'bg-amber-400 text-neutral-950' : 'bg-emerald-400 text-neutral-950'
                 }`}>
-                  {isAdmin ? 'Depository Director' : 'Editorial Moderator'}
+                  {isAdmin ? 'Administrator' : 'Editor'}
                 </span>
               </div>
-              <span className="text-[10px] font-mono-meta text-neutral-400 uppercase tracking-wider">
-                Project Panther • Operational RBAC Gateway
+              <span className="text-[11px] font-mono-meta text-neutral-400 uppercase tracking-wider">
+                The Thesis Archive
               </span>
             </div>
           </div>
@@ -665,9 +752,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   }`}
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Pending Applicants</span>
+                  <span>New students</span>
                   {pendingStudents.length > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-mono ${
                       activeTab === 'pending' ? 'bg-neutral-950 text-amber-300' : 'bg-amber-500 text-neutral-950'
                     }`}>
                       {pendingStudents.length}
@@ -684,8 +771,8 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   }`}
                 >
                   <Users className="w-3.5 h-3.5" />
-                  <span>Student Roster</span>
-                  <span className="text-[10px] opacity-75 font-mono">({students.length})</span>
+                  <span>Students</span>
+                  <span className="text-[11px] opacity-75 font-mono">({students.length})</span>
                 </button>
               </>
             )}
@@ -700,9 +787,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Moderation Desk</span>
+                <span>Theses</span>
                 {pendingThesesCount > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-mono ${
                     activeTab === 'publications' ? 'bg-neutral-950 text-amber-300' : 'bg-amber-500 text-neutral-950'
                   }`}>
                     {pendingThesesCount}
@@ -723,7 +810,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 <CreditCard className="w-3.5 h-3.5" />
                 <span>bKash Payments</span>
                 {payments.filter((p) => ['submitted', 'under_review'].includes(p.status)).length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-mono ${
                     activeTab === 'payments' ? 'bg-neutral-950 text-amber-300' : 'bg-pink-600 text-white'
                   }`}>
                     {payments.filter((p) => ['submitted', 'under_review'].includes(p.status)).length}
@@ -742,7 +829,35 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 }`}
               >
                 <FileWarning className="w-3.5 h-3.5" />
-                <span>Issue Reports</span>
+                <span>Reports</span>
+                {reports.filter((r) => r.status === 'pending').length > 0 && (
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-mono ${
+                    activeTab === 'reports' ? 'bg-neutral-950 text-amber-300' : 'bg-amber-500 text-neutral-950'
+                  }`}>
+                    {reports.filter((r) => r.status === 'pending').length}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {canModerateReports && (
+              <button
+                onClick={() => setActiveTab('feedback')}
+                className={`px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'feedback'
+                    ? 'bg-amber-500 text-neutral-950 font-bold'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Feedback</span>
+                {newFeedbackCount > 0 && (
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-mono ${
+                    activeTab === 'feedback' ? 'bg-neutral-950 text-amber-300' : 'bg-amber-500 text-neutral-950'
+                  }`}>
+                    {newFeedbackCount}
+                  </span>
+                )}
               </button>
             )}
 
@@ -757,7 +872,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   }`}
                 >
                   <Shield className="w-3.5 h-3.5" />
-                  <span>Team & Access</span>
+                  <span>Team</span>
                 </button>
 
                 <button
@@ -769,9 +884,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   }`}
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>System Status</span>
+                  <span>System</span>
                   {maintenanceState?.enabled && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-red-600 text-white font-bold">
+                    <span className="text-[11px] px-1.5 py-0.2 rounded-full font-mono bg-red-600 text-white font-bold">
                       MAINTENANCE
                     </span>
                   )}
@@ -795,10 +910,10 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             <button
               onClick={onSwitchToStudentPreview}
               className="bg-amber-500 hover:bg-amber-400 text-neutral-950 px-3.5 py-1.5 rounded-xs transition font-mono-meta text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Open full research discovery repository with administrative entitlements"
+              title="See the site as students see it"
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Open Research Library</span>
+              <span>Open the student site</span>
             </button>
 
             <button
@@ -814,7 +929,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-6 py-6 w-full flex-1">
+      <main className="tta-light-panel max-w-7xl mx-auto px-4 sm:px-6 py-5 w-full flex-1">
         
         {/* TAB 1: PENDING APPLICANTS */}
         {activeTab === 'pending' && canViewStudents && (
@@ -822,10 +937,10 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8]">
               <div>
                 <h2 className="text-xl font-serif-title font-semibold text-[#1C1B18]">
-                  Candidate Verification Desk
+                  New students to check
                 </h2>
                 <p className="text-xs font-mono-meta text-[#737067]">
-                  Inspect student academic identity credentials and evaluate access requests.
+                  Look at each student's details and ID card, then approve or decline.
                 </p>
               </div>
               <button
@@ -834,7 +949,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 className="text-xs font-mono-meta text-[#737067] hover:text-[#1C1B18] flex items-center gap-1 cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loadingStudents ? 'animate-spin' : ''}`} />
-                <span>Refresh Desk</span>
+                <span>Refresh</span>
               </button>
             </div>
 
@@ -861,7 +976,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                         <h3 className="font-bold text-base text-[#1C1B18]">{student.name}</h3>
                         <p className="text-xs font-mono-meta text-[#737067]">{student.email}</p>
                       </div>
-                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-xs text-[10px] font-mono-meta font-bold">
+                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-xs text-[11px] font-mono-meta font-bold">
                         AWAITING VERIFICATION
                       </span>
                     </div>
@@ -905,7 +1020,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                           className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-1.5 rounded-xs font-mono-meta text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>Approve Access</span>
+                          <span>Approve</span>
                         </button>
                         <button
                           onClick={() => handleVerifyStudent(student._id, 'reject')}
@@ -926,273 +1041,258 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
         )}
 
         {/* TAB 2: STUDENT ROSTER */}
-        {activeTab === 'roster' && canViewStudents && (
-          <div className="bg-white border border-[#E2DFD8] rounded-sm shadow-xs p-6 space-y-4">
-            
-            {/* Header Controls */}
-            <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E2DFD8]">
-              <div>
-                <h2 className="text-xl font-serif-title text-[#1C1B18]">Scholarly Registry</h2>
-                <p className="text-xs text-[#737067] font-mono-meta">
-                  Authoritative directory of registered scholars and active membership entitlements.
-                </p>
-              </div>
+        {activeTab === 'roster' && canViewStudents && (() => {
+          const totalPages = Math.max(1, Math.ceil(filteredStudents.length / ROSTER_PAGE_SIZE));
+          const page = Math.min(rosterPage, totalPages);
+          const pageRows = filteredStudents.slice((page - 1) * ROSTER_PAGE_SIZE, page * ROSTER_PAGE_SIZE);
 
-              {/* Search & Filter */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative w-64">
-                  <input
-                    type="text"
-                    value={searchStudent}
-                    onChange={(e) => setSearchStudent(e.target.value)}
-                    placeholder="Search by name, ID, email..."
-                    className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 pl-8 text-xs font-mono-meta rounded-xs focus:outline-none focus:border-[#1C1B18]"
-                  />
-                  <Search className="w-3.5 h-3.5 text-[#8C887E] absolute left-2.5 top-2.5" />
+          const statusChip = (s) => (
+            <span className="inline-flex items-center gap-1 flex-wrap">
+              <span className={`px-2 py-0.5 rounded-xs text-[11px] font-bold uppercase border ${
+                s.status === 'approved'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  : s.status === 'pending'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-red-100 text-red-900 border-red-300'
+              }`}>
+                {s.status === 'banned' ? 'suspended' : s.status}
+              </span>
+              {s.role === 'editor' && (
+                <span className="px-1.5 py-0.5 rounded-xs text-[11px] font-bold uppercase bg-purple-100 text-purple-900 border border-purple-300">Editor</span>
+              )}
+            </span>
+          );
+
+          const planCell = (s) => {
+            const m = s.membership || {};
+            const expiry = m.formattedExpiry ? <div className="text-[11px] text-[#737067] mt-0.5">Until {m.formattedExpiry}</div> : null;
+            if (m.source === 'manual_admin') {
+              return (
+                <div>
+                  <span className={`border px-1.5 py-0.5 rounded-xs text-[11px] font-bold ${m.grantType === 'test' ? 'bg-purple-100 text-purple-900 border-purple-300' : 'bg-blue-100 text-blue-900 border-blue-300'}`}>
+                    {m.customLabel || m.label || 'Given by admin'}
+                  </span>
+                  {m.grantReason && <div className="text-[11px] text-[#737067] italic truncate max-w-[180px]" title={m.grantReason}>“{m.grantReason}”</div>}
+                  {expiry}
+                </div>
+              );
+            }
+            const info = getPlanInfo(m.plan);
+            if (info.isPaid || info.isTrial) {
+              return (
+                <div>
+                  <span className={`border px-1.5 py-0.5 rounded-xs text-[11px] font-bold ${info.isTrial ? 'bg-blue-100 text-blue-900 border-blue-300' : 'bg-emerald-100 text-emerald-900 border-emerald-400'}`}>
+                    {info.label}
+                  </span>
+                  {expiry}
+                </div>
+              );
+            }
+            return <span className="text-[11px] text-[#737067] bg-[#FAF9F5] border border-[#D5D1C7] px-1.5 py-0.5 rounded-xs">Free</span>;
+          };
+
+          // One clear action per row; everything else is in the row's menu
+          const mainAction = (s) => {
+            const busy = actionLoading === s._id;
+            if (s.status === 'pending' && s.isProfileComplete === false) {
+              return <span className="text-[11px] text-neutral-500 italic" title="This person signed in but has not filled in the registration form">Registration not finished</span>;
+            }
+            if (s.status === 'pending' && canVerifyStudents) {
+              return <button type="button" onClick={() => handleVerifyStudent(s._id, 'approve')} disabled={busy} className="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1.5 rounded-xs font-bold text-xs cursor-pointer disabled:opacity-50">Approve</button>;
+            }
+            if (s.status === 'approved' && canSuspendStudents) {
+              return <button type="button" onClick={() => handleBanStudent(s._id, s.name)} disabled={busy} className="bg-white hover:bg-red-50 text-neutral-700 hover:text-red-700 border border-neutral-300 px-2.5 py-1.5 rounded-xs text-xs cursor-pointer disabled:opacity-50">Suspend</button>;
+            }
+            if (s.status === 'banned' && canSuspendStudents) {
+              return <button type="button" onClick={() => handleUnbanStudent(s._id)} disabled={busy} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1.5 rounded-xs text-xs cursor-pointer disabled:opacity-50 font-bold">Reinstate</button>;
+            }
+            return null;
+          };
+
+          const menuItems = (s) => {
+            const items = [];
+            if (s.hasVerificationDocument || s.idCardProof) items.push({ label: 'View ID card', run: () => setInspectingDocStudent(s) });
+            if (isAdmin) {
+              items.push({ label: 'Give membership…', run: () => setManualGrantTarget(s) });
+              if (s.membership?.plan && s.membership.plan !== 'free') items.push({ label: 'Remove membership', run: () => handleRevokeMembership(s._id, s.name), danger: true });
+              if (s.role === 'editor') items.push({ label: 'Remove editor role', run: () => handleRevokeEditorRole(s._id, s.name) });
+              // Only an approved student can be made an editor
+              else if (s.status === 'approved') items.push({ label: 'Make editor…', run: () => handleAppointEditorFromStudent(s) });
+              items.push({ label: 'Delete account', run: () => handleDeleteStudent(s._id, s.name), danger: true });
+            }
+            return items;
+          };
+
+          const rowMenu = (s) => {
+            const items = menuItems(s);
+            if (items.length === 0) return null;
+            const open = openRowMenuId === s._id;
+            return (
+              <div className="relative inline-block text-left" data-row-menu>
+                <button
+                  type="button"
+                  onClick={() => setOpenRowMenuId(open ? null : s._id)}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  aria-label={`More actions for ${s.name}`}
+                  className="p-1.5 border border-[#D5D1C7] rounded-xs bg-white hover:bg-[#F2EFE8] text-[#605D55] cursor-pointer"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {open && (
+                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 bg-white border border-[#D5D1C7] rounded-sm shadow-xl z-20 py-1 text-xs text-left">
+                    {items.map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        role="menuitem"
+                        disabled={actionLoading === s._id}
+                        onClick={() => {
+                          setOpenRowMenuId(null);
+                          item.run();
+                        }}
+                        className={`w-full text-left px-3 py-2 hover:bg-[#FAF9F5] cursor-pointer disabled:opacity-50 ${item.danger ? 'text-red-700' : 'text-[#1C1B18]'}`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          };
+
+          return (
+            <div className="bg-white border border-[#E2DFD8] rounded-sm shadow-xs p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E2DFD8]">
+                <div>
+                  <h2 className="text-xl font-serif-title text-[#1C1B18]">Students</h2>
+                  <p className="text-xs text-[#737067]">Everyone who has signed up, with account status and membership.</p>
                 </div>
 
-                <div className="flex gap-1 text-xs font-mono-meta border border-[#D5D1C7] p-0.5 rounded-xs bg-[#FAF9F5]">
-                  {['all', 'approved', 'pending', 'banned'].map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setRosterFilter(f)}
-                      className={`px-2.5 py-1 rounded-xs uppercase text-[10px] cursor-pointer transition ${
-                        rosterFilter === f ? 'bg-[#1C1B18] text-white font-bold' : 'text-[#737067] hover:text-[#1C1B18]'
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-none sm:w-64">
+                    <input
+                      type="text"
+                      value={searchStudent}
+                      onChange={(e) => {
+                        setSearchStudent(e.target.value);
+                        setRosterPage(1);
+                      }}
+                      placeholder="Search by name, student ID or email"
+                      aria-label="Search students"
+                      className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 pl-8 text-xs rounded-xs focus:outline-none focus:border-[#1C1B18]"
+                    />
+                    <Search className="w-3.5 h-3.5 text-[#8C887E] absolute left-2.5 top-2.5" />
+                  </div>
+
+                  <div className="flex gap-1 text-xs border border-[#D5D1C7] p-0.5 rounded-xs bg-[#FAF9F5]">
+                    {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['banned', 'Suspended']].map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setRosterFilter(key);
+                          setRosterPage(1);
+                        }}
+                        aria-pressed={rosterFilter === key}
+                        className={`px-2.5 py-1 rounded-xs text-[11px] cursor-pointer transition ${rosterFilter === key ? 'bg-[#1C1B18] text-white font-bold' : 'text-[#737067] hover:text-[#1C1B18]'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto border border-[#E2DFD8] rounded-xs">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[10px] font-mono-meta text-[#605D55] uppercase">
-                  <tr>
-                    <th className="py-2.5 px-4">Scholar Identity</th>
-                    <th className="py-2.5 px-4">Institution & Degree</th>
-                    <th className="py-2.5 px-4">Account Status</th>
-                    <th className="py-2.5 px-4">Membership Plan</th>
-                    <th className="py-2.5 px-4">Verification ID</th>
-                    <th className="py-2.5 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E2DA] font-sans">
-                  {filteredStudents.map((s) => {
-                    const isStudentApproved = s.status === 'approved';
-                    const isStudentPending = s.status === 'pending';
-                    const isStudentBanned = s.status === 'banned';
+              {loadingStudents && students.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[#737067]">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                  Loading students…
+                </div>
+              ) : filteredStudents.length === 0 ? (
+                <div className="p-10 text-center text-xs text-[#737067] bg-[#FAF9F5] border border-[#E2DFD8] rounded-sm">No students match.</div>
+              ) : (
+                <>
+                  {/* Wide screens: a table */}
+                  <div className="hidden md:block border border-[#E2DFD8] rounded-xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[11px] text-[#605D55] uppercase">
+                        <tr>
+                          <th className="py-2.5 px-4 font-semibold">Student</th>
+                          <th className="py-2.5 px-4 font-semibold">University</th>
+                          <th className="py-2.5 px-4 font-semibold">Status</th>
+                          <th className="py-2.5 px-4 font-semibold">Membership</th>
+                          <th className="py-2.5 px-4 font-semibold text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E2DA]">
+                        {pageRows.map((s) => (
+                          <tr key={s._id} className="hover:bg-[#FAF9F5]/70 transition-colors">
+                            <td className="py-2.5 px-4">
+                              <div className="font-bold text-[#1C1B18]">{s.name}</div>
+                              <div className="text-[11px] text-[#737067] break-all">{s.email}</div>
+                            </td>
+                            <td className="py-2.5 px-4 text-[12px]">
+                              <div className="text-[#1C1B18]">{s.university || 'Not given'}</div>
+                              <div className="text-[11px] text-[#8C887E]">ID {s.studentId || 'not given'}{s.degreeProgram ? ` · ${s.degreeProgram}` : ''}</div>
+                            </td>
+                            <td className="py-2.5 px-4">{statusChip(s)}</td>
+                            <td className="py-2.5 px-4">{planCell(s)}</td>
+                            <td className="py-2.5 px-4 text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                {mainAction(s)}
+                                {rowMenu(s)}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                    return (
-                      <tr key={s._id} className="hover:bg-[#FAF9F5]/70 transition-colors">
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-[#1C1B18]">{s.name}</div>
-                          <div className="text-[11px] font-mono-meta text-[#737067]">{s.email}</div>
-                        </td>
-
-                        <td className="py-3 px-4 font-mono-meta text-[11px]">
-                          <div>{s.university || 'N/A'}</div>
-                          <div className="text-[10px] text-[#8C887E]">ID: {s.studentId || 'N/A'} • {s.degreeProgram}</div>
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <div className="flex flex-col gap-1 items-start">
-                            <span className={`px-2 py-0.5 rounded-xs text-[10px] font-mono-meta font-bold uppercase ${
-                              isStudentApproved
-                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                : isStudentPending
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : 'bg-red-100 text-red-900 border border-red-300'
-                            }`}>
-                              {s.status}
-                            </span>
-                            {s.role === 'editor' && (
-                              <span className="px-1.5 py-0.2 rounded-xs text-[9px] font-mono-meta font-bold uppercase bg-purple-100 text-purple-900 border border-purple-300">
-                                Editor
-                              </span>
-                            )}
+                  {/* Phones: one card per student, nothing cut off */}
+                  <ul className="md:hidden space-y-2.5">
+                    {pageRows.map((s) => (
+                      <li key={s._id} className="border border-[#E2DFD8] rounded-sm p-3 space-y-2 text-xs bg-white">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm text-[#1C1B18]">{s.name}</div>
+                            <div className="text-[11px] text-[#737067] break-all">{s.email}</div>
                           </div>
-                        </td>
-
-                        {/* Canonical Membership Plan Badges */}
-                        <td className="py-3 px-4 font-mono-meta text-xs">
-                          {s.membership?.source === 'manual_admin' ? (
-                            <div>
-                              <span className={`border px-1.5 py-0.5 rounded-xs text-[10px] font-bold ${
-                                s.membership.grantType === 'test'
-                                  ? 'bg-purple-100 text-purple-900 border-purple-300'
-                                  : 'bg-blue-100 text-blue-900 border-blue-300'
-                              }`}>
-                                {s.membership.customLabel || s.membership.label || 'Admin Grant'}
-                              </span>
-                              {s.membership.grantReason && (
-                                <div className="text-[9px] text-[#737067] italic truncate max-w-[160px]" title={s.membership.grantReason}>
-                                  &quot;{s.membership.grantReason}&quot;
-                                </div>
-                              )}
-                              {s.membership?.formattedExpiry && (
-                                <div className="text-[9px] text-[#737067] mt-0.5">Exp: {s.membership.formattedExpiry}</div>
-                              )}
-                            </div>
-                          ) : s.membership?.plan === 'pro_max_12m' ? (
-                            <div>
-                              <span className="bg-amber-100 text-amber-900 border border-amber-400 px-1.5 py-0.5 rounded-xs text-[10px] font-bold">
-                                ★ Pro Max Annual
-                              </span>
-                              {s.membership?.formattedExpiry && (
-                                <div className="text-[9px] text-[#737067] mt-0.5">Exp: {s.membership.formattedExpiry}</div>
-                              )}
-                            </div>
-                          ) : s.membership?.plan === 'premium_6m' || s.membership?.plan === 'premium' ? (
-                            <div>
-                              <span className="bg-emerald-100 text-emerald-900 border border-emerald-400 px-1.5 py-0.5 rounded-xs text-[10px] font-bold">
-                                Premium Scholarly
-                              </span>
-                              {s.membership?.formattedExpiry && (
-                                <div className="text-[9px] text-[#737067] mt-0.5">Exp: {s.membership.formattedExpiry}</div>
-                              )}
-                            </div>
-                          ) : s.membership?.plan === 'trial_v2' || s.membership?.plan === 'trial' ? (
-                            <div>
-                              <span className="bg-blue-100 text-blue-900 border border-blue-300 px-1.5 py-0.5 rounded-xs text-[10px]">
-                                7-Day Trial
-                              </span>
-                              {s.membership?.formattedExpiry && (
-                                <div className="text-[9px] text-[#737067] mt-0.5">Exp: {s.membership.formattedExpiry}</div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-[#737067] bg-[#FAF9F5] border border-[#D5D1C7] px-1.5 py-0.5 rounded-xs">
-                              Standard Free
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Document View */}
-                        <td className="py-3 px-4">
-                          {(s.hasVerificationDocument || s.idCardProof) ? (
-                            <button
-                              type="button"
-                              onClick={() => setInspectingDocStudent(s)}
-                              className="text-[11px] font-mono-meta text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-1 cursor-pointer font-bold"
-                            >
-                              <Eye className="w-3 h-3" />
-                              <span>View Proof</span>
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-mono-meta text-[#8C887E]">None</span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-3 px-4 text-right">
-                          <div className="inline-flex items-center gap-1.5 font-mono-meta text-xs">
-                            
-                            {/* Manual Grant (Admin Only) */}
-                            {isAdmin && (
-                              <button
-                                type="button"
-                                onClick={() => setManualGrantTarget(s)}
-                                className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-2 py-1 rounded-xs cursor-pointer font-bold text-[10px]"
-                                title="Grant manual Premium or custom test duration"
-                              >
-                                + Grant Access
-                              </button>
-                            )}
-
-                            {/* Revoke Membership Plan (Admin Only - if user has any active plan) */}
-                            {isAdmin && s.membership?.plan && s.membership.plan !== 'free' && (
-                              <button
-                                type="button"
-                                onClick={() => handleRevokeMembership(s._id, s.name)}
-                                disabled={actionLoading === s._id}
-                                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-xs text-[10px] cursor-pointer font-bold disabled:opacity-50"
-                                title="Revoke active membership or test grant"
-                              >
-                                Revoke Plan
-                              </button>
-                            )}
-
-                            {/* Editor Management Role Action (Admin Only) */}
-                            {isAdmin && (
-                              s.role === 'editor' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRevokeEditorRole(s._id, s.name)}
-                                  disabled={actionLoading === s._id}
-                                  className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 px-2 py-1 rounded-xs text-[10px] cursor-pointer font-bold disabled:opacity-50"
-                                  title="Revoke editor privileges"
-                                >
-                                  Revoke Editor
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleAppointEditorFromStudent(s)}
-                                  disabled={actionLoading === s._id}
-                                  className="bg-neutral-50 hover:bg-neutral-100 text-neutral-800 border border-neutral-300 px-2 py-1 rounded-xs text-[10px] cursor-pointer font-bold disabled:opacity-50"
-                                  title="Appoint this scholar as a depository editor"
-                                >
-                                  + Appoint Editor
-                                </button>
-                              )
-                            )}
-
-                            {isStudentPending && canVerifyStudents && (
-                              <button
-                                onClick={() => handleVerifyStudent(s._id, 'approve')}
-                                disabled={actionLoading === s._id}
-                                className="bg-emerald-700 hover:bg-emerald-800 text-white px-2 py-1 rounded-xs font-bold text-[10px] cursor-pointer disabled:opacity-50"
-                              >
-                                Approve
-                              </button>
-                            )}
-
-                            {isStudentApproved && canSuspendStudents && (
-                              <button
-                                onClick={() => handleBanStudent(s._id, s.name)}
-                                disabled={actionLoading === s._id}
-                                className="bg-neutral-100 hover:bg-red-50 text-neutral-700 hover:text-red-700 border border-neutral-300 px-2 py-1 rounded-xs text-[10px] cursor-pointer disabled:opacity-50"
-                              >
-                                Suspend
-                              </button>
-                            )}
-
-                            {isStudentBanned && canSuspendStudents && (
-                              <button
-                                onClick={() => handleUnbanStudent(s._id)}
-                                disabled={actionLoading === s._id}
-                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-1 rounded-xs text-[10px] cursor-pointer disabled:opacity-50 font-bold"
-                              >
-                                Reinstate
-                              </button>
-                            )}
-
-                            {isAdmin && (
-                              <button
-                                onClick={() => handleDeleteStudent(s._id, s.name)}
-                                disabled={actionLoading === s._id}
-                                className="text-neutral-400 hover:text-red-700 p-1 cursor-pointer"
-                                title="Delete account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
+                          {statusChip(s)}
+                        </div>
+                        <div className="text-[#524F47]">
+                          {s.university || 'University not given'} · ID {s.studentId || 'not given'}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F0ECE1]">
+                          {planCell(s)}
+                          <div className="inline-flex items-center gap-1.5 shrink-0">
+                            {mainAction(s)}
+                            {rowMenu(s)}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
 
-          </div>
-        )}
+                  <div className="flex items-center justify-between gap-2 text-xs text-[#605D55]">
+                    <span>
+                      {filteredStudents.length} {filteredStudents.length === 1 ? 'student' : 'students'}
+                      {totalPages > 1 ? ` · page ${page} of ${totalPages}` : ''}
+                    </span>
+                    {totalPages > 1 && (
+                      <span className="flex items-center gap-2">
+                        <button type="button" disabled={page <= 1} onClick={() => setRosterPage(page - 1)} className="px-2.5 py-1 border border-[#D5D1C7] rounded-sm bg-white cursor-pointer disabled:opacity-40">Previous</button>
+                        <button type="button" disabled={page >= totalPages} onClick={() => setRosterPage(page + 1)} className="px-2.5 py-1 border border-[#D5D1C7] rounded-sm bg-white cursor-pointer disabled:opacity-40">Next</button>
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* TAB 3: DEPOSITORY PUBLICATIONS MODERATION */}
         {activeTab === 'publications' && (canModeratePublications || isAdmin) && (
@@ -1201,27 +1301,28 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E2DFD8]">
               <div>
                 <h2 className="text-xl font-serif-title text-[#1C1B18]">
-                  Depository Publications Moderation Desk
+                  Deposited theses
                 </h2>
                 <p className="text-xs text-[#737067] font-mono-meta">
-                  Inspect and moderate locally cataloged student theses and institutional research papers.
+                  Theses students have deposited. Approve a thesis to make it appear in search.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative w-64">
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <div className="relative flex-1 min-w-0 sm:flex-none sm:w-64">
                   <input
                     type="text"
+                    aria-label="Search deposited theses"
                     value={searchTheses}
                     onChange={(e) => setSearchTheses(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && fetchPublications(1)}
-                    placeholder="Search local titles, authors..."
+                    placeholder="Search by title or author"
                     className="w-full bg-[#FAF9F5] border border-[#D5D1C7] px-3 py-1.5 pl-8 text-xs font-mono-meta rounded-xs focus:outline-none focus:border-[#1C1B18]"
                   />
                   <Search className="w-3.5 h-3.5 text-[#8C887E] absolute left-2.5 top-2.5" />
                 </div>
 
-                <div className="flex gap-1 text-xs font-mono-meta border border-[#D5D1C7] p-0.5 rounded-xs bg-[#FAF9F5]">
+                <div className="flex gap-1 text-xs font-mono-meta border border-[#D5D1C7] p-0.5 rounded-xs bg-[#FAF9F5] flex-wrap">
                   {['all', 'pending', 'approved', 'rejected'].map((st) => (
                     <button
                       key={st}
@@ -1229,7 +1330,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                         setPublicationStatusFilter(st);
                         fetchPublications(1, st);
                       }}
-                      className={`px-2 py-1 rounded-xs uppercase text-[10px] cursor-pointer transition ${
+                      className={`px-2 py-1 rounded-xs uppercase text-[11px] cursor-pointer transition ${
                         publicationStatusFilter === st ? 'bg-[#1C1B18] text-white font-bold' : 'text-[#737067] hover:text-[#1C1B18]'
                       }`}
                     >
@@ -1244,7 +1345,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                     className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs font-mono-meta px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Deposit Paper</span>
+                    <span>Add a thesis</span>
                   </button>
                 )}
               </div>
@@ -1270,7 +1371,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                     className="border border-[#E2DFD8] p-4 rounded-xs hover:border-[#1C1B18] transition flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#FAF9F5]"
                   >
                     <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono-meta">
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono-meta">
                         <span className={`px-1.5 py-0.5 rounded-xs font-bold uppercase ${
                           paper.status === 'approved'
                             ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
@@ -1284,7 +1385,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                           {paper.category}
                         </span>
                         <span className="text-[#737067]">
-                          Catalog ID: <code>{paper.catalogId || paper._id}</code>
+                          <code className="break-all">{paper.catalogId || paper._id}</code>
                         </span>
                       </div>
 
@@ -1298,13 +1399,13 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
 
                       {paper.status === 'rejected' && paper.rejectionReason && (
                         <div className="text-xs text-red-800 bg-red-50 border border-red-200 p-2 rounded-xs mt-1 font-mono-meta">
-                          <strong>Rejection Reason:</strong> "{paper.rejectionReason}"
+                          <strong>Reason given:</strong> "{paper.rejectionReason}"
                         </div>
                       )}
                     </div>
 
                     {/* Moderation Controls */}
-                    <div className="flex items-center gap-2 shrink-0 font-mono-meta text-xs">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap font-mono-meta text-xs">
                       <button
                         onClick={() => setSelectedThesisDetail(paper)}
                         className="bg-white border border-[#D5D1C7] hover:border-[#1C1B18] text-[#1C1B18] px-2.5 py-1.5 rounded-xs transition flex items-center gap-1 cursor-pointer"
@@ -1339,7 +1440,8 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                         <button
                           onClick={() => handleDeletePublication(paper._id, paper.title)}
                           className="text-neutral-400 hover:text-red-700 p-1.5 cursor-pointer ml-1"
-                          title="Permanently remove local thesis"
+                          title="Delete this thesis for good"
+                          aria-label="Delete this thesis"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1359,9 +1461,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E2DFD8]">
               <div>
-                <h2 className="text-xl font-serif-title text-[#1C1B18]">bKash Payment Review Desk</h2>
+                <h2 className="text-xl font-serif-title text-[#1C1B18]">bKash payments</h2>
                 <p className="text-xs text-[#737067] font-mono-meta">
-                  Reconcile manual bKash transaction submissions against official statements and activate memberships.
+                  Check each transaction ID against your bKash statement, then approve to start the membership.
                 </p>
               </div>
 
@@ -1372,7 +1474,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   className="text-xs font-mono-meta text-[#737067] hover:text-[#1C1B18] flex items-center gap-1 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingPayments ? 'animate-spin' : ''}`} />
-                  <span>Refresh Queue</span>
+                  <span>Refresh</span>
                 </button>
               </div>
             </div>
@@ -1389,9 +1491,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             ) : (
               <div className="overflow-x-auto border border-[#E2DFD8] rounded-xs">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[10px] font-mono-meta text-[#605D55] uppercase">
+                  <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[11px] font-mono-meta text-[#605D55] uppercase">
                     <tr>
-                      <th className="py-2.5 px-4">Scholar & Order</th>
+                      <th className="py-2.5 px-4">Student and order</th>
                       <th className="py-2.5 px-4">Transaction ID</th>
                       <th className="py-2.5 px-4">Plan & Amount</th>
                       <th className="py-2.5 px-4">Sender & Time</th>
@@ -1407,9 +1509,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                       return (
                         <tr key={sub._id} className="hover:bg-[#FAF9F5]/70 transition-colors">
                           <td className="py-3 px-4">
-                            <div className="font-bold text-[#1C1B18]">{sub.user?.name || 'Scholar'}</div>
+                            <div className="font-bold text-[#1C1B18]">{sub.user?.name || 'Student'}</div>
                             <div className="text-[11px] font-mono-meta text-[#737067]">{sub.user?.email}</div>
-                            <div className="text-[10px] font-mono-meta text-neutral-500">Ref: {sub.order?.orderRef || 'N/A'}</div>
+                            <div className="text-[11px] font-mono-meta text-neutral-500">Ref: {sub.order?.orderRef || 'N/A'}</div>
                           </td>
 
                           <td className="py-3 px-4 font-mono-meta">
@@ -1422,20 +1524,20 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                             <div className="font-bold text-sm text-purple-950">
                               ৳{sub.claimedAmountPaisa / 100} BDT
                             </div>
-                            <div className="text-[10px] text-neutral-500">
+                            <div className="text-[11px] text-neutral-500">
                               {sub.order?.durationMonths || 6} Months ({sub.order?.planName || 'Premium'})
                             </div>
                           </td>
 
                           <td className="py-3 px-4 font-mono-meta text-xs">
                             <div>Sender: <strong>{sub.senderNumber || 'Not specified'}</strong></div>
-                            <div className="text-[10px] text-neutral-500">
+                            <div className="text-[11px] text-neutral-500">
                               {new Date(sub.paymentDateTime || sub.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </td>
 
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded-xs text-[10px] font-mono-meta font-bold uppercase ${
+                            <span className={`px-2 py-0.5 rounded-xs text-[11px] font-mono-meta font-bold uppercase ${
                               isApproved
                                 ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                 : isRejected
@@ -1476,9 +1578,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
           <div className="bg-white border border-[#E2DFD8] rounded-sm shadow-xs p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8]">
               <div>
-                <h2 className="text-xl font-serif-title text-[#1C1B18]">Depository Reports Queue</h2>
+                <h2 className="text-xl font-serif-title text-[#1C1B18]">Reported problems</h2>
                 <p className="text-xs text-[#737067] font-mono-meta">
-                  Metadata inaccuracies, dead PDF links, and data issues reported by scholars.
+                  Broken links and wrong details that users reported on a paper.
                 </p>
               </div>
               <button
@@ -1487,7 +1589,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 className="text-xs font-mono-meta text-[#737067] hover:text-[#1C1B18] flex items-center gap-1 cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loadingReports ? 'animate-spin' : ''}`} />
-                <span>Refresh Reports</span>
+                <span>Refresh</span>
               </button>
             </div>
 
@@ -1498,38 +1600,122 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
               </div>
             ) : reports.length === 0 ? (
               <div className="p-12 text-center text-xs font-mono-meta text-[#737067] bg-[#FAF9F5] border border-[#E2DFD8] rounded-sm">
-                No issue reports pending.
+                No issue reports yet.
               </div>
             ) : (
               <div className="space-y-3">
-                {reports.map((r) => (
-                  <div key={r._id} className="border border-[#E2DFD8] p-4 rounded-xs bg-[#FAF9F5] space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-[#1C1B18]">{r.title || 'Publication Issue'}</span>
-                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-xs text-[10px] font-mono-meta uppercase font-bold">
-                        {r.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#524F47]">{r.description}</p>
-                    <div className="text-[10px] font-mono-meta text-[#737067]">
-                      Reported by: <strong>{r.reportedBy}</strong> • Record ID: <code>{r.recordId}</code>
-                    </div>
+                <div className="flex items-center gap-1 bg-[#FAF9F5] border border-[#D5D1C7] p-1 rounded-sm text-[11px] font-mono-meta w-fit flex-wrap">
+                  {[
+                    ['all', 'All'],
+                    ['pending', 'Pending'],
+                    ['resolved', 'Resolved'],
+                    ['dismissed', 'Dismissed'],
+                  ].map(([key, label]) => {
+                    const count = key === 'all' ? reports.length : reports.filter((r) => r.status === key).length;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-pressed={reportFilter === key}
+                        onClick={() => setReportFilter(key)}
+                        className={`px-2.5 py-1 rounded-xs cursor-pointer transition ${
+                          reportFilter === key ? 'bg-[#1C1B18] text-white font-bold' : 'text-[#605D55] hover:text-[#1C1B18]'
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {reports.filter((r) => reportFilter === 'all' || r.status === reportFilter).length === 0 && (
+                  <div className="p-8 text-center text-xs font-mono-meta text-[#737067] bg-[#FAF9F5] border border-[#E2DFD8] rounded-sm">
+                    No reports with this status.
                   </div>
-                ))}
+                )}
+
+                {reports
+                  .filter((r) => reportFilter === 'all' || r.status === reportFilter)
+                  .map((r) => (
+                    <div key={r._id} className="border border-[#E2DFD8] p-4 rounded-xs bg-[#FAF9F5] space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="font-bold text-sm text-[#1C1B18] block">{r.title || 'Publication issue'}</span>
+                          <span className="text-[11px] font-mono-meta text-[#524F47]">
+                            {REPORT_TYPE_LABELS[r.issueType] || r.issueType || 'Other'}
+                          </span>
+                        </div>
+                        <span
+                          className={`shrink-0 px-2 py-0.5 rounded-xs text-[11px] font-mono-meta uppercase font-bold border ${
+                            r.status === 'resolved'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : r.status === 'dismissed'
+                              ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-300'
+                          }`}
+                        >
+                          {r.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#524F47] break-words">{r.description}</p>
+                      <div className="text-[11px] font-mono-meta text-[#737067] break-all">
+                        Reported by: <strong>{r.reportedBy}</strong>
+                        {r.createdAt && <> • {new Date(r.createdAt).toLocaleDateString()}</>} • Record ID: <code>{r.recordId}</code>
+                      </div>
+                      {r.adminNotes && (
+                        <div className="text-[11px] text-[#1C1B18] bg-white border border-[#E2DFD8] rounded-xs px-2 py-1.5">
+                          <strong>Staff note:</strong> {r.adminNotes}
+                          {r.resolvedBy?.name && <span className="text-[#737067]"> ({r.resolvedBy.name})</span>}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 pt-1 font-mono-meta text-[11px]">
+                        {r.status === 'pending' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateReport(r, 'resolved')}
+                              className="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1 rounded-xs font-bold cursor-pointer"
+                            >
+                              Mark resolved
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateReport(r, 'dismissed')}
+                              className="bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 px-2.5 py-1 rounded-xs cursor-pointer"
+                            >
+                              Dismiss
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateReport(r, 'pending')}
+                            className="text-[#605D55] hover:text-[#1C1B18] underline cursor-pointer"
+                          >
+                            Reopen
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
         )}
 
         {/* TAB 6: TEAM & ACCESS (Admin Only) */}
+        {activeTab === 'feedback' && canModerateReports && (
+          <AdminFeedbackPanel onCountsChange={handleFeedbackCounts} />
+        )}
+
         {activeTab === 'staff' && isAdmin && (
           <div className="bg-white border border-[#E2DFD8] rounded-sm shadow-xs p-6 space-y-4">
             
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E2DFD8]">
               <div>
-                <h2 className="text-xl font-serif-title text-[#1C1B18]">Team & Access Control</h2>
+                <h2 className="text-xl font-serif-title text-[#1C1B18]">Team</h2>
                 <p className="text-xs text-[#737067] font-mono-meta">
-                  Appoint depository editors, delegate granular moderation capabilities, and audit privileged accounts.
+                  Make a student an editor and choose what each editor may do.
                 </p>
               </div>
 
@@ -1541,7 +1727,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs font-mono-meta px-3.5 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>Appoint New Editor</span>
+                <span>Add an editor</span>
               </button>
             </div>
 
@@ -1557,7 +1743,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
             ) : (
               <div className="overflow-x-auto border border-[#E2DFD8] rounded-xs">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[10px] font-mono-meta text-[#605D55] uppercase">
+                  <thead className="bg-[#FAF9F5] border-b border-[#E2DFD8] text-[11px] font-mono-meta text-[#605D55] uppercase">
                     <tr>
                       <th className="py-2.5 px-4">Staff Member</th>
                       <th className="py-2.5 px-4">Role</th>
@@ -1577,7 +1763,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                           </td>
 
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded-xs text-[10px] font-mono-meta font-bold uppercase ${
+                            <span className={`px-2 py-0.5 rounded-xs text-[11px] font-mono-meta font-bold uppercase ${
                               isTargetAdmin
                                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                 : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
@@ -1594,7 +1780,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                             ) : Array.isArray(st.permissions) && st.permissions.length > 0 ? (
                               <div className="flex flex-wrap gap-1 max-w-md">
                                 {st.permissions.map((p) => (
-                                  <span key={p} className="bg-white border border-[#D5D1C7] text-[#524F47] px-1.5 py-0.5 rounded text-[9px]">
+                                  <span key={p} className="bg-white border border-[#D5D1C7] text-[#524F47] px-1.5 py-0.5 rounded text-[11px]">
                                     {p}
                                   </span>
                                 ))}
@@ -1645,7 +1831,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
               <div>
                 <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                  <span>Platform Operations & Maintenance Mode</span>
+                  <span>Maintenance mode</span>
                 </h2>
                 <p className="text-xs text-[#737067] dark:text-[#9A968D] font-mono-meta mt-1">
                   Global repository traffic gates, upstream protection, and public availability controls.
@@ -1660,7 +1846,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   className="px-3 py-1.5 bg-[#FAF9F5] dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-xs font-mono-meta rounded-xs text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingMaintenance ? 'animate-spin' : ''}`} />
-                  <span>Refresh Status</span>
+                  <span>Refresh</span>
                 </button>
               </div>
             </div>
@@ -1867,7 +2053,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
         const isUnderReview = reviewingPayment.status === 'under_review';
         const isPending = reviewingPayment.status === 'submitted' || isUnderReview;
         const durationMonths = reviewingPayment.order?.durationMonths || 6;
-        const planName = reviewingPayment.order?.planName || (reviewingPayment.order?.plan === 'pro_max_12m' ? 'Pro Max Annual' : 'Premium Scholarly');
+        const planName = reviewingPayment.order?.planName || (reviewingPayment.order?.plan === 'pro_max_12m' ? 'Pro Max' : 'Premium');
 
         return (
           <div className="fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1882,7 +2068,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                     <h3 className="font-serif-title font-bold text-base text-[#1C1B18]">
                       bKash Transaction Verification Desk
                     </h3>
-                    <p className="text-[10px] font-mono-meta text-neutral-500">
+                    <p className="text-[11px] font-mono-meta text-neutral-500">
                       Merchant Reconciliation & Membership Activation Gate
                     </p>
                   </div>
@@ -2093,7 +2279,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
               className="space-y-3"
             >
               <textarea
-                required
+                required={!promptModal.optional}
                 rows="3"
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
@@ -2126,8 +2312,8 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       )}
 
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-6 py-4 w-full border-t border-[#E2DFD8] text-center text-xs font-mono-meta text-[#737067]">
-        The Thesis Archive • Master Administrative Console
+      <footer className="max-w-7xl mx-auto px-6 py-4 w-full border-t border-[#E2DFD8] dark:border-neutral-800 text-center text-xs text-[#737067] dark:text-neutral-500">
+        The Thesis Archive · Staff console
       </footer>
 
     </div>

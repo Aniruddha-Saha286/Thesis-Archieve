@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Thesis = require('../models/Thesis');
 const Report = require('../models/Report');
+const Feedback = require('../models/Feedback');
+const thesisFileStorage = require('../services/thesisFileStorage');
 const MembershipOrder = require('../models/MembershipOrder');
 const PaymentSubmission = require('../models/PaymentSubmission');
 const MembershipPeriod = require('../models/MembershipPeriod');
@@ -34,6 +36,7 @@ const {
   getValidatedPrimaryAdminEmail,
 } = require('../services/googleIdentityService');
 const emailService = require('../services/emailService');
+const { escapeRegex } = require('../utils/escapeRegex');
 const cloudinary = require('cloudinary').v2;
 
 const hasCloudinary = Boolean(
@@ -159,7 +162,8 @@ router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req
 // Returns students awaiting registration verification
 router.get('/pending-students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req, res) => {
   try {
-    const pendingStudents = await User.find({ role: 'student', status: 'pending' })
+    // Only students who finished the registration form belong in the review queue
+    const pendingStudents = await User.find({ role: 'student', status: 'pending', isProfileComplete: true })
       .select('-password -savedPapers -collections -comparisons -searchHistory')
       .sort({ createdAt: -1 });
 
@@ -261,6 +265,13 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
     const student = await User.findOne({ _id: studentId, role: 'student' });
     if (!student) {
       return res.status(404).json({ message: 'Student application not found or target is not a student.' });
+    }
+
+    if (decision === 'approve' && !student.isProfileComplete) {
+      return res.status(400).json({
+        message: 'This student has not finished the registration form yet, so there is nothing to verify. Approval becomes available once they submit it.',
+        code: 'PROFILE_INCOMPLETE',
+      });
     }
 
     student.status = decision === 'approve' ? 'approved' : 'rejected';
@@ -372,6 +383,7 @@ router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND),
       },
     });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to ban student:', err);
     return res.status(500).json({ message: 'Failed to ban student.' });
   }
 });
@@ -414,6 +426,7 @@ router.post('/student/:id/unban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND
       },
     });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to unban student:', err);
     return res.status(500).json({ message: 'Failed to unban student.' });
   }
 });
@@ -441,6 +454,7 @@ router.delete('/student/:id', requireAdmin, adminActionLimiter, async (req, res)
 
     return res.json({ message: `Student account for ${student.name} permanently removed.` });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to delete student account:', err);
     return res.status(500).json({ message: 'Failed to delete student account.' });
   }
 });
@@ -449,14 +463,17 @@ router.delete('/student/:id', requireAdmin, adminActionLimiter, async (req, res)
 // Returns administrative telemetry (staff authorization required)
 router.get('/stats', requireStaff, async (req, res) => {
   try {
-    const [pendingCount, pendingThesesCount, approvedStudents, bannedStudents, totalTheses, totalDatasets, totalEditors] = await Promise.all([
-      User.countDocuments({ role: 'student', status: 'pending' }),
+    const [pendingCount, pendingThesesCount, approvedStudents, bannedStudents, totalTheses, totalDatasets, totalEditors, pendingPaymentsCount, pendingReportsCount, newFeedbackCount] = await Promise.all([
+      User.countDocuments({ role: 'student', status: 'pending', isProfileComplete: true }),
       Thesis.countDocuments({ status: 'pending' }),
       User.countDocuments({ role: 'student', status: 'approved' }),
       User.countDocuments({ role: 'student', status: 'banned' }),
       Thesis.countDocuments({ status: 'approved' }),
-      Thesis.countDocuments({ datasetUrl: { $ne: '' } }),
+      Thesis.countDocuments({ datasetUrl: { $nin: ['', null] } }),
       User.countDocuments({ role: 'editor' }),
+      PaymentSubmission.countDocuments({ status: { $in: ['submitted', 'under_review'] } }),
+      Report.countDocuments({ status: 'pending' }),
+      Feedback.countDocuments({ status: 'new' }),
     ]);
 
     return res.json({
@@ -467,8 +484,12 @@ router.get('/stats', requireStaff, async (req, res) => {
       totalTheses,
       totalDatasets,
       totalEditors,
+      pendingPaymentsCount,
+      pendingReportsCount,
+      newFeedbackCount,
     });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to retrieve admin telemetry:', err);
     return res.status(500).json({ message: 'Failed to retrieve admin telemetry.' });
   }
 });
@@ -737,7 +758,7 @@ router.get('/publications', requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE)
     }
 
     if (q && q.trim()) {
-      const searchRegex = new RegExp(q.trim(), 'i');
+      const searchRegex = new RegExp(escapeRegex(q.trim()), 'i');
       filter.$or = [
         { title: searchRegex },
         { author: searchRegex },
@@ -907,6 +928,11 @@ router.delete('/publications/:id', requireAdmin, adminActionLimiter, async (req,
 
     emitToAdmins('admin:thesis_deleted', { thesisId: String(thesis._id) });
 
+    // Remove the uploaded PDF with the record (does nothing for linked PDFs; never blocks the delete)
+    if (thesis.pdfStorageRef) {
+      await thesisFileStorage.destroyThesisPdfIfUnused(thesis.pdfStorageRef, Thesis);
+    }
+
     await AuditEvent.create({
       actor: req.user._id,
       action: 'publication.deleted',
@@ -918,6 +944,7 @@ router.delete('/publications/:id', requireAdmin, adminActionLimiter, async (req,
 
     return res.json({ message: `Publication "${thesis.title}" permanently removed.` });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to delete publication:', err);
     return res.status(500).json({ message: 'Failed to delete publication.' });
   }
 });
@@ -936,6 +963,7 @@ router.get('/reports', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (r
       .populate('resolvedBy', 'name email');
     return res.json(reports);
   } catch (err) {
+    console.error('[routes/admin.js] Failed to retrieve reports queue:', err);
     return res.status(500).json({ message: 'Failed to retrieve reports queue.' });
   }
 });
@@ -943,18 +971,30 @@ router.get('/reports', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (r
 // PUT /api/admin/reports/:id
 router.put('/reports/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), adminActionLimiter, async (req, res) => {
   try {
-    const { status, adminNotes } = req.body;
+    const { status, adminNotes } = req.body || {};
+    if (status !== undefined && !['pending', 'resolved', 'dismissed'].includes(status)) {
+      return res.status(400).json({ message: 'Status must be pending, resolved or dismissed.' });
+    }
+
     const report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ message: 'Report not found.' });
 
     if (status) report.status = status;
-    if (adminNotes !== undefined) report.adminNotes = adminNotes;
-    report.resolvedBy = req.user._id;
-    report.resolvedAt = new Date();
+    if (adminNotes !== undefined) report.adminNotes = String(adminNotes || '').trim().slice(0, 1000);
+
+    if (report.status === 'pending') {
+      // Reopened: it is no longer closed by anyone
+      report.resolvedBy = null;
+      report.resolvedAt = null;
+    } else {
+      report.resolvedBy = req.user._id;
+      report.resolvedAt = new Date();
+    }
 
     await report.save();
     return res.json({ message: 'Report updated.', report });
   } catch (err) {
+    console.error('[Admin] Report update error:', err);
     return res.status(500).json({ message: 'Failed to update report.' });
   }
 });
@@ -974,10 +1014,10 @@ router.get('/payments', requirePermission(PERMISSIONS.PAYMENTS_VIEW), async (req
     }
 
     if (search && search.trim()) {
-      const q = search.trim();
+      const q = escapeRegex(search.trim());
       filter.$or = [
         { trxId: new RegExp(q, 'i') },
-        { normalizedTrxId: new RegExp(q.toUpperCase(), 'i') },
+        { normalizedTrxId: new RegExp(q, 'i') },
         { senderNumber: new RegExp(q, 'i') },
       ];
     }
@@ -1333,6 +1373,7 @@ router.post('/payments/:id/reject', requirePermission(PERMISSIONS.PAYMENTS_REVIE
 
     return res.json({ message: 'Payment claim rejected.', submission });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to reject payment:', err);
     return res.status(500).json({ message: 'Failed to reject payment.' });
   }
 });
@@ -1383,6 +1424,7 @@ router.post('/payments/:id/request-correction', requirePermission(PERMISSIONS.PA
 
     return res.json({ message: 'Correction instructions dispatched to student.', submission });
   } catch (err) {
+    console.error('[routes/admin.js] Failed to request correction:', err);
     return res.status(500).json({ message: 'Failed to request correction.' });
   }
 });
@@ -1771,6 +1813,7 @@ router.get('/system/maintenance', requireAdmin, async (req, res) => {
     const status = await getMaintenanceStatus();
     return res.json(status);
   } catch (err) {
+    console.error('[routes/admin.js] Failed to retrieve maintenance status:', err);
     return res.status(500).json({ message: 'Failed to retrieve maintenance status.' });
   }
 });

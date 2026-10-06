@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { X, RefreshCw, AlertCircle, ExternalLink, FileText, Shield } from 'lucide-react';
 
 export default function DocumentViewerModal({ isOpen, onClose, studentId, studentName }) {
+  useEscapeToClose(onClose, isOpen);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [documentUrl, setDocumentUrl] = useState('');
@@ -57,7 +59,7 @@ export default function DocumentViewerModal({ isOpen, onClose, studentId, studen
               <h3 className="text-sm font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                 Protected Verification Document Viewer
               </h3>
-              <p className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F]">
+              <p className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F]">
                 Student: <strong>{studentName || 'Scholar'}</strong> • Short-lived secure access ({Math.round(expiresIn / 60)} min)
               </p>
             </div>
@@ -144,7 +146,7 @@ export default function DocumentViewerModal({ isOpen, onClose, studentId, studen
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-[#FAF9F5] dark:bg-[#201F1C] border-t border-[#E2DFD8] dark:border-[#2C2A26] text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center justify-between">
+        <div className="p-3 bg-[#FAF9F5] dark:bg-[#201F1C] border-t border-[#E2DFD8] dark:border-[#2C2A26] text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center justify-between">
           <span>Private Object Reference Protected • No Raw Storage Keys Exposed</span>
           <span>Access token strictly expires in 10 minutes</span>
         </div>

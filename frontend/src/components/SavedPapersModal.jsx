@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { Bookmark, Trash2, Edit3, Check, FileText, Quote, Scale, ExternalLink, Plus, Search } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
 export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompare, comparisonPaperIds = [] }) {
+  useEscapeToClose(onClose, isOpen);
   const { showNotice } = useSocket();
   const [savedPapers, setSavedPapers] = useState([]);
   const [loading, setLoading] = useState(false);

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { buildSummaryView, buildSummaryCopyText, buildFullTextView, buildFullTextCopyText } from '../utils/summarySections';
 import {
   FileText,
   Database,
@@ -18,11 +20,16 @@ import {
   CheckCircle2,
   Bookmark,
   BookmarkCheck,
+  Copy,
   BookOpen,
   Users,
   Calendar,
   Layers,
   Info,
+  Search,
+  Code,
+  Loader2,
+  ArrowRight,
 } from 'lucide-react';
 
 export default function PublicationDetailModal({
@@ -39,7 +46,9 @@ export default function PublicationDetailModal({
   onViewInstitutionLandscape,
   onRequireAuth,
   onSavedPapersChange,
+  initiallySaved = false,
 }) {
+  useEscapeToClose(onClose, Boolean(thesis));
   const { isAuthenticated } = useAuth();
   const currentThesisId = thesis ? (thesis._id || thesis.id || thesis.doi || thesis.title || '') : '';
   const currentThesisIdRef = useRef(currentThesisId);
@@ -47,7 +56,10 @@ export default function PublicationDetailModal({
   // Active Tab: 'overview' | 'authors' | 'datasets' | 'citations' | 'summary'
   const [activeTab, setActiveTab] = useState(initialTab || 'overview');
   const [showAllAuthors, setShowAllAuthors] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isSaved, setIsSaved] = useState(Boolean(initiallySaved));
+  useEffect(() => {
+    setIsSaved(Boolean(initiallySaved));
+  }, [initiallySaved]);
   const [savingPaper, setSavingPaper] = useState(false);
   const [copiedDoi, setCopiedDoi] = useState(false);
 
@@ -59,6 +71,11 @@ export default function PublicationDetailModal({
     language: 'en',
     copied: false,
   });
+
+  // The paper's own Limitations / Future work / Data sections, read from its free PDF on request
+  const [fullTextState, setFullTextState] = useState({ requested: false, loading: false, isLocked: false, data: null });
+  // "Find a free PDF": a legal free copy looked up by DOI
+  const [freePdfState, setFreePdfState] = useState({ requested: false, loading: false, result: null });
 
   const [datasetsState, setDatasetsState] = useState({
     requested: false,
@@ -80,17 +97,6 @@ export default function PublicationDetailModal({
       document.body.style.overflow = originalOverflow;
     };
   }, []);
-
-  // Keyboard Escape key handler to close modal
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
 
   // Strictly reset dataset discovery and tabs whenever a different thesis is opened
   useEffect(() => {
@@ -118,6 +124,8 @@ export default function PublicationDetailModal({
       language: 'en',
       copied: false,
     });
+    setFullTextState({ requested: false, loading: false, isLocked: false, data: null });
+    setFreePdfState({ requested: false, loading: false, result: null });
   }, [currentThesisId, initialTab]);
 
   // Check saved papers state on load
@@ -178,6 +186,9 @@ export default function PublicationDetailModal({
       }
     } catch (err) {
       console.error('Failed to toggle save paper in modal:', err);
+      const message = err.response?.data?.message || 'Could not update your saved papers. Please try again.';
+      if (onRequireAuth) onRequireAuth(message);
+      if (err.response?.data?.code === 'QUOTA_EXCEEDED' && onOpenMembership) onOpenMembership();
     } finally {
       setSavingPaper(false);
     }
@@ -238,7 +249,7 @@ export default function PublicationDetailModal({
         isLocked,
         isQuotaExceeded,
         isError: !isLocked && !isQuotaExceeded,
-        message: err.response?.data?.message || 'Scholarly dataset discovery service encountered an error.',
+        message: err.response?.data?.message || 'The dataset sources could not be reached. Please try again.',
         quota: err.response?.data?.datasetQuota || null,
       });
     }
@@ -266,6 +277,7 @@ export default function PublicationDetailModal({
       loading: true,
       isLocked: false,
       error: null,
+      quotaReached: false,
       language: lang,
     }));
 
@@ -291,7 +303,7 @@ export default function PublicationDetailModal({
           loading: false,
           isLocked: false,
           data: null,
-          error: res.data.message || 'Quick Summary is currently disabled by administrator configuration.',
+          error: res.data.message || 'Quick Summary is switched off at the moment.',
         }));
         return;
       }
@@ -307,13 +319,13 @@ export default function PublicationDetailModal({
       if (currentThesisIdRef.current !== requestedThesisId) return;
       if (err.response?.status === 401) {
         if (onRequireAuth) {
-          onRequireAuth('Sign in with your student account to access Grounded Paper Summaries.');
+          onRequireAuth('Sign in to use Quick Summary.');
         }
         setSummaryState((s) => ({
           ...s,
           loading: false,
           isLocked: true,
-          error: 'Sign in with your student account to access Grounded Paper Summaries.',
+          error: 'Sign in to use Quick Summary.',
         }));
         return;
       }
@@ -323,17 +335,18 @@ export default function PublicationDetailModal({
           ...s,
           loading: false,
           isLocked: true,
-          error: err.response?.data?.message || 'Quick Paper Summary is exclusive to Verified Trial and Active Premium members. Free accounts do not have summary entitlements.',
+          error: err.response?.data?.message || 'Quick Summary is included in the 7-day trial and in Premium. It is not part of the free plan.',
         }));
         return;
       }
       const isQuota = err.response?.status === 429 || err.response?.data?.code === 'DAILY_SUMMARY_LIMIT_REACHED';
-      const msg = err.response?.data?.message || 'Failed to generate summary for this paper.';
+      const msg = err.response?.data?.message || 'The summary could not be built for this paper. Please try again.';
       setSummaryState((s) => ({
         ...s,
         loading: false,
         isLocked: false,
-        error: isQuota ? `[Daily Limit] ${msg}` : msg,
+        error: msg,
+        quotaReached: isQuota,
       }));
     }
   };
@@ -345,30 +358,63 @@ export default function PublicationDetailModal({
   }, [activeTab, currentThesisId]);
 
   const copySummaryText = () => {
-    if (!summaryState.data?.summary) return;
-    const s = summaryState.data.summary;
-    const text = [
-      `TITLE: ${thesis.title}`,
-      `TAKEAWAY: ${s.oneSentenceTakeaway || s.tldr || ''}`,
-      s.plainLanguageOverview ? `OVERVIEW: ${s.plainLanguageOverview}` : '',
-      `OBJECTIVE: ${s.researchQuestion || s.researchObjective || ''}`,
-      `METHODOLOGY: ${s.studyDesignAndMethods || s.methodology || ''}`,
-      `DATA/SAMPLE: ${s.dataOrSample || s.datasetSample || ''}`,
-      `MAIN FINDINGS: ${s.keyFindings || s.mainFindings || ''}`,
-      s.mainContributions && s.mainContributions !== 'Not reported' ? `CONTRIBUTIONS: ${s.mainContributions}` : '',
-      `LIMITATIONS: ${s.authorStatedLimitations || s.limitations || ''}`,
-      s.cautiousInferredLimitations ? `INFERRED LIMITATIONS: ${s.cautiousInferredLimitations}` : '',
-      s.futureWork && s.futureWork !== 'Not reported' ? `FUTURE WORK: ${s.futureWork}` : '',
-      s.relevanceForThesisResearch && s.relevanceForThesisResearch !== 'Not reported' ? `RELEVANCE FOR THESIS: ${s.relevanceForThesisResearch}` : '',
-      s.keyTerms?.length ? `KEY TERMS: ${s.keyTerms.join(', ')}` : '',
-      `[Summary via Project Panther - verify against original paper]`,
-    ].filter(Boolean).join('\n\n');
+    if (!summaryState.data?.summary && !fullTextState.data?.available) return;
+    const parts = [
+      summaryState.data?.summary ? buildSummaryCopyText(thesis.title, summaryState.data.summary, summaryState.language) : thesis.title,
+      buildFullTextCopyText(fullTextState.data, summaryState.language),
+    ].filter(Boolean);
 
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(parts.join('\n\n'));
     setSummaryState((prev) => ({ ...prev, copied: true }));
     setTimeout(() => {
       setSummaryState((prev) => ({ ...prev, copied: false }));
     }, 2000);
+  };
+
+  // Reads the paper's free PDF on the server and brings back the authors' own sections
+  const fetchFullText = async () => {
+    const requestedThesisId = currentThesisId;
+    setFullTextState({ requested: true, loading: true, isLocked: false, data: null });
+    try {
+      const id = thesis._id || thesis.id || 'ext';
+      const res = await axios.post(`/api/thesis/${encodeURIComponent(id)}/full-text`, {
+        paper: { pdfUrl: freePdfState.result?.pdfUrl || thesis.pdfUrl || '', doi: thesis.doi || '' },
+      });
+      if (currentThesisIdRef.current !== requestedThesisId) return;
+      setFullTextState({ requested: true, loading: false, isLocked: false, data: res.data });
+    } catch (err) {
+      if (currentThesisIdRef.current !== requestedThesisId) return;
+      const locked = err.response?.status === 403 || err.response?.data?.code === 'FEATURE_LOCKED';
+      setFullTextState({
+        requested: true,
+        loading: false,
+        isLocked: locked,
+        data: {
+          available: false,
+          retryable: !locked,
+          message: err.response?.data?.message || 'The full paper could not be read just now. Please try again.',
+        },
+      });
+    }
+  };
+
+  // Looks for a legal free copy of a paper that has a DOI but no PDF link
+  const findFreePdf = async () => {
+    if (!thesis.doi) return;
+    const requestedThesisId = currentThesisId;
+    setFreePdfState({ requested: true, loading: true, result: null });
+    try {
+      const res = await axios.get('/api/thesis/open-access/find', { params: { doi: thesis.doi } });
+      if (currentThesisIdRef.current !== requestedThesisId) return;
+      setFreePdfState({ requested: true, loading: false, result: res.data });
+    } catch (err) {
+      if (currentThesisIdRef.current !== requestedThesisId) return;
+      setFreePdfState({
+        requested: true,
+        loading: false,
+        result: { found: false, message: err.response?.data?.message || 'The free-PDF lookup could not be done just now. Please try again.' },
+      });
+    }
   };
 
   const handleQuickSummaryClick = () => {
@@ -389,6 +435,35 @@ export default function PublicationDetailModal({
   if (!thesis) return null;
 
   const pubType = (thesis.publicationType || thesis.degreeType || 'article').toLowerCase();
+
+  // Where the record came from. Search results carry it in `sources`, older records in `source`.
+  const sourceName = thesis.source || thesis.sources?.[0]?.provider || '';
+  const isLocalRecord = /local (archive|repository)|thesis archive/i.test(sourceName) || /^THESIS-/.test(String(thesis.catalogId || ''));
+  // Open access is three-valued: yes, no, or not stated. Records deposited in this archive are open
+  // unless marked otherwise. "Not stated" must never be shown as "Subscription".
+  const accessState = thesis.isOpenAccess === true ? 'open' : thesis.isOpenAccess === false ? 'closed' : isLocalRecord ? 'open' : 'unknown';
+  // A record copied from a university repository: say which one, and link back to it
+  const isHarvested = thesis.origin === 'harvest';
+  const originalUrl = /^https?:\/\//i.test(String(thesis.sourceUrl || '')) ? thesis.sourceUrl : '';
+  const sourceDisplay = isHarvested
+    ? `${thesis.sourceRepositoryName || sourceName || 'University repository'} (copied from their repository)`
+    : isLocalRecord
+    ? 'The Thesis Archive (deposited here)'
+    : sourceName || 'Not stated';
+  // Codes the server uses for "how we know this" are turned into words; unknown codes are not shown
+  const EVIDENCE_WORDS = {
+    local_archive_thesis_metadata: 'Stated on the thesis record in this archive',
+    openalex_institution: 'From the OpenAlex record',
+    author_affiliation: 'From the author affiliation',
+  };
+  const describeEvidence = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (EVIDENCE_WORDS[text]) return EVIDENCE_WORDS[text];
+    return /^[a-z0-9]+(_[a-z0-9]+)+$/.test(text) ? '' : text;
+  };
+  const hasReadableCopy = Boolean(thesis.pdfUrl || freePdfState.result?.pdfUrl);
+  const canLookForFreePdf = Boolean(thesis.doi) && !thesis.pdfUrl;
   const isThesisType = pubType.includes('thesis') || pubType.includes('dissertation') || pubType.includes('capstone');
   const isPreprint = pubType.includes('preprint') || thesis.source === 'arXiv';
   const isConference = pubType.includes('proceedings') || pubType.includes('conference');
@@ -426,11 +501,11 @@ export default function PublicationDetailModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-4xl shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden text-[#1C1B18] dark:text-[#F0EDE6]">
+      <div className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-4xl shadow-2xl relative h-[96vh] sm:h-[90vh] max-h-[900px] flex flex-col overflow-hidden text-[#1C1B18] dark:text-[#F0EDE6]">
         {/* ========================================================================= */}
         {/* 1. STICKY SUMMARY HEADER                                                  */}
         {/* ========================================================================= */}
-        <div className="p-4 sm:p-5 bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] shrink-0 space-y-3">
+        <div className="px-4 sm:px-5 pt-3 pb-3 bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] shrink-0 space-y-2">
           {/* Top Meta Badges & Close Button */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap text-xs font-mono-meta">
@@ -446,12 +521,12 @@ export default function PublicationDetailModal({
                 }`}
               >
                 {isThesisType
-                  ? (thesis.degreeType || 'Thesis / Dissertation')
+                  ? (thesis.degreeType || 'Thesis')
                   : isPreprint
-                  ? 'Preprint (Not Peer-Reviewed)'
+                  ? 'Preprint (not peer-reviewed)'
                   : isConference
-                  ? 'Conference Paper'
-                  : 'Journal Article'}
+                  ? 'Conference paper'
+                  : 'Journal article'}
               </span>
 
               {thesis.publishedYear && (
@@ -462,192 +537,192 @@ export default function PublicationDetailModal({
 
               {thesis.isPeerReviewed === true && (
                 <span className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-sm text-[11px] font-bold">
-                  ✓ Peer-Reviewed
+                  Peer-reviewed
                 </span>
               )}
 
-              {thesis.source && (
-                <span className="bg-[#1C1B18] dark:bg-[#383530] text-white px-2 py-0.5 rounded-sm font-bold uppercase text-[10px]">
-                  {thesis.source}
+              {sourceName && (
+                <span className="bg-[#1C1B18] dark:bg-[#383530] text-white px-2 py-0.5 rounded-sm font-bold uppercase text-[11px]">
+                  {sourceName}
                 </span>
               )}
 
-              {thesis.isOpenAccess !== undefined && (
+              {accessState !== 'unknown' && (
                 <span
                   className={`px-2 py-0.5 rounded-sm text-[11px] font-semibold ${
-                    thesis.isOpenAccess
+                    accessState === 'open'
                       ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                       : 'bg-neutral-100 dark:bg-neutral-900/60 text-neutral-800 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-700'
                   }`}
                 >
-                  {thesis.isOpenAccess ? 'Open Access' : 'Subscription'}
+                  {accessState === 'open' ? 'Open access' : 'Subscription'}
                 </span>
               )}
 
               {thesis.citationCount !== undefined && thesis.citationCount !== null && (
                 <span className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[#2C6B3F] dark:text-emerald-400 font-bold px-2 py-0.5 rounded-sm text-[11px]">
-                  ★ {thesis.citationCount.toLocaleString()} {thesis.citationCount === 1 ? 'Citation' : 'Citations'}
+                  {thesis.citationCount.toLocaleString()} {thesis.citationCount === 1 ? 'citation' : 'citations'}
                 </span>
               )}
             </div>
 
             <button
               onClick={onClose}
-              aria-label="Close publication details"
-              className="text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2 px-2 transition"
+              aria-label="Close"
+              title="Close (Esc)"
+              className="text-[#605D55] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] rounded-sm cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center -mr-2 transition"
             >
-              <span className="font-bold">[✕ CLOSE]</span>
+              <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Paper Title */}
           <h2
             id="modal-paper-title"
-            className="text-lg sm:text-xl md:text-2xl font-serif-title font-normal text-[#1C1B18] dark:text-[#F0EDE6] leading-snug tracking-tight"
+            className="text-lg sm:text-xl font-serif-title font-normal text-[#1C1B18] dark:text-[#F0EDE6] leading-snug tracking-tight line-clamp-3"
           >
             {thesis.title}
           </h2>
 
-          {/* Primary Action Toolbar */}
+          {/* Actions: one way to read the paper, then save, cite and compare.
+              Summary and datasets are tabs below, so they are not repeated here. */}
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#F0ECE1] dark:border-[#2C2A26]">
-            {/* Direct PDF / Repository Access */}
-            {isDirectPdf && thesis.pdfUrl && (
-              <a
-                href={thesis.pdfUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="min-h-[44px] px-3.5 py-2 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] rounded-sm font-mono-meta text-xs uppercase tracking-wider font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
+            {(() => {
+              const main = 'min-h-[40px] px-3.5 py-2 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] rounded-sm text-sm font-semibold transition flex items-center gap-2 shadow-2xs cursor-pointer';
+              if (isDirectPdf && thesis.pdfUrl) {
+                return (
+                  <a href={thesis.pdfUrl} target="_blank" rel="noreferrer" className={main}>
+                    <FileText className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
+                    <span>Open PDF</span>
+                  </a>
+                );
+              }
+              if (freePdfState.result?.found && (freePdfState.result.pdfUrl || freePdfState.result.landingUrl)) {
+                return (
+                  <a href={freePdfState.result.pdfUrl || freePdfState.result.landingUrl} target="_blank" rel="noreferrer" className={main}>
+                    <FileText className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
+                    <span>{freePdfState.result.pdfUrl ? 'Open free PDF' : 'Open free copy'}</span>
+                  </a>
+                );
+              }
+              if (originalUrl) {
+                return (
+                  <a href={originalUrl} target="_blank" rel="noreferrer" className={main}>
+                    <ExternalLink className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
+                    <span>View in original repository</span>
+                  </a>
+                );
+              }
+              if (thesis.pdfUrl || thesis.fullTextUrl) {
+                return (
+                  <a href={thesis.pdfUrl || thesis.fullTextUrl} target="_blank" rel="noreferrer" className={main}>
+                    <ExternalLink className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
+                    <span>View source</span>
+                  </a>
+                );
+              }
+              if (thesis.doi) {
+                return (
+                  <a href={`https://doi.org/${thesis.doi}`} target="_blank" rel="noreferrer" className={main}>
+                    <ExternalLink className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
+                    <span>View DOI</span>
+                  </a>
+                );
+              }
+              return null;
+            })()}
+
+            {canLookForFreePdf && !freePdfState.result?.found && (
+              <button
+                type="button"
+                onClick={findFreePdf}
+                disabled={freePdfState.loading}
+                className="min-h-[40px] px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-950 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 dark:border-emerald-800 dark:text-emerald-200 rounded-sm text-sm font-medium transition flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                title="Look for a legal free copy of this paper"
               >
-                <FileText className="w-4 h-4 text-amber-400 dark:text-amber-700 shrink-0" />
-                <span>Direct PDF ↗</span>
-              </a>
+                {freePdfState.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                <span>{freePdfState.loading ? 'Looking…' : 'Find a free PDF'}</span>
+              </button>
             )}
 
-            {!isDirectPdf && thesis.pdfUrl && (
-              <a
-                href={thesis.pdfUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#FAF9F5] border border-[#1C1B18] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 shadow-2xs cursor-pointer"
-              >
-                <Globe className="w-4 h-4 text-blue-700 dark:text-blue-400 shrink-0" />
-                <span>Repository Page ↗</span>
-              </a>
-            )}
-
-            {!thesis.pdfUrl && thesis.doi && (
-              <a
-                href={`https://doi.org/${thesis.doi}`}
-                target="_blank"
-                rel="noreferrer"
-                className="min-h-[44px] px-3.5 py-2 bg-white hover:bg-[#FAF9F5] border border-[#D5D1C7] text-blue-900 dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-blue-300 rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 cursor-pointer"
-              >
-                <ExternalLink className="w-4 h-4 text-blue-800 dark:text-blue-400 shrink-0" />
-                <span>Publisher DOI ↗</span>
-              </a>
-            )}
-
-            {/* Save to Library */}
             <button
               type="button"
               onClick={handleToggleSave}
               disabled={savingPaper}
-              className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              aria-pressed={isSaved}
+              className={`min-h-[40px] px-3.5 py-2 rounded-sm text-sm font-medium transition flex items-center gap-2 cursor-pointer ${
                 isSaved
-                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-200/70'
+                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-200/70 font-bold'
                   : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
               }`}
             >
               {isSaved ? (
                 <>
                   <BookmarkCheck className="w-4 h-4 text-amber-800 dark:text-amber-400" />
-                  <span>Saved in Library</span>
+                  <span>Saved</span>
                 </>
               ) : (
                 <>
                   <Bookmark className="w-4 h-4 text-[#737067] dark:text-[#9C988F]" />
-                  <span>Save to Library</span>
+                  <span>Save</span>
                 </>
               )}
             </button>
 
-            {/* Cite */}
             <button
               type="button"
               onClick={() => onCite && onCite(thesis)}
-              className="min-h-[44px] px-3.5 py-2 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] rounded-sm text-sm font-medium transition flex items-center gap-2 cursor-pointer"
             >
               <Quote className="w-4 h-4 text-[#2C6B3F] dark:text-emerald-400" />
               <span>Cite</span>
             </button>
 
-            {/* Add to Compare */}
             <button
               type="button"
               onClick={() => onAddToCompare && onAddToCompare(thesis)}
-              className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
+              aria-pressed={inComparison}
+              className={`min-h-[40px] px-3.5 py-2 rounded-sm text-sm font-medium transition flex items-center gap-2 cursor-pointer ${
                 inComparison
                   ? 'bg-purple-100 dark:bg-purple-950/50 text-purple-900 dark:text-purple-300 border border-purple-300 dark:border-purple-800 font-bold'
                   : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
               }`}
             >
               <Scale className="w-4 h-4" />
-              <span>{inComparison ? 'In Comparison' : 'Add to Compare'}</span>
+              <span>{inComparison ? 'In comparison' : 'Compare'}</span>
             </button>
 
-            {/* Find Datasets Shortcut */}
-            <button
-              type="button"
-              onClick={handleFindDatasetsClick}
-              className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
-                activeTab === 'datasets'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold'
-                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
-              }`}
-            >
-              <Database className="w-4 h-4 text-[#2C6B3F] dark:text-emerald-400" />
-              <span>
-                Datasets {totalDatasetsCount > 0 ? `(${totalDatasetsCount})` : ''}
-              </span>
-            </button>
-
-            {/* Quick Summary Shortcut */}
-            <button
-              type="button"
-              onClick={handleQuickSummaryClick}
-              className={`min-h-[44px] px-3.5 py-2 rounded-sm font-mono-meta text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
-                activeTab === 'summary'
-                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-950 dark:text-amber-300 border border-amber-400 dark:border-amber-800 font-bold'
-                  : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1]'
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>Quick Summary</span>
-            </button>
-
-            {/* Report Issue */}
             {onReportIssue && (
               <button
                 type="button"
                 onClick={() => onReportIssue(thesis)}
-                className="min-h-[44px] min-w-[44px] px-2.5 py-2 text-[#8C887E] dark:text-[#9C988F] hover:text-red-700 dark:hover:text-red-400 transition flex items-center justify-center cursor-pointer ml-auto"
-                title="Report issue or broken metadata"
-                aria-label="Report issue"
+                className="min-h-[40px] min-w-[40px] px-2.5 py-2 text-[#8C887E] dark:text-[#9C988F] hover:text-red-700 dark:hover:text-red-400 transition flex items-center justify-center cursor-pointer ml-auto"
+                title="Report a problem with this record"
+                aria-label="Report a problem"
               >
                 <Flag className="w-4 h-4" />
               </button>
             )}
           </div>
+
+          {/* What the free-PDF lookup found */}
+          {freePdfState.requested && !freePdfState.loading && freePdfState.result && (
+            <p role="status" className={`text-xs ${freePdfState.result.found ? 'text-emerald-800 dark:text-emerald-300' : 'text-[#605D55] dark:text-[#A8A49C]'}`}>
+              {freePdfState.result.found
+                ? `A free legal copy was found${freePdfState.result.repository ? ` at ${freePdfState.result.repository}` : ''} (through Unpaywall).`
+                : freePdfState.result.message || 'No free legal copy of this paper is known.'}
+            </p>
+          )}
         </div>
 
         {/* ========================================================================= */}
         {/* 2. TABBED NAVIGATION BAR                                                  */}
         {/* ========================================================================= */}
-        <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] px-4 sm:px-5 flex gap-1 sm:gap-2 overflow-x-auto shrink-0 font-mono-meta text-xs">
+        <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] px-2 sm:px-4 flex gap-0.5 sm:gap-1 overflow-x-auto shrink-0 text-[13px]">
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-            className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
+            className={`min-h-[42px] px-3 py-2 border-b-2 flex items-center gap-1.5 transition cursor-pointer font-semibold whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
                 : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
@@ -660,20 +735,20 @@ export default function PublicationDetailModal({
           <button
             type="button"
             onClick={handleSummaryTabClick}
-            className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
+            className={`min-h-[42px] px-3 py-2 border-b-2 flex items-center gap-1.5 transition cursor-pointer font-semibold whitespace-nowrap ${
               activeTab === 'summary'
                 ? 'border-amber-600 dark:border-amber-500 text-amber-950 dark:text-amber-300 bg-amber-50/50 dark:bg-amber-950/40'
                 : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span>Quick Summary</span>
+            <span>Summary &amp; limitations</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('authors')}
-            className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
+            className={`min-h-[42px] px-3 py-2 border-b-2 flex items-center gap-1.5 transition cursor-pointer font-semibold whitespace-nowrap ${
               activeTab === 'authors'
                 ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
                 : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
@@ -681,14 +756,14 @@ export default function PublicationDetailModal({
           >
             <Users className="w-3.5 h-3.5" />
             <span>
-              Authors & Affiliations {authorsCount > 0 ? `(${authorsCount})` : ''}
+              Authors {authorsCount > 0 ? `(${authorsCount})` : ''}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('datasets')}
-            className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
+            className={`min-h-[42px] px-3 py-2 border-b-2 flex items-center gap-1.5 transition cursor-pointer font-semibold whitespace-nowrap ${
               activeTab === 'datasets'
                 ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
                 : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
@@ -696,28 +771,28 @@ export default function PublicationDetailModal({
           >
             <Database className="w-3.5 h-3.5" />
             <span>
-              Full Text & Datasets {totalDatasetsCount > 0 ? `(${totalDatasetsCount})` : ''}
+              Full text &amp; datasets {totalDatasetsCount > 0 ? `(${totalDatasetsCount})` : ''}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('citations')}
-            className={`min-h-[44px] px-3.5 py-2.5 border-b-2 flex items-center gap-2 transition cursor-pointer font-bold whitespace-nowrap ${
+            className={`min-h-[42px] px-3 py-2 border-b-2 flex items-center gap-1.5 transition cursor-pointer font-semibold whitespace-nowrap ${
               activeTab === 'citations'
                 ? 'border-[#1C1B18] dark:border-[#F0EDE6] text-[#1C1B18] dark:text-[#F0EDE6] bg-[#FAF9F5] dark:bg-[#1A1916]'
                 : 'border-transparent text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#FAF9F5]/60 dark:hover:bg-[#272521]'
             }`}
           >
             <Quote className="w-3.5 h-3.5" />
-            <span>Citations & Provenance</span>
+            <span>Citations &amp; source</span>
           </button>
         </div>
 
         {/* ========================================================================= */}
         {/* 3. SCROLLABLE TAB CONTENT                                                 */}
         {/* ========================================================================= */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <div className="tta-light-panel flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
@@ -751,15 +826,15 @@ export default function PublicationDetailModal({
                     <Quote className="w-4 h-4 text-[#2C6B3F] shrink-0" />
                     <div>
                       <div className="font-bold text-[#1C1B18] text-sm">
-                        ★ {thesis.citationCount.toLocaleString()} {thesis.citationCount === 1 ? 'Citation' : 'Citations'} Indexed
+                        {thesis.citationCount.toLocaleString()} {thesis.citationCount === 1 ? 'citation' : 'citations'}
                       </div>
                       <div className="text-[11px] text-[#737067] mt-0.5">
-                        Provider Source: <strong>{thesis.citationMetrics?.source || thesis.citationSource || 'OpenAlex'}</strong>
-                        {thesis.citationMetrics?.retrievedAt && ` • Snapshot: ${thesis.citationMetrics.retrievedAt}`}
+                        Counted by <strong>{thesis.citationMetrics?.source || thesis.citationSource || 'OpenAlex'}</strong>
+                        {thesis.citationMetrics?.retrievedAt && ` · as of ${thesis.citationMetrics.retrievedAt}`}
                       </div>
                     </div>
                   </div>
-                  {thesis.citationMetrics?.sourceId && (
+                  {/^https?:\/\//i.test(String(thesis.citationMetrics?.sourceId || '')) && (
                     <span className="text-[11px] text-[#737067] bg-white border border-emerald-200 px-2 py-1 rounded-sm">
                       OA:{thesis.citationMetrics.sourceId.split('/').pop()}
                     </span>
@@ -773,13 +848,13 @@ export default function PublicationDetailModal({
                   <Building2 className="w-5 h-5 text-amber-800 shrink-0 mt-0.5" />
                   <div>
                     <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider block">
-                      Publisher / Journal / Academic Venue
+                      Published by
                     </span>
                     <span className="text-base font-bold text-[#1C1B18] block">
-                      {thesis.publisher || thesis.venue || thesis.university || 'Scholarly Depository'}
+                      {thesis.publisher || thesis.venue || thesis.university || 'Publisher not recorded'}
                     </span>
                     <div className="text-xs text-[#605D55] mt-1 flex items-center gap-3">
-                      <span>Year: <strong>{thesis.publishedYear || 'Year unrecorded'}</strong></span>
+                      <span>Year: <strong>{thesis.publishedYear || 'not recorded'}</strong></span>
                       {thesis.doi && (
                         <span>
                           DOI:{' '}
@@ -807,7 +882,7 @@ export default function PublicationDetailModal({
                     }}
                     className="min-h-[44px] bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-3.5 py-2 rounded-sm text-xs font-mono-meta transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
                   >
-                    <span>Filter other works from this venue &rarr;</span>
+                    <span>More from this publisher &rarr;</span>
                   </button>
                 )}
               </div>
@@ -822,9 +897,9 @@ export default function PublicationDetailModal({
                     <span className="font-bold text-[#1C1B18] text-sm block">
                       {thesis.awardingInstitution.name}
                     </span>
-                    {thesis.awardingInstitution.evidence && (
-                      <span className="text-[11px] font-mono-meta text-[#737067] block mt-0.5">
-                        Evidence: {thesis.awardingInstitution.evidence}
+                    {describeEvidence(thesis.awardingInstitution.evidence) && (
+                      <span className="text-[11px] text-[#737067] block mt-0.5">
+                        {describeEvidence(thesis.awardingInstitution.evidence)}
                       </span>
                     )}
                   </div>
@@ -839,10 +914,10 @@ export default function PublicationDetailModal({
               {/* Abstract Section with High Legibility */}
               <div className="space-y-2">
                 <h4 className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55]">
-                  Abstract & Methodological Summary
+                  Abstract
                 </h4>
                 <div className="font-sans text-[15px] sm:text-base text-[#2E2C28] leading-relaxed font-normal bg-white p-5 sm:p-6 border border-[#E5E2DA] rounded-sm whitespace-pre-line shadow-2xs">
-                  {thesis.abstract || 'No abstract text available in source archive.'}
+                  {thesis.abstract || 'No abstract is available for this record.'}
                 </div>
               </div>
 
@@ -850,7 +925,7 @@ export default function PublicationDetailModal({
               {thesis.subjects && thesis.subjects.length > 0 && (
                 <div className="space-y-2 bg-white p-4 border border-[#E5E2DA] rounded-sm">
                   <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                    Research Disciplines & Subject Classification:
+                    Subjects
                   </span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {thesis.subjects.map((sub) => (
@@ -868,15 +943,17 @@ export default function PublicationDetailModal({
               {/* Licensing & Access Model */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 border border-[#E5E2DA] rounded-sm text-xs font-sans">
                 <div>
-                  <span className="text-[11px] font-mono-meta text-[#737067] uppercase block">Open Access Licensing:</span>
+                  <span className="text-[11px] font-mono-meta text-[#737067] uppercase block">Access and licence</span>
                   <span className="font-medium text-[#1C1B18] mt-0.5 block">
-                    {thesis.isOpenAccess
-                      ? (thesis.license || 'Open Access (Free lawful access)')
-                      : 'Subscription / Paywalled metadata record'}
+                    {accessState === 'open'
+                      ? (thesis.license || 'Open access')
+                      : accessState === 'closed'
+                      ? 'Subscription or paywalled'
+                      : 'Not stated by the source'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-mono-meta text-[#737067] uppercase block">Archival Identifier:</span>
+                  <span className="text-[11px] font-mono-meta text-[#737067] uppercase block">Identifier</span>
                   <span className="font-mono-meta text-[#1C1B18] mt-0.5 block truncate">
                     {thesis.doi ? `DOI: ${thesis.doi}` : `ID: ${thesis._id || thesis.id}`}
                   </span>
@@ -892,7 +969,7 @@ export default function PublicationDetailModal({
                 <div className="space-y-3 bg-white p-5 border border-[#E5E2DA] rounded-sm shadow-2xs">
                   <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-[#F0ECE1]">
                     <span className="text-[#737067] text-xs font-mono-meta uppercase tracking-wider font-bold">
-                      Indexed Researchers & Affiliations ({authorshipsList.length})
+                      Authors ({authorshipsList.length})
                     </span>
 
                     {/* Single Quiet Summary for unrecorded affiliations */}
@@ -936,7 +1013,7 @@ export default function PublicationDetailModal({
                               }
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-xs font-mono-meta font-bold hover:bg-emerald-100 transition inline-flex items-center gap-1"
+                              className="text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-xs font-mono-meta font-bold hover:bg-emerald-100 transition inline-flex items-center gap-1"
                             >
                               <span>ORCID: {auth.author.orcid.replace(/^https?:\/\/orcid\.org\//, '')} ↗</span>
                             </a>
@@ -1015,13 +1092,13 @@ export default function PublicationDetailModal({
                     <div>
                       <span className="text-[#737067] block text-[11px] font-mono-meta uppercase">Affiliation / Institution:</span>
                       <span className="text-sm text-[#1C1B18] block mt-0.5">
-                        {thesis.university || 'Open Scholarly Depository'} {thesis.department ? `• ${thesis.department}` : ''}
+                        {thesis.university || 'University not recorded'} {thesis.department ? `• ${thesis.department}` : ''}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[#737067] block text-[11px] font-mono-meta uppercase">Open Access Licensing:</span>
+                      <span className="text-[#737067] block text-[11px] font-mono-meta uppercase">Access and licence</span>
                       <span className="text-sm text-[#1C1B18] block mt-0.5">
-                        {thesis.isOpenAccess ? (thesis.license || 'Open Access (Free lawful access)') : 'Subscription / Paywalled metadata record'}
+                        {accessState === 'open' ? (thesis.license || 'Open access') : accessState === 'closed' ? 'Subscription or paywalled' : 'Not stated by the source'}
                       </span>
                     </div>
                   </div>
@@ -1036,7 +1113,7 @@ export default function PublicationDetailModal({
               {/* Verified Full Text Access Section */}
               <div className="space-y-2">
                 <h4 className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55]">
-                  Verified Full Text & Repository Access
+                  Where to read it
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono-meta text-xs">
                   {isDirectPdf && thesis.pdfUrl && (
@@ -1049,8 +1126,8 @@ export default function PublicationDetailModal({
                       <div className="flex items-center gap-3">
                         <FileText className="w-5 h-5 text-amber-600 shrink-0" />
                         <div>
-                          <div className="font-bold text-[#1C1B18]">Open Direct PDF Document</div>
-                          <div className="text-[11px] text-[#2C6B3F]">Verified Direct PDF (1:1 full-text file)</div>
+                          <div className="font-bold text-[#1C1B18]">Open the PDF</div>
+                          <div className="text-[11px] text-[#2C6B3F]">Direct link to the file</div>
                         </div>
                       </div>
                       <ExternalLink className="w-4 h-4 text-[#1C1B18] shrink-0" />
@@ -1067,12 +1144,71 @@ export default function PublicationDetailModal({
                       <div className="flex items-center gap-3">
                         <Globe className="w-5 h-5 text-blue-700 shrink-0" />
                         <div>
-                          <div className="font-bold text-[#1C1B18]">Full-Text Repository Page</div>
-                          <div className="text-[11px] text-[#737067]">Publisher or institutional repository</div>
+                          <div className="font-bold text-[#1C1B18]">Page that hosts the full text</div>
+                          <div className="text-[11px] text-[#737067]">Publisher or university repository</div>
                         </div>
                       </div>
                       <ExternalLink className="w-4 h-4 text-[#737067] shrink-0" />
                     </a>
+                  )}
+
+                  {originalUrl && (
+                    <a
+                      href={originalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3.5 bg-white border border-[#D5D1C7] hover:border-[#1C1B18] rounded-sm flex items-center justify-between transition group min-h-[44px] shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Building2 className="w-5 h-5 text-blue-700 shrink-0" />
+                        <div>
+                          <div className="font-bold text-[#1C1B18]">View in original repository</div>
+                          <div className="text-[11px] text-[#737067]">{thesis.sourceRepositoryName || 'University repository'}</div>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-[#737067] shrink-0" />
+                    </a>
+                  )}
+
+                  {freePdfState.result?.found && (freePdfState.result.pdfUrl || freePdfState.result.landingUrl) && (
+                    <a
+                      href={freePdfState.result.pdfUrl || freePdfState.result.landingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3.5 bg-emerald-50 border border-emerald-300 hover:border-emerald-600 rounded-sm flex items-center justify-between transition group min-h-[44px] shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-emerald-700 shrink-0" />
+                        <div>
+                          <div className="font-bold text-emerald-950">{freePdfState.result.pdfUrl ? 'Free PDF' : 'Free copy to read online'}</div>
+                          <div className="text-[11px] text-emerald-800">
+                            {[freePdfState.result.repository, freePdfState.result.license, 'found through Unpaywall'].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-emerald-800 shrink-0" />
+                    </a>
+                  )}
+
+                  {canLookForFreePdf && !freePdfState.result?.found && (
+                    <button
+                      type="button"
+                      onClick={findFreePdf}
+                      disabled={freePdfState.loading}
+                      className="p-3.5 bg-white border border-dashed border-emerald-400 hover:border-emerald-700 rounded-sm flex items-center justify-between transition min-h-[44px] text-left cursor-pointer disabled:opacity-60"
+                    >
+                      <div className="flex items-center gap-3">
+                        {freePdfState.loading ? <Loader2 className="w-5 h-5 text-emerald-700 shrink-0 animate-spin" /> : <Search className="w-5 h-5 text-emerald-700 shrink-0" />}
+                        <div>
+                          <div className="font-bold text-[#1C1B18]">{freePdfState.loading ? 'Looking for a free copy…' : 'Find a free PDF'}</div>
+                          <div className="text-[11px] text-[#737067]">
+                            {freePdfState.requested && !freePdfState.loading && freePdfState.result && !freePdfState.result.found
+                              ? freePdfState.result.message || 'No free legal copy of this paper is known.'
+                              : 'Checks whether a legal free copy exists'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
                   )}
 
                   {thesis.doi && (
@@ -1085,7 +1221,7 @@ export default function PublicationDetailModal({
                       <div className="flex items-center gap-3">
                         <ExternalLink className="w-5 h-5 text-blue-800 shrink-0" />
                         <div>
-                          <div className="font-bold text-blue-900">Official Publisher DOI</div>
+                          <div className="font-bold text-blue-900">Publisher page (DOI)</div>
                           <div className="text-[11px] text-[#737067]">doi.org/{thesis.doi}</div>
                         </div>
                       </div>
@@ -1100,7 +1236,7 @@ export default function PublicationDetailModal({
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h4 className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55] flex items-center gap-2">
                     <Database className="w-4 h-4 text-[#2C6B3F]" />
-                    <span>Open Research Datasets Discovery (DataCite & Zenodo)</span>
+                    <span>Datasets for this paper</span>
                   </h4>
 
                   {datasetsState.quota && datasetsState.quota.limit !== null && (
@@ -1115,10 +1251,10 @@ export default function PublicationDetailModal({
                   <div className="p-5 bg-white border border-[#D5D1C7] rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs shadow-2xs">
                     <div className="space-y-1.5">
                       <span className="font-serif-title font-medium text-base text-[#1C1B18] block">
-                        Discover Linked & Related Open Datasets
+                        Find datasets linked to this paper
                       </span>
                       <p className="text-[#605D55] text-xs leading-relaxed max-w-xl font-sans">
-                        Query verified Open Science depositories (DataCite, Zenodo) for supplementary raw datasets, benchmark corpora, and author-deposited data files associated with this publication.
+                        Looks in DataCite, Zenodo, Figshare, Dryad, Harvard Dataverse and OpenAIRE for data the authors deposited with this paper, and for datasets on the same topic.
                       </p>
                     </div>
                     <button
@@ -1149,7 +1285,7 @@ export default function PublicationDetailModal({
                         <Lock className="w-4 h-4 text-amber-700 shrink-0" />
                         <span>Research Datasets (Premium or Trial Required)</span>
                       </div>
-                      <span className="bg-amber-200/80 text-amber-900 text-[10px] font-mono-meta font-bold px-2 py-0.5 rounded-xs">
+                      <span className="bg-amber-200/80 text-amber-900 text-[11px] font-mono-meta font-bold px-2 py-0.5 rounded-xs">
                         Feature Restricted
                       </span>
                     </div>
@@ -1244,7 +1380,7 @@ export default function PublicationDetailModal({
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span
-                                  className={`px-2 py-0.5 rounded-2xs text-[10px] font-mono-meta font-bold uppercase ${
+                                  className={`px-2 py-0.5 rounded-2xs text-[11px] font-mono-meta font-bold uppercase ${
                                     isDirect
                                       ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
                                       : 'bg-blue-100 text-blue-900 border border-blue-300'
@@ -1252,7 +1388,7 @@ export default function PublicationDetailModal({
                                 >
                                   {isDirect ? 'Direct Supplemental Dataset' : 'Referenced Work / Citation'}
                                 </span>
-                                <span className="bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-2xs text-[10px] font-mono-meta text-[#1C1B18]">
+                                <span className="bg-white border border-[#D5D1C7] px-2 py-0.5 rounded-2xs text-[11px] font-mono-meta text-[#1C1B18]">
                                   {d.source || 'DataCite'}
                                 </span>
                               </div>
@@ -1261,9 +1397,9 @@ export default function PublicationDetailModal({
                                 {d.title}
                               </div>
 
-                              {d.evidence && (
+                              {describeEvidence(d.relationEvidence || d.evidence) && (
                                 <div className="text-xs text-[#605D55] italic font-sans">
-                                  Evidence: {d.evidence}
+                                  {describeEvidence(d.relationEvidence || d.evidence)}
                                 </div>
                               )}
 
@@ -1299,7 +1435,7 @@ export default function PublicationDetailModal({
                           className="p-4 bg-amber-50/40 border border-amber-200 hover:border-amber-600 rounded-sm flex items-start justify-between gap-3 transition group min-h-[44px]"
                         >
                           <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 text-[10px] font-mono-meta">
+                            <div className="flex items-center gap-2 text-[11px] font-mono-meta">
                               <span className="bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-2xs font-bold uppercase">
                                 Related Data
                               </span>
@@ -1368,23 +1504,23 @@ export default function PublicationDetailModal({
               {thesis.citationCount !== undefined && thesis.citationCount !== null && (
                 <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 shadow-2xs">
                   <h4 className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55]">
-                    Indexed Citation Provenance & Telemetry
+                    Citation count
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono-meta">
                     <div className="p-3 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm">
-                      <span className="text-[10px] text-[#737067] uppercase block">Indexed Citations:</span>
+                      <span className="text-[11px] text-[#737067] uppercase block">Citations</span>
                       <strong className="text-base text-[#1C1B18] font-bold">
                         {thesis.citationCount.toLocaleString()}
                       </strong>
                     </div>
                     <div className="p-3 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm">
-                      <span className="text-[10px] text-[#737067] uppercase block">Attributed Source:</span>
+                      <span className="text-[11px] text-[#737067] uppercase block">Attributed Source:</span>
                       <strong className="text-sm text-[#1C1B18]">
                         {thesis.citationMetrics?.source || thesis.citationSource || 'OpenAlex'}
                       </strong>
                     </div>
                     <div className="p-3 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm">
-                      <span className="text-[10px] text-[#737067] uppercase block">Snapshot Harvested:</span>
+                      <span className="text-[11px] text-[#737067] uppercase block">Snapshot Harvested:</span>
                       <span className="text-xs text-[#524F47]">
                         {thesis.citationMetrics?.retrievedAt || 'Current Session'}
                       </span>
@@ -1396,7 +1532,7 @@ export default function PublicationDetailModal({
               {/* Global Scholarly Citation Indices */}
               <div className="space-y-2">
                 <h4 className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55]">
-                  Global Scholarly Citation Indices
+                  Look this paper up elsewhere
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono-meta text-xs">
                   <a
@@ -1443,11 +1579,11 @@ export default function PublicationDetailModal({
               {/* Provenance & Registry Identifiers */}
               <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 text-xs font-mono-meta shadow-2xs">
                 <h4 className="font-bold uppercase tracking-wider text-[#605D55] text-[11px]">
-                  Archival Provenance & Registry Metadata
+                  About this record
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="text-[10px] text-[#737067] uppercase block">DOI Resolver:</span>
+                    <span className="text-[11px] text-[#737067] uppercase block">DOI Resolver:</span>
                     {thesis.doi ? (
                       <a
                         href={`https://doi.org/${thesis.doi}`}
@@ -1463,15 +1599,15 @@ export default function PublicationDetailModal({
                   </div>
 
                   <div>
-                    <span className="text-[10px] text-[#737067] uppercase block">Primary Upstream Source:</span>
+                    <span className="text-[11px] text-[#737067] uppercase block">Source of this record:</span>
                     <span className="text-[#1C1B18] font-bold">
-                      {thesis.source || 'OpenAlex Scholarly Knowledge Graph'}
+                      {sourceDisplay}
                     </span>
                   </div>
 
-                  {thesis.citationMetrics?.sourceId && (
+                  {/^https?:\/\//i.test(String(thesis.citationMetrics?.sourceId || '')) && (
                     <div>
-                      <span className="text-[10px] text-[#737067] uppercase block">OpenAlex Canonical Record:</span>
+                      <span className="text-[11px] text-[#737067] uppercase block">OpenAlex Canonical Record:</span>
                       <a
                         href={thesis.citationMetrics.sourceId}
                         target="_blank"
@@ -1483,11 +1619,11 @@ export default function PublicationDetailModal({
                     </div>
                   )}
 
-                  {thesis.isOpenAccess !== undefined && (
+                  {accessState !== 'unknown' && (
                     <div>
-                      <span className="text-[10px] text-[#737067] uppercase block">Access Status:</span>
+                      <span className="text-[11px] text-[#737067] uppercase block">Access Status:</span>
                       <span className="font-semibold text-[#1C1B18]">
-                        {thesis.isOpenAccess ? 'Lawful Open Access Repository' : 'Subscription / Restricted'}
+                        {accessState === 'open' ? 'Open access' : 'Subscription or restricted'}
                       </span>
                     </div>
                   )}
@@ -1505,11 +1641,11 @@ export default function PublicationDetailModal({
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-amber-600" />
                     <h3 className="font-serif-title text-base sm:text-lg font-bold text-[#1C1B18]">
-                      Grounded Research Quick Summary
+                      Summary and limitations
                     </h3>
                   </div>
                   <p className="text-xs text-[#605D55] font-mono-meta mt-1">
-                    Direct factual decomposition extracted from author text. Zero hallucination policy.
+                    The paper's own sentences, sorted under headings by keyword rules. Not written by AI.
                   </p>
                 </div>
 
@@ -1540,27 +1676,27 @@ export default function PublicationDetailModal({
                           : 'text-[#605D55] hover:text-black'
                       }`}
                     >
-                      বাংলা (Bangla)
+                      বাংলা
                     </button>
                   </div>
 
-                  {summaryState.data?.summary && (
+                  {(summaryState.data?.summary || fullTextState.data?.available) && (
                     <>
                       <button
                         type="button"
                         onClick={copySummaryText}
                         className="min-h-[40px] px-3 py-1.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm text-xs font-mono-meta font-bold transition flex items-center gap-1.5 cursor-pointer"
-                        title="Copy structured summary to clipboard"
+                        title="Copy this summary as plain text"
                       >
-                        <Bookmark className="w-3.5 h-3.5 text-amber-700" />
-                        <span>{summaryState.copied ? '✓ Copied' : 'Copy Summary'}</span>
+                        <Copy className="w-3.5 h-3.5 text-amber-700" />
+                        <span>{summaryState.copied ? 'Copied' : 'Copy'}</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => fetchSummary(summaryState.language, true)}
                         className="min-h-[40px] px-3 py-1.5 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] rounded-sm text-xs font-mono-meta font-bold transition flex items-center gap-1.5 cursor-pointer"
-                        title="Regenerate summary"
+                        title="Build the summary again"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Refresh</span>
@@ -1570,6 +1706,139 @@ export default function PublicationDetailModal({
                 </div>
               </div>
 
+              {/* From the full paper: the authors' own Limitations, Future work, Conclusion and Data sections */}
+              {summaryState.requested && !summaryState.loading && !summaryState.isLocked && (() => {
+                const view = buildFullTextView(fullTextState.data, summaryState.language);
+                const F = view.labels;
+                const hasSomethingToRead = Boolean(thesis.pdfUrl || thesis.doi || freePdfState.result?.pdfUrl);
+                const failed = fullTextState.requested && !fullTextState.loading && fullTextState.data && !fullTextState.data.available;
+
+                return (
+                  <section className="bg-white border border-[#D5D1C7] rounded-sm shadow-2xs" data-testid="fulltext-block" aria-label={F.title}>
+                    <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <h4 className="font-serif-title text-base font-bold text-[#1C1B18] flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>{F.title}</span>
+                        </h4>
+                        <p className="text-xs text-[#605D55] leading-relaxed max-w-xl">
+                          {view.available
+                            ? [F.note, view.pagesNote, view.viaFinder ? F.viaFinder : ''].filter(Boolean).join(' · ')
+                            : 'Reads the paper’s free PDF and copies out the authors’ own Limitations, Future work, Conclusion and Data availability sections. Nothing is rewritten.'}
+                        </p>
+                      </div>
+
+                      {/* "Try again" only when trying again can help (a slow or busy host), not for a scanned or missing PDF */}
+                      {!view.available && !fullTextState.loading && !fullTextState.isLocked && hasSomethingToRead && (!failed || fullTextState.data.retryable !== false) && (
+                        <button
+                          type="button"
+                          onClick={fetchFullText}
+                          className="min-h-[40px] shrink-0 bg-[#1C1B18] hover:bg-[#2E2C28] text-white px-4 py-2 rounded-sm text-sm font-semibold transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                        >
+                          <FileText className="w-4 h-4 text-amber-400" />
+                          <span>{failed ? 'Try again' : 'Read the full paper'}</span>
+                        </button>
+                      )}
+                      {view.available && view.pdfUrl && (
+                        <a
+                          href={view.pdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="min-h-[40px] shrink-0 bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] px-3.5 py-2 rounded-sm text-sm font-medium transition flex items-center justify-center gap-2"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          <span>{F.openPdf}</span>
+                        </a>
+                      )}
+                    </div>
+
+                    {!hasSomethingToRead && !fullTextState.requested && (
+                      <p className="px-4 sm:px-5 pb-4 text-xs text-[#605D55]">
+                        This record has no PDF link and no DOI, so there is no full text to read here.
+                      </p>
+                    )}
+
+                    {fullTextState.loading && (
+                      <div className="px-4 sm:px-5 pb-4 flex items-center gap-2 text-xs text-amber-900" role="status">
+                        <Loader2 className="w-4 h-4 animate-spin text-amber-700" />
+                        <span>Opening and reading the PDF. A long thesis can take up to 20 seconds.</span>
+                      </div>
+                    )}
+
+                    {failed && (
+                      <div className="mx-4 sm:mx-5 mb-4 p-3 bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm text-xs text-[#524F47] space-y-2" role="status">
+                        <p>{fullTextState.data.message || 'The full paper could not be read.'}</p>
+                        {fullTextState.isLocked && onOpenMembership && (
+                          <button type="button" onClick={onOpenMembership} className="underline font-semibold text-[#1C1B18] cursor-pointer">
+                            See trial and Premium options
+                          </button>
+                        )}
+                        {!fullTextState.isLocked && fullTextState.data.reason === 'no_pdf' && canLookForFreePdf && !freePdfState.requested && (
+                          <button type="button" onClick={findFreePdf} className="underline font-semibold text-[#1C1B18] cursor-pointer">
+                            Look for a free PDF
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {view.available && (
+                      <div className="border-t border-[#F0ECE1] p-4 sm:p-5 space-y-4">
+                        {view.blocks.length === 0 && (
+                          <p className="text-sm text-[#605D55]" data-testid="fulltext-nothing">{F.nothing}</p>
+                        )}
+
+                        {view.blocks.map((block) => (
+                          <div key={block.keys.join('-')} className={`space-y-1.5 ${block.keys.includes('limitations') ? 'border-l-4 border-l-amber-500 pl-3.5' : ''}`}>
+                            <div className="flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
+                              <span className="text-[11px] font-mono-meta uppercase tracking-wider font-bold text-[#1C1B18]">{block.headings.join(' + ')}</span>
+                              {(block.sectionTitle || block.page) && (
+                                <span className="text-[11px] text-[#737067]">
+                                  {block.sectionTitle ? `${F.section}: “${block.sectionTitle}”` : ''}
+                                  {block.sectionTitle && block.page ? ', ' : ''}
+                                  {block.page ? `${F.page} ${block.page}` : ''}
+                                  {block.insideSection ? ` (${F.insideSection})` : ''}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-[#2E2C28] leading-relaxed whitespace-pre-line">{block.text}</p>
+                            {block.truncated && <p className="text-[11px] text-[#737067]">{F.continues}</p>}
+                          </div>
+                        ))}
+
+                        {view.links.length > 0 && (
+                          <div className="space-y-2 pt-1">
+                            <span className="text-[11px] font-mono-meta uppercase tracking-wider font-bold text-[#1C1B18] block">{F.links}</span>
+                            <ul className="space-y-1.5">
+                              {view.links.map((link) => (
+                                <li key={link.url} className="text-xs flex items-start gap-2">
+                                  <span
+                                    className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded-sm border text-[11px] font-bold uppercase ${
+                                      link.kind === 'dataset'
+                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                                        : link.kind === 'code'
+                                        ? 'bg-blue-50 border-blue-300 text-blue-900'
+                                        : 'bg-[#FAF9F5] border-[#D5D1C7] text-[#524F47]'
+                                    }`}
+                                  >
+                                    {F[link.kind]}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-900 underline break-all hover:text-black">
+                                      {link.url}
+                                    </a>
+                                    {link.context && <span className="block text-[#737067] mt-0.5">“{link.context}”</span>}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                );
+              })()}
+
               {/* State 1: Not Requested Yet (Honest trigger screen) */}
               {!summaryState.requested && !summaryState.loading && (
                 <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-6 sm:p-8 rounded-sm text-center space-y-4">
@@ -1578,10 +1847,10 @@ export default function PublicationDetailModal({
                   </div>
                   <div className="max-w-lg mx-auto space-y-2">
                     <h4 className="text-base font-bold text-[#1C1B18]">
-                      Extract Grounded Key Research Findings
+                      See this paper at a glance
                     </h4>
                     <p className="text-xs sm:text-sm text-[#524F47] leading-relaxed">
-                      Generate an objective, methodology, data/sample, and findings breakdown. Project Panther strictly forbids hallucination — missing experimental data is marked as “Not reported”.
+                      Picks the sentences that state the research question, methods, data, findings and limitations, and puts each under its heading. Nothing is rewritten, and a heading with no matching sentence is listed as not found.
                     </p>
                   </div>
                   <div className="pt-2">
@@ -1591,7 +1860,7 @@ export default function PublicationDetailModal({
                       className="min-h-[44px] px-6 py-2.5 bg-[#1C1B18] hover:bg-[#2E2C28] text-white font-mono-meta text-xs uppercase tracking-wider font-bold rounded-sm transition shadow-2xs cursor-pointer inline-flex items-center gap-2"
                     >
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span>Generate Grounded Summary</span>
+                      <span>Show Quick Summary</span>
                     </button>
                   </div>
                 </div>
@@ -1603,7 +1872,7 @@ export default function PublicationDetailModal({
                   <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-sm flex items-center gap-3">
                     <RefreshCw className="w-4 h-4 text-amber-700 animate-spin" />
                     <span className="text-xs font-mono-meta text-amber-900 font-bold">
-                      Analyzing author text and verifying grounded claims...
+                      Sorting the paper's sentences under headings...
                     </span>
                   </div>
                   <div className="bg-white p-5 border border-[#E5E2DA] rounded-sm space-y-3">
@@ -1634,10 +1903,10 @@ export default function PublicationDetailModal({
                   </div>
                   <div className="max-w-md mx-auto space-y-2">
                     <h4 className="text-base font-bold text-[#1C1B18]">
-                      Premium Research Feature
+                      Quick Summary is a Premium feature
                     </h4>
                     <p className="text-xs sm:text-sm text-[#524F47] leading-relaxed">
-                      {summaryState.error || 'Grounded Quick Summaries are reserved for Verified 7-Day Trial and Paid Membership researchers. Free tier accounts do not have access to automated summaries.'}
+                      {summaryState.error || 'Quick Summary and reading limitations from the full paper are included in the 7-day trial and in Premium. They are not part of the free plan.'}
                     </p>
                   </div>
                   <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -1648,7 +1917,7 @@ export default function PublicationDetailModal({
                         className="min-h-[44px] px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-mono-meta text-xs uppercase tracking-wider font-bold rounded-sm transition shadow-2xs cursor-pointer inline-flex items-center gap-2"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>Unlock with Premium / Start Trial</span>
+                        <span>See trial and Premium options</span>
                       </button>
                     )}
                   </div>
@@ -1660,7 +1929,7 @@ export default function PublicationDetailModal({
                 <div className="bg-red-50 border border-red-300 p-5 rounded-sm space-y-3 shadow-2xs">
                   <div className="flex items-center gap-2 text-red-900 font-bold text-sm">
                     <AlertTriangle className="w-5 h-5 text-red-700 shrink-0" />
-                    <span>Summary Service Notice</span>
+                    <span>{summaryState.quotaReached ? "Today's summary limit is used up" : 'The summary could not be shown'}</span>
                   </div>
                   <p className="text-xs text-red-800 leading-relaxed">
                     {summaryState.error}
@@ -1671,291 +1940,187 @@ export default function PublicationDetailModal({
                       onClick={() => fetchSummary(summaryState.language, true)}
                       className="min-h-[44px] px-4 py-2 bg-red-900 text-white font-mono-meta text-xs uppercase font-bold rounded-sm transition cursor-pointer"
                     >
-                      Retry Generation
+                      Try again
                     </button>
-                    {summaryState.error.includes('Daily Limit') && onOpenMembership && (
+                    {summaryState.quotaReached && onOpenMembership && (
                       <button
                         type="button"
                         onClick={onOpenMembership}
                         className="min-h-[44px] px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-mono-meta text-xs uppercase font-bold rounded-sm transition cursor-pointer"
                       >
-                        Upgrade Membership Plan
+                        See membership plans
                       </button>
                     )}
                   </div>
                 </div>
               )}
 
+              {/* No usable text: say so instead of leaving the panel empty */}
+              {summaryState.requested && !summaryState.loading && !summaryState.isLocked && !summaryState.error && !summaryState.data?.summary && (
+                <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-5 sm:p-6 rounded-sm space-y-2">
+                  <h4 className="text-sm font-bold text-[#1C1B18]">No summary for this record</h4>
+                  <p className="text-xs sm:text-sm text-[#524F47] leading-relaxed">
+                    {summaryState.data?.message || 'This record has no abstract long enough to summarise. Open the paper itself to read it.'}
+                  </p>
+                </div>
+              )}
+
               {/* State 4: Summary Result View */}
-              {summaryState.data?.summary && !summaryState.loading && !summaryState.isLocked && (
-                <div className="space-y-4">
-                  {/* Coverage & AI Disclaimer Notice Banner */}
-                  <div className="p-3.5 bg-amber-50/70 border border-amber-300 rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono-meta">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 rounded-sm font-bold uppercase text-[10px] ${
-                          summaryState.data.coverage === 'full_text'
-                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : 'bg-amber-100 text-amber-900 border border-amber-400'
-                        }`}
-                      >
-                        {summaryState.data.coverage === 'full_text'
-                          ? '✓ Full-Text Grounded'
-                          : '⚡ Based on Abstract Only'}
-                      </span>
-                      {summaryState.data.generationType === 'extractive' && (
-                        <span className="px-2 py-0.5 rounded-sm font-bold uppercase text-[10px] bg-slate-100 text-slate-800 border border-slate-300">
-                          Extractive Overview
+              {summaryState.data?.summary && !summaryState.loading && !summaryState.isLocked && (() => {
+                const view = buildSummaryView(summaryState.data.summary, summaryState.data.language || summaryState.language);
+                const L = view.labels;
+                const quota = summaryState.data.quota;
+                const isFullText = summaryState.data.coverage === 'full_text';
+                const headingClass = 'text-[11px] font-mono-meta uppercase tracking-wider font-bold block';
+
+                return (
+                  <div className="space-y-4" data-testid="summary-result">
+                    {/* What this is, and what it is based on */}
+                    <div className="p-3.5 bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-sm font-mono-meta font-bold uppercase text-[11px] border ${
+                            isFullText
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : 'bg-amber-100 text-amber-900 border-amber-400'
+                          }`}
+                        >
+                          {isFullText ? 'From the full text' : 'From the abstract only'}
                         </span>
-                      )}
-                      <span className="text-[#605D55]">
-                        {summaryState.data.summary.disclaimer || 'Direct extraction from author text; verify against original publication'}
-                      </span>
-                    </div>
-
-                    {summaryState.data.quota && (
-                      <span className="text-[#737067] text-[11px] shrink-0 font-medium">
-                        {summaryState.data.quota.limit === null || summaryState.data.quota.limit === undefined
-                          ? 'Daily Quota: Unlimited summaries'
-                          : `Daily Quota: ${summaryState.data.quota.used}/${summaryState.data.quota.limit} used (${summaryState.data.quota.remaining ?? (summaryState.data.quota.limit - summaryState.data.quota.used)} remaining)`}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* One-Sentence Takeaway / TL;DR Highlight Card */}
-                  <div className="bg-white border-2 border-[#1C1B18] p-5 sm:p-6 rounded-sm space-y-2 shadow-2xs">
-                    <span className="text-[11px] font-mono-meta text-amber-800 uppercase tracking-wider font-bold block">
-                      One-Sentence Takeaway:
-                    </span>
-                    <p className="font-sans text-[15px] sm:text-base text-[#1C1B18] leading-relaxed font-medium">
-                      {summaryState.data.summary.oneSentenceTakeaway || summaryState.data.summary.tldr}
-                    </p>
-                  </div>
-
-                  {/* Plain-Language Overview (if available) */}
-                  {summaryState.data.summary.plainLanguageOverview && (
-                    <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-4 sm:p-5 rounded-sm space-y-1.5 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        Plain-Language Overview:
-                      </span>
-                      <p className="text-sm text-[#2E2C28] leading-relaxed">
-                        {summaryState.data.summary.plainLanguageOverview}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Structured Core Aspects Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Research Question / Objective */}
-                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        🎯 Research Question / Problem:
-                      </span>
-                      <p className="text-sm text-[#2E2C28] leading-relaxed">
-                        {summaryState.data.summary.researchQuestion || summaryState.data.summary.researchObjective}
-                      </p>
-                    </div>
-
-                    {/* Methodology */}
-                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        🔬 Study Design & Methods:
-                      </span>
-                      <p className="text-sm text-[#2E2C28] leading-relaxed">
-                        {summaryState.data.summary.studyDesignAndMethods || summaryState.data.summary.methodology}
-                      </p>
-                    </div>
-
-                    {/* Data / Sample / Corpus */}
-                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        📊 Data & Corpus / Sample:
-                      </span>
-                      <p className="text-sm text-[#2E2C28] leading-relaxed">
-                        {summaryState.data.summary.dataOrSample || summaryState.data.summary.datasetSample}
-                      </p>
-                    </div>
-
-                    {/* Key Findings */}
-                    <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        💡 Key Empirical Findings:
-                      </span>
-                      <p className="text-sm text-[#2E2C28] leading-relaxed">
-                        {summaryState.data.summary.keyFindings || summaryState.data.summary.mainFindings}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Main Contributions & Thesis Relevance (if present) */}
-                  {((summaryState.data.summary.mainContributions && summaryState.data.summary.mainContributions !== 'Not reported') ||
-                    (summaryState.data.summary.relevanceForThesisResearch && summaryState.data.summary.relevanceForThesisResearch !== 'Not reported')) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {summaryState.data.summary.mainContributions && summaryState.data.summary.mainContributions !== 'Not reported' && (
-                        <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                          <span className="text-[11px] font-mono-meta text-emerald-800 uppercase tracking-wider font-bold block">
-                            🏆 Main Contributions:
-                          </span>
-                          <p className="text-sm text-[#2E2C28] leading-relaxed">
-                            {summaryState.data.summary.mainContributions}
-                          </p>
-                        </div>
-                      )}
-                      {summaryState.data.summary.relevanceForThesisResearch && summaryState.data.summary.relevanceForThesisResearch !== 'Not reported' && (
-                        <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
-                          <span className="text-[11px] font-mono-meta text-blue-800 uppercase tracking-wider font-bold block">
-                            🎓 Relevance for Thesis Researchers:
-                          </span>
-                          <p className="text-sm text-[#2E2C28] leading-relaxed">
-                            {summaryState.data.summary.relevanceForThesisResearch}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Limitations Card */}
-                  <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-3 shadow-2xs">
-                    <div>
-                      <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-[#F0ECE1]">
-                        <span className="text-[11px] font-mono-meta text-amber-900 uppercase tracking-wider font-bold flex items-center gap-1.5">
-                          ⚠️ Author-Stated Limitations:
+                        <span className="text-[#524F47]">
+                          {summaryState.data.summary.disclaimer || "Sentences taken from the paper's own text by keyword rules. Not written by AI. Check the original paper."}
                         </span>
-                        {(() => {
-                          const lim = (summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations || '').toLowerCase();
-                          const hasStated = lim &&
-                            !lim.includes('none explicitly') &&
-                            !lim.includes('সুনির্দিষ্ট সীমাবদ্ধতা') &&
-                            !lim.includes('সুস্পষ্ট সীমাবদ্ধতা') &&
-                            !lim.includes('সরাসরি উল্লেখ করা হয়নি') &&
-                            lim !== 'not reported';
-                          return (
-                            <span className={`px-2 py-0.5 rounded-sm text-[10px] font-mono-meta font-bold uppercase ${
-                              hasStated
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : 'bg-slate-100 text-slate-700 border border-slate-300'
-                            }`}>
-                              {hasStated ? '✓ Stated by Authors' : 'Unstated in Abstract'}
-                            </span>
-                          );
-                        })()}
                       </div>
-                      <p className="text-sm text-[#524F47] leading-relaxed mt-2">
-                        {summaryState.data.summary.authorStatedLimitations || summaryState.data.summary.limitations}
-                      </p>
+
+                      {quota && (
+                        <span className="text-[#737067] text-[11px] font-mono-meta shrink-0">
+                          {quota.limit === null || quota.limit === undefined
+                            ? 'No daily limit'
+                            : `${quota.used} of ${quota.limit} used today`}
+                        </span>
+                      )}
                     </div>
 
-                    {(summaryState.data.summary.cautiousInferredLimitations || summaryState.data.summary.inferredLimitations) && (
-                      <div className="pt-2.5 border-t border-[#F0ECE1] bg-[#FAF9F5] p-3.5 rounded-sm space-y-1">
-                        <span className="text-[10px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block mb-1">
-                          🔍 Cautious Methodological Bounds & Inferred Scope:
-                        </span>
-                        <p className="text-xs text-[#524F47] leading-relaxed">
-                          {summaryState.data.summary.cautiousInferredLimitations || summaryState.data.summary.inferredLimitations}
+                    {(summaryState.data.language || summaryState.language) === 'bn' && (
+                      <p className="text-xs text-[#605D55] leading-relaxed">
+                        শিরোনাম ও টীকা বাংলায় দেখানো হচ্ছে। বাক্যগুলো গবেষণাপত্রের নিজের ভাষাতেই থাকে, অনুবাদ করা হয় না।
+                      </p>
+                    )}
+
+                    {/* Opening sentence */}
+                    {view.takeaway && (
+                      <div className="bg-white border-2 border-[#1C1B18] p-5 sm:p-6 rounded-sm space-y-2 shadow-2xs">
+                        <span className={`${headingClass} text-amber-800`}>{L.takeaway}</span>
+                        <p className="font-sans text-[15px] sm:text-base text-[#1C1B18] leading-relaxed font-medium">
+                          {view.takeaway}
                         </p>
+                        {view.takeawayAlsoCovers.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                            <span className="text-[11px] text-[#737067]">{L.alsoCovers}:</span>
+                            {view.takeawayAlsoCovers.map((name) => (
+                              <span key={name} className="px-2 py-0.5 bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm text-[11px] text-[#2E2C28]">
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
 
-                  {/* Future Work (if present) */}
-                  {summaryState.data.summary.futureWork && summaryState.data.summary.futureWork !== 'Not reported' && (
-                    <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-1.5 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        🔭 Stated Future Work:
-                      </span>
-                      <p className="text-sm text-[#524F47] leading-relaxed">
-                        {summaryState.data.summary.futureWork}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Missing Information / Evidence Gaps (if present) */}
-                  {Array.isArray(summaryState.data.summary.missingInformation) && summaryState.data.summary.missingInformation.length > 0 && (
-                    <div className="bg-[#FAF9F5] border border-[#E5E2DA] p-4 rounded-sm space-y-1.5 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-amber-900 uppercase tracking-wider font-bold block">
-                        ℹ️ Unreported Information / Evidence Gaps:
-                      </span>
-                      <ul className="list-disc list-inside text-xs text-[#524F47] space-y-1">
-                        {summaryState.data.summary.missingInformation.map((gap, gIdx) => (
-                          <li key={gIdx}>{gap}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Key Terms */}
-                  {summaryState.data.summary.keyTerms?.length > 0 && (
-                    <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider font-bold block">
-                        🏷️ Key Domain Terms:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {summaryState.data.summary.keyTerms.map((term, tIdx) => (
-                          <span
-                            key={tIdx}
-                            className="bg-[#FAF9F5] border border-[#D5D1C7] text-[#1C1B18] px-2.5 py-1 rounded-sm text-xs font-mono-meta font-medium"
-                          >
-                            {term}
-                          </span>
-                        ))}
+                    {view.overview && (
+                      <div className="bg-[#FAF9F5] border border-[#D5D1C7] p-4 sm:p-5 rounded-sm">
+                        <p className="text-sm text-[#2E2C28] leading-relaxed">{view.overview}</p>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Full Text Section References */}
-                  {(summaryState.data.summary.evidence?.length > 0 || summaryState.data.summary.evidenceReferences?.length > 0) && (
-                    <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 shadow-2xs">
-                      <span className="text-[11px] font-mono-meta text-emerald-800 uppercase tracking-wider font-bold block">
-                        📑 Full-Text Evidence References:
-                      </span>
-                      <div className="space-y-2">
-                        {(summaryState.data.summary.evidence || summaryState.data.summary.evidenceReferences).map((ev, eIdx) => (
-                          <div key={eIdx} className="text-xs p-2.5 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm font-mono-meta">
-                            <strong className="text-[#1C1B18] block">{ev.sectionOrPage}</strong>
-                            <span className="text-[#605D55] italic">"{ev.quote}"</span>
+                    {/* One card per sentence; a sentence that answers two headings carries both names */}
+                    {view.sections.length > 0 && (
+                      <div className={`grid grid-cols-1 gap-4 ${view.sections.length > 1 ? 'md:grid-cols-2' : ''}`}>
+                        {view.sections.map((section) => (
+                          <div key={section.keys.join('-')} className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                            <span className={`${headingClass} text-[#605D55]`}>{section.headings.join(' + ')}</span>
+                            <p className="text-sm text-[#2E2C28] leading-relaxed">{section.text}</p>
                           </div>
                         ))}
                       </div>
+                    )}
+
+                    {/* Limitations: what the authors said, kept apart from the site's own checklist */}
+                    <div className="bg-white border border-[#D5D1C7] border-l-4 border-l-amber-500 p-5 rounded-sm space-y-2 shadow-2xs">
+                      <span className={`${headingClass} text-amber-900`}>{L.limitations}</span>
+                      {view.limitations.stated ? (
+                        <p className="text-sm text-[#2E2C28] leading-relaxed">{view.limitations.text}</p>
+                      ) : (
+                        <p className="text-sm text-[#605D55] leading-relaxed">{L.limitationsMissing}</p>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {view.futureWork && (
+                      <div className="bg-white border border-[#D5D1C7] p-5 rounded-sm space-y-2 shadow-2xs">
+                        <span className={`${headingClass} text-[#605D55]`}>{L.futureWork}</span>
+                        <p className="text-sm text-[#2E2C28] leading-relaxed">{view.futureWork}</p>
+                      </div>
+                    )}
+
+                    {view.notFound.length > 0 && (
+                      <p className="text-xs text-[#605D55] leading-relaxed" data-testid="summary-not-found">
+                        <span className="font-bold text-[#2E2C28]">{L.notFound}:</span> {view.notFound.join(', ')}
+                      </p>
+                    )}
+
+                    {view.checklist.length > 0 && (
+                      <div className="bg-[#FAF9F5] border border-dashed border-[#C9C4B8] p-4 sm:p-5 rounded-sm space-y-2">
+                        <div>
+                          <span className={`${headingClass} text-[#2E2C28]`}>{L.checklist}</span>
+                          <p className="text-[11px] text-[#737067] mt-0.5">{L.checklistNote}</p>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {view.checklist.map((item, index) => (
+                            <li key={index} className="text-xs text-[#524F47] leading-relaxed">
+                              {item.title && <span className="font-bold text-[#2E2C28]">{item.title}: </span>}
+                              {item.text}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {view.keyTerms.length > 0 && (
+                      <div className="space-y-2">
+                        <span className={`${headingClass} text-[#605D55]`}>{L.keyTerms}</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {view.keyTerms.map((term) => (
+                            <span
+                              key={term}
+                              className="bg-white border border-[#D5D1C7] text-[#1C1B18] px-2.5 py-1 rounded-sm text-xs"
+                            >
+                              {term}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {view.evidence.length > 0 && (
+                      <div className="bg-white border border-[#D5D1C7] p-4 rounded-sm space-y-2 shadow-2xs">
+                        <span className={`${headingClass} text-emerald-800`}>{L.evidence}</span>
+                        <div className="space-y-2">
+                          {view.evidence.map((ev, eIdx) => (
+                            <div key={eIdx} className="text-xs p-2.5 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm">
+                              <strong className="text-[#1C1B18] block">{ev.sectionOrPage}</strong>
+                              <span className="text-[#605D55] italic">"{ev.quote}"</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
 
-        {/* ========================================================================= */}
-        {/* 4. ANCHORED ACTION FOOTER                                                 */}
-        {/* ========================================================================= */}
-        <div className="px-4 sm:px-6 py-3 border-t border-[#E2DFD8] dark:border-[#2C2A26] bg-white dark:bg-[#201F1C] flex items-center justify-between gap-3 font-mono-meta text-xs shrink-0 flex-wrap">
-          <div className="flex items-center gap-2 text-[#737067] dark:text-[#9C988F] text-[11px]">
-            <span>Panther Scholarly Archive</span>
-            {thesis.doi && (
-              <>
-                <span>•</span>
-                <span className="hidden sm:inline font-mono">DOI: {thesis.doi}</span>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onCite && onCite(thesis)}
-              className="min-h-[44px] bg-[#FAF9F5] hover:bg-[#F2EFE8] border border-[#D5D1C7] text-[#1C1B18] dark:bg-[#24221E] dark:hover:bg-[#2A2824] dark:border-[#383530] dark:text-[#E8E6E1] px-3.5 py-2 rounded-sm transition cursor-pointer flex items-center gap-1.5"
-            >
-              <Quote className="w-3.5 h-3.5 text-[#2C6B3F] dark:text-emerald-400" />
-              <span className="font-bold">Cite</span>
-            </button>
-
-            <button
-              onClick={onClose}
-              className="min-h-[44px] bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] px-5 py-2 rounded-sm uppercase tracking-wider font-bold transition cursor-pointer shadow-2xs"
-            >
-              Close
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

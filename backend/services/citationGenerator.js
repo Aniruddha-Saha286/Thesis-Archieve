@@ -5,6 +5,27 @@
  * NEVER silently filled with fictional values or the current year.
  */
 
+
+// Degree level as stated on the record: 'bachelor' | 'master' | 'doctoral' | 'unknown'.
+// Most theses from Bangladeshi universities are bachelor's theses, so nothing is assumed:
+// an unstated level is cited as plain "Thesis".
+function getDegreeLevel(record) {
+  const text = String((record && record.degreeType) || '').toLowerCase();
+  if (/\b(ph\.?\s?d|d\.?phil|doctor(al|ate)?)\b/.test(text)) return 'doctoral';
+  if (/\b(master'?s?|m\.?\s?sc|m\.?\s?phil|m\.?\s?eng|m\.?\s?s|m\.?\s?a|mba|postgraduate)\b/.test(text)) return 'master';
+  if (/\b(bachelor'?s?|b\.?\s?sc|b\.?\s?eng|b\.?\s?a|b\.?\s?s|bba|undergraduate|honou?rs)\b/.test(text)) return 'bachelor';
+  if (record && record.publicationType === 'dissertation') return 'doctoral';
+  return 'unknown';
+}
+
+function describeDegree(record) {
+  const level = getDegreeLevel(record);
+  if (level === 'doctoral') return 'Doctoral dissertation';
+  if (level === 'master') return "Master's thesis";
+  if (level === 'bachelor') return "Bachelor's thesis";
+  return 'Thesis';
+}
+
 // Formats an author's name into "Surname, First Initial."
 function formatAuthorApa(name) {
   if (!name) return '';
@@ -48,8 +69,7 @@ function generateApaCitation(record) {
 
   // Venue / Degree / Source
   let venueStr = '';
-  const isMaster = (record.degreeType || '').toLowerCase().includes('master') || (record.degreeType || '').toLowerCase().includes('m.sc') || (record.degreeType || '').toLowerCase().includes('m.phil');
-  const degreeDesc = isMaster ? "Master's thesis" : "Doctoral dissertation";
+  const degreeDesc = describeDegree(record);
 
   if (record.publicationType === 'thesis' || record.publicationType === 'dissertation') {
     const inst = record.venue || record.publisher || record.university || '';
@@ -129,11 +149,25 @@ function generateBibtex(record) {
   const citeKey = `${firstSurname}${year}${firstWord}`;
 
   // Determine entry type: keep degree level separate
-  const isMaster = (record.degreeType || '').toLowerCase().includes('master') || (record.degreeType || '').toLowerCase().includes('m.sc') || (record.degreeType || '').toLowerCase().includes('m.phil');
+  // BibTeX has only two thesis entry types. A bachelor's thesis uses @mastersthesis with an
+  // explicit type, and a thesis of unstated level keeps @phdthesis with type "Thesis", so the
+  // printed reference never claims a degree the record does not state.
+  const level = getDegreeLevel(record);
+  let thesisTypeNote = null;
 
   let entryType = 'misc';
   if (record.publicationType === 'thesis' || record.publicationType === 'dissertation') {
-    entryType = isMaster ? 'mastersthesis' : 'phdthesis';
+    if (level === 'master') {
+      entryType = 'mastersthesis';
+    } else if (level === 'bachelor') {
+      entryType = 'mastersthesis';
+      thesisTypeNote = "Bachelor's thesis";
+    } else if (level === 'doctoral') {
+      entryType = 'phdthesis';
+    } else {
+      entryType = 'phdthesis';
+      thesisTypeNote = 'Thesis';
+    }
   } else if (record.publicationType === 'journal-article') {
     entryType = 'article';
   } else if (record.publicationType === 'conference-paper') {
@@ -168,6 +202,7 @@ function generateBibtex(record) {
     const school = record.university || record.venue || record.publisher;
     if (school) lines.push(`  school = {${school}},`);
     else missingFields.push('school');
+    if (thesisTypeNote) lines.push(`  type = {${thesisTypeNote}},`);
   } else if (entryType === 'unpublished' || entryType === 'misc') {
     const note = record.venue || record.source || 'Preprint repository';
     lines.push(`  note = {${note}},`);

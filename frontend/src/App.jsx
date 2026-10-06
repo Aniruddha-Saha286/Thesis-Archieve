@@ -1,31 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useSocket } from './context/SocketContext';
 import axios from 'axios';
 import Header from './components/Header';
 import AdminDesk from './components/AdminDesk';
-import VerificationDrawer from './components/VerificationDrawer';
 import ThesisCard from './components/ThesisCard';
-import ProposeThesisModal from './components/ProposeThesisModal';
-import CiteModal from './components/CiteModal';
-import PublicationDetailModal from './components/PublicationDetailModal';
-import StudentManagementModal from './components/StudentManagementModal';
 import LoginView from './components/LoginView';
 import StudentRegistrationView from './components/StudentRegistrationView';
 import PendingView from './components/PendingView';
-import AdminPortalView from './components/AdminPortalView';
-import SavedPapersModal from './components/SavedPapersModal';
-import CollectionsModal from './components/CollectionsModal';
-import ComparisonMatrixModal from './components/ComparisonMatrixModal';
-import TopicAlertsModal from './components/TopicAlertsModal';
-import ReportIssueModal from './components/ReportIssueModal';
-import MembershipModal from './components/MembershipModal';
-import AuthorProfileModal from './components/AuthorProfileModal';
-import InstitutionLandscapeModal from './components/InstitutionLandscapeModal';
-import CoverageModal from './components/CoverageModal';
 import DiscoveryFiltersPanel from './components/DiscoveryFiltersPanel';
-import LibraryHub from './components/LibraryHub';
 import DiscoverSearchBar from './components/DiscoverSearchBar';
+import FilterSection from './components/FilterSection';
+import { isTrialPlan } from './utils/plan';
+import { parseUrlState, buildUrl, paperParams, isArchiveId, rememberPaper, recallPaper, rememberSearchContext, recallSearchContext } from './utils/urlState';
 import {
   Filter,
   Building2,
@@ -49,7 +36,45 @@ import {
   Bookmark,
   Folder,
   RefreshCw,
+  Calendar,
+  Layers,
+  ArrowUpDown,
+  RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
+import lazyWithRetry from './utils/lazyWithRetry';
+
+// Loaded only when first opened, so the first screen downloads less. The search page itself,
+// the header and the result cards stay in the main file.
+const VerificationDrawer = lazyWithRetry(() => import('./components/VerificationDrawer'));
+const ProposeThesisModal = lazyWithRetry(() => import('./components/ProposeThesisModal'));
+const FeedbackModal = lazyWithRetry(() => import('./components/FeedbackModal'));
+const CiteModal = lazyWithRetry(() => import('./components/CiteModal'));
+const PublicationDetailModal = lazyWithRetry(() => import('./components/PublicationDetailModal'));
+const StudentManagementModal = lazyWithRetry(() => import('./components/StudentManagementModal'));
+const AdminPortalView = lazyWithRetry(() => import('./components/AdminPortalView'));
+const SavedPapersModal = lazyWithRetry(() => import('./components/SavedPapersModal'));
+const CollectionsModal = lazyWithRetry(() => import('./components/CollectionsModal'));
+const ComparisonMatrixModal = lazyWithRetry(() => import('./components/ComparisonMatrixModal'));
+const TopicAlertsModal = lazyWithRetry(() => import('./components/TopicAlertsModal'));
+const ReportIssueModal = lazyWithRetry(() => import('./components/ReportIssueModal'));
+const MembershipModal = lazyWithRetry(() => import('./components/MembershipModal'));
+const AuthorProfileModal = lazyWithRetry(() => import('./components/AuthorProfileModal'));
+const InstitutionLandscapeModal = lazyWithRetry(() => import('./components/InstitutionLandscapeModal'));
+const CoverageModal = lazyWithRetry(() => import('./components/CoverageModal'));
+const LibraryHub = lazyWithRetry(() => import('./components/LibraryHub'));
+const TopicCheck = lazyWithRetry(() => import('./components/TopicCheck'));
+
+// Shown for a moment while one of the parts above is being fetched
+function PartLoading() {
+  return (
+    <div role="status" className="py-16 text-center text-xs text-[#737067] dark:text-[#9A968D]">
+      <div className="w-6 h-6 border-2 border-[#1C1B18] dark:border-amber-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+      Loading…
+    </div>
+  );
+}
+
 
 const DEFAULT_CATEGORIES = [
   { id: '', label: 'All Disciplines', shortLabel: 'All Disciplines' },
@@ -70,15 +95,39 @@ const DEFAULT_CATEGORIES = [
   { id: 'other', label: 'Other Disciplines / Unclassified', shortLabel: 'Other Disciplines' },
 ];
 
+const PUBLICATION_TYPE_LABELS = {
+  all: 'All Records',
+  thesis: 'Theses & Dissertations',
+  article: 'Journal Articles',
+  'journal-article': 'Journal Articles',
+  proceedings: 'Conference Papers',
+  'conference-paper': 'Conference Papers',
+  preprint: 'Preprints',
+  book: 'Books',
+};
+
+// This tab's storage, or null when the browser blocks it (private mode with strict settings)
+function safeSessionStorage() {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const { user, loading, isAuthenticated, needsRegistration, isApproved, isPending, isAdmin, isEditor, isStaff, hasPermission, logout } = useAuth();
   const { socket, isConnected, realtimeNotice, clearRealtimeNotice, showNotice } = useSocket();
 
   // Search & Filtering State
+  // What the address bar says when the page loads (a shared link, or a refresh)
+  const initialUrl = useRef(parseUrlState(window.location.search)).current;
+
   const [searchMode, setSearchMode] = useState('publications'); // 'publications' | 'authors'
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialUrl.q);
   const [sessionId, setSessionId] = useState(null);
-  const [searchContextId, setSearchContextId] = useState(null);
+  // After a refresh the same search keeps its id, so it is not counted against the daily limit again
+  const [searchContextId, setSearchContextId] = useState(() => recallSearchContext(safeSessionStorage(), initialUrl.q));
   const [selectedCategory, setSelectedCategory] = useState('All Disciplines');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedFieldId, setSelectedFieldId] = useState('');
@@ -89,15 +138,15 @@ export default function App() {
   const [academicOnly, setAcademicOnly] = useState(true);
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [minCitations, setMinCitations] = useState('');
-  const [sortOrder, setSortOrder] = useState('relevance');
+  const [sortOrder, setSortOrder] = useState(initialUrl.sort);
   const [selectedAuthorFilter, setSelectedAuthorFilter] = useState(null);
   const [inspectingAuthor, setInspectingAuthor] = useState(null);
   const [selectedPublisher, setSelectedPublisher] = useState('');
-  const [selectedPublicationType, setSelectedPublicationType] = useState('all');
-  const [hasPdfOnly, setHasPdfOnly] = useState(false);
-  const [isOpenAccessOnly, setIsOpenAccessOnly] = useState(false);
-  const [yearMin, setYearMin] = useState('');
-  const [yearMax, setYearMax] = useState('');
+  const [selectedPublicationType, setSelectedPublicationType] = useState(initialUrl.type);
+  const [hasPdfOnly, setHasPdfOnly] = useState(initialUrl.pdf);
+  const [isOpenAccessOnly, setIsOpenAccessOnly] = useState(initialUrl.oa);
+  const [yearMin, setYearMin] = useState(initialUrl.from);
+  const [yearMax, setYearMax] = useState(initialUrl.to);
   const [draftYearMin, setDraftYearMin] = useState('');
   const [draftYearMax, setDraftYearMax] = useState('');
   const [totalTechnicalFailure, setTotalTechnicalFailure] = useState(false);
@@ -115,11 +164,13 @@ export default function App() {
   const [publishersList, setPublishersList] = useState([]);
   const [providerTelemetry, setProviderTelemetry] = useState({});
   const [loadingTheses, setLoadingTheses] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const currentRequestIdRef = useRef(0);
   const abortControllerRef = useRef(null);
 
   // Research Workspace State
   const [savedPapersCount, setSavedPapersCount] = useState(0);
+  const [savedPaperIds, setSavedPaperIds] = useState(() => new Set());
   const [comparisonPapers, setComparisonPapers] = useState([]);
 
   // Modals
@@ -128,6 +179,7 @@ export default function App() {
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isTopicAlertsOpen, setIsTopicAlertsOpen] = useState(false);
   const [isProposeOpen, setIsProposeOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [citingThesis, setCitingThesis] = useState(null);
   const [selectedDetailThesis, setSelectedDetailThesis] = useState(null);
   const [detailInitialTab, setDetailInitialTab] = useState('overview');
@@ -138,8 +190,9 @@ export default function App() {
   const [searchQuotaError, setSearchQuotaError] = useState(null);
   const [inspectingLandscapeInst, setInspectingLandscapeInst] = useState(null);
 
-  // Primary Navigation Tabs: 'discover' | 'datasets' | 'library'
-  const [activeTab, setActiveTab] = useState('discover');
+  // Primary Navigation Tabs: 'discover' | 'datasets' | 'topic' | 'library'
+  const [activeTab, setActiveTab] = useState(initialUrl.view);
+  const [topicSeed, setTopicSeed] = useState('');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Provider Telemetry Details Drawer
@@ -150,6 +203,8 @@ export default function App() {
   const [datasetInput, setDatasetInput] = useState('');
   const [datasetsList, setDatasetsList] = useState([]);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [datasetError, setDatasetError] = useState(null);
+  const datasetRequestIdRef = useRef(0);
   const [datasetPage, setDatasetPage] = useState(1);
   const [hasMoreDatasets, setHasMoreDatasets] = useState(false);
 
@@ -163,6 +218,15 @@ export default function App() {
   const [evaluating, setEvaluating] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isStudentManagementOpen, setIsStudentManagementOpen] = useState(false);
+
+  // Fetch the paper details window in the background once the page is up,
+  // so the first click on a result opens without a pause.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      import('./components/PublicationDetailModal').catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load Subject Disciplines Catalog
   useEffect(() => {
@@ -192,11 +256,13 @@ export default function App() {
     if (!trimmed) {
       if (yearMin !== '') {
         setYearMin('');
+        setSessionId(null);
         setCurrentPage(1);
       }
     } else if (/^\d{4}$/.test(trimmed)) {
       if (yearMin !== trimmed) {
         setYearMin(trimmed);
+        setSessionId(null);
         setCurrentPage(1);
       }
     }
@@ -207,11 +273,13 @@ export default function App() {
     if (!trimmed) {
       if (yearMax !== '') {
         setYearMax('');
+        setSessionId(null);
         setCurrentPage(1);
       }
     } else if (/^\d{4}$/.test(trimmed)) {
       if (yearMax !== trimmed) {
         setYearMax(trimmed);
+        setSessionId(null);
         setCurrentPage(1);
       }
     }
@@ -231,6 +299,7 @@ export default function App() {
     const requestId = ++currentRequestIdRef.current;
     try {
       setLoadingTheses(true);
+      setSearchError(null);
       const params = {};
       const activePage = pageOverride !== undefined ? pageOverride : currentPage;
 
@@ -310,6 +379,7 @@ export default function App() {
           }
           if (res.data.searchContextId) {
             setSearchContextId(res.data.searchContextId);
+            rememberSearchContext(safeSessionStorage(), params.search, res.data.searchContextId);
           }
           if (res.data.searchQuota) {
             setSearchQuota(res.data.searchQuota);
@@ -330,6 +400,15 @@ export default function App() {
           });
         } else if (err.response?.data?.code === 'SEARCH_QUOTA_EXCEEDED') {
           setSearchQuotaError(err.response.data);
+        } else {
+          // Network drop, server error, rate limit... tell the user instead of silently showing stale results
+          setTheses([]);
+          setHasMore(false);
+          setSearchError(
+            err.response?.status === 429
+              ? 'Too many requests in a short time. Please wait a few seconds and try again.'
+              : err.response?.data?.message || 'We could not load results right now. Please check your connection and try again.'
+          );
         }
       }
     } finally {
@@ -349,35 +428,54 @@ export default function App() {
   };
 
   const fetchGlobalDatasets = async (pageOverride) => {
+    const requestId = ++datasetRequestIdRef.current;
+    // Nothing typed yet: show the starting suggestions instead of searching for made-up words
+    if (!datasetQuery.trim()) {
+      setDatasetsList([]);
+      setHasMoreDatasets(false);
+      setDatasetError(null);
+      setLoadingDatasets(false);
+      return;
+    }
     try {
       setLoadingDatasets(true);
+      setDatasetError(null);
       const activePage = pageOverride !== undefined ? pageOverride : datasetPage;
       const res = await axios.get('/api/datasets', {
         params: {
-          q: datasetQuery.trim() || 'research dataset',
+          q: datasetQuery.trim(),
           page: activePage,
           limit: 15,
         },
       });
+      if (requestId !== datasetRequestIdRef.current) return;
       setDatasetsList(res.data.datasets || []);
       setHasMoreDatasets(Boolean(res.data.pagination?.hasMore));
     } catch (err) {
+      if (requestId !== datasetRequestIdRef.current) return;
       if (err.response?.status === 503 || err.response?.data?.code === 'MAINTENANCE_MODE') {
         setSystemMaintenance({
           enabled: true,
           message: err.response.data?.message || 'Scheduled platform maintenance is in progress.',
         });
+      } else {
+        setDatasetError(err.response?.data?.message || 'Dataset sources could not be reached. Please try again.');
       }
       console.error('Error fetching global datasets:', err);
     } finally {
-      setLoadingDatasets(false);
+      if (requestId === datasetRequestIdRef.current) {
+        setLoadingDatasets(false);
+      }
     }
   };
 
   const fetchUserSavedCount = async () => {
     try {
       const res = await axios.get('/api/user/saved-papers');
-      setSavedPapersCount(res.data?.length || 0);
+      const list = Array.isArray(res.data) ? res.data : [];
+      setSavedPapersCount(list.length);
+      // Cards and the details window use this to show "Saved" correctly after a reload
+      setSavedPaperIds(new Set(list.map((sp) => String(sp.paperId))));
     } catch (err) {
       // User not authenticated or token expired
     }
@@ -404,12 +502,11 @@ export default function App() {
   const fetchSystemStatus = async () => {
     try {
       const res = await axios.get('/api/system/status');
-      setSystemMaintenance({
-        enabled: Boolean(res.data?.enabled ?? res.data?.maintenance),
-        message: res.data?.message || '',
-      });
+      if (res.data?.maintenance) {
+        setSystemMaintenance(res.data.maintenance);
+      }
     } catch (err) {
-      // Keep existing state if network check fails
+      // Fallback
     } finally {
       setCheckingMaintenance(false);
     }
@@ -433,6 +530,194 @@ export default function App() {
   // Synchronization Effects
   // ==========================================
 
+  // ==========================================
+  // Address bar <-> screen
+  // ==========================================
+
+  // The paper named in the address when the page loaded; opened once the user is in
+  const pendingPaperRef = useRef(initialUrl.paper ? { paper: initialUrl.paper, doi: initialUrl.doi } : null);
+  // Waiting for a search (by DOI) to bring back the paper a shared link points to
+  const pendingDoiRef = useRef('');
+  // The paper currently being looked up for the address; kept in the address until it is found or given up
+  const resolvingPaperRef = useRef(null);
+  const doiSearchSeenRef = useRef(false);
+  const firstAddressSyncRef = useRef(true);
+
+  const closePaperDetails = () => {
+    // If opening the paper added a step to the browser history, closing goes back over that
+    // step, so Back does not reopen a window the user has just closed.
+    if (window.history.state && window.history.state.ttaPaper) {
+      window.history.back();
+    } else {
+      setSelectedDetailThesis(null);
+    }
+  };
+
+  // Finds the record for a paper id: the results on screen, this tab's memory, then the archive.
+  const openPaperFromAddress = async ({ paper, doi }) => {
+    if (!paper) {
+      resolvingPaperRef.current = null;
+      setSelectedDetailThesis(null);
+      return;
+    }
+    resolvingPaperRef.current = { paper, doi: doi || '' };
+    const onScreen = theses.find((t) => String(t._id || t.id) === paper);
+    const remembered = onScreen || recallPaper(safeSessionStorage(), paper);
+    if (remembered) {
+      setSelectedDetailThesis(remembered);
+      setDetailInitialTab('overview');
+      return;
+    }
+    if (isArchiveId(paper)) {
+      try {
+        const res = await axios.get(`/api/thesis/${encodeURIComponent(paper)}`);
+        if (res.data && res.data.title) {
+          setSelectedDetailThesis(res.data);
+          setDetailInitialTab('overview');
+          return;
+        }
+      } catch (err) {
+        // Not in the archive (or removed): fall through to the DOI or the message below
+      }
+    }
+    if (doi) {
+      // A paper from an outside source: search for its DOI and open it when it comes back
+      pendingDoiRef.current = doi.toLowerCase();
+      doiSearchSeenRef.current = false;
+      setActiveTab('discover');
+      setSessionId(null);
+      setSearchContextId(null);
+      setSearchQuery(doi);
+      setCurrentPage(1);
+      return;
+    }
+    resolvingPaperRef.current = null;
+    showNotice(
+      isArchiveId(paper)
+        ? 'The paper in this link is no longer in the archive.'
+        : 'This link points to a paper from an outside source. Search for its title to find it again.',
+      'info'
+    );
+    window.history.replaceState(null, '', buildUrl({ ...parseUrlState(window.location.search), paper: '', doi: '' }, window.location.pathname));
+  };
+
+  // A shared link or a refresh: open the paper once the user is signed in and approved
+  useEffect(() => {
+    if (!isApproved || !pendingPaperRef.current) return;
+    const target = pendingPaperRef.current;
+    pendingPaperRef.current = null;
+    openPaperFromAddress(target);
+  }, [isApproved]);
+
+  // The DOI search came back: open the matching paper
+  useEffect(() => {
+    if (!pendingDoiRef.current) return;
+    if (loadingTheses) {
+      doiSearchSeenRef.current = true; // the search for this DOI is on its way
+      return;
+    }
+    const wanted = pendingDoiRef.current;
+    const match = theses.find((t) => String(t.doi || '').toLowerCase() === wanted);
+    if (match) {
+      pendingDoiRef.current = '';
+      doiSearchSeenRef.current = false;
+      setSelectedDetailThesis(match);
+      setDetailInitialTab('overview');
+    } else if (theses.length > 0 || searchError || searchQuotaError || doiSearchSeenRef.current) {
+      // The search answered without that paper (or was refused): stop waiting, say so, and drop it from the address
+      pendingDoiRef.current = '';
+      doiSearchSeenRef.current = false;
+      resolvingPaperRef.current = null;
+      if (!searchQuotaError) showNotice('The paper in this link could not be found again. Search for its title instead.', 'info');
+      window.history.replaceState(null, '', buildUrl({ ...parseUrlState(window.location.search), paper: '', doi: '' }, window.location.pathname));
+    }
+  }, [theses, loadingTheses, searchError, searchQuotaError]);
+
+  // Screen -> address. A new step in the browser history for a real move (another page, another
+  // search, opening a paper); a silent update when a paper window is simply closed.
+  useEffect(() => {
+    // The linked paper is on screen now, so it is no longer "being looked up"
+    if (selectedDetailThesis) resolvingPaperRef.current = null;
+    if (!isApproved || pendingPaperRef.current) return;
+    const openPaper = paperParams(selectedDetailThesis);
+    // While a linked paper is still being looked up, keep it in the address
+    const awaited = !selectedDetailThesis ? resolvingPaperRef.current : null;
+    const next = buildUrl(
+      {
+        view: activeTab === 'publications' ? 'discover' : activeTab,
+        q: searchQuery,
+        type: selectedPublicationType,
+        sort: sortOrder,
+        pdf: hasPdfOnly,
+        oa: isOpenAccessOnly,
+        from: yearMin,
+        to: yearMax,
+        paper: awaited ? awaited.paper : openPaper.paper,
+        doi: awaited ? awaited.doi : openPaper.doi,
+      },
+      window.location.pathname
+    );
+    const current = window.location.pathname + window.location.search;
+    const firstSync = firstAddressSyncRef.current;
+    firstAddressSyncRef.current = false;
+    if (next === current) return;
+    if (firstSync) {
+      // The page has just loaded: tidy the address it was opened with (extra tracking words, an
+      // unknown value) in place. A new history step here would cost the visitor an extra Back.
+      window.history.replaceState(window.history.state, '', next);
+      return;
+    }
+
+    const hadPaper = Boolean(parseUrlState(window.location.search).paper);
+    const onPaperStep = Boolean(window.history.state && window.history.state.ttaPaper);
+    if (selectedDetailThesis) rememberPaper(safeSessionStorage(), selectedDetailThesis);
+
+    if (selectedDetailThesis && !hadPaper) {
+      // A paper was opened: one new step, which Back (or the close button) undoes
+      window.history.pushState({ ttaPaper: true }, '', next);
+    } else if (hadPaper && !onPaperStep) {
+      // The page was loaded from a paper link: correct that same step, add none
+      window.history.replaceState(null, '', next);
+    } else if (!selectedDetailThesis && hadPaper) {
+      window.history.replaceState(null, '', next);
+    } else {
+      window.history.pushState(selectedDetailThesis ? { ttaPaper: true } : null, '', next);
+    }
+  }, [isApproved, activeTab, searchQuery, selectedPublicationType, sortOrder, hasPdfOnly, isOpenAccessOnly, yearMin, yearMax, selectedDetailThesis]);
+
+  // Address -> screen: the Back and Forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const target = parseUrlState(window.location.search);
+      setActiveTab(target.view);
+      setMobileFilterOpen(false);
+      if (target.view === 'discover') {
+        const changed =
+          target.q !== searchQuery || target.type !== selectedPublicationType || target.sort !== sortOrder ||
+          target.pdf !== hasPdfOnly || target.oa !== isOpenAccessOnly || target.from !== yearMin || target.to !== yearMax;
+        if (changed) {
+          setSessionId(null);
+          // Going back to a search already made: reuse its id so it is not counted again
+          setSearchContextId(recallSearchContext(safeSessionStorage(), target.q));
+          setCurrentPage(1);
+          setSearchQuery(target.q);
+          setSelectedPublicationType(target.type);
+          setSortOrder(target.sort);
+          setHasPdfOnly(target.pdf);
+          setIsOpenAccessOnly(target.oa);
+          setYearMin(target.from);
+          setYearMax(target.to);
+        }
+      }
+      const openId = selectedDetailThesis ? String(selectedDetailThesis._id || selectedDetailThesis.id) : '';
+      if (target.paper !== openId) {
+        openPaperFromAddress({ paper: target.paper, doi: target.doi });
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  });
+
   // Fetch theses whenever user is approved and search criteria changes
   useEffect(() => {
     if (isApproved) {
@@ -445,7 +730,6 @@ export default function App() {
     selectedFieldId,
     selectedInstitution,
     institutionMode,
-    academicOnly,
     selectedCountries,
     selectedAuthorFilter,
     minCitations,
@@ -532,10 +816,7 @@ export default function App() {
 
     const handleMaintenanceChanged = (status) => {
       if (status) {
-        setSystemMaintenance({
-          enabled: Boolean(status.enabled ?? status.maintenance),
-          message: status.message || '',
-        });
+        setSystemMaintenance(status);
       }
     };
 
@@ -575,7 +856,7 @@ export default function App() {
       } else {
         if (prev.length >= 5) {
           if (showNotice) {
-            showNotice('Comparison Limit: You can compare a maximum of 5 publications simultaneously in the synthesis matrix.', 'info');
+            showNotice('You can compare up to 5 papers at a time. Remove one to add another.', 'info');
           }
           return prev;
         }
@@ -595,7 +876,6 @@ export default function App() {
     selectedCountries.length > 0 ||
     selectedAuthorFilter ||
     minCitations ||
-    sortOrder !== 'relevance' ||
     hasPdfOnly ||
     isOpenAccessOnly ||
     yearMin ||
@@ -608,7 +888,6 @@ export default function App() {
     selectedCountries.length > 0,
     Boolean(selectedAuthorFilter),
     Boolean(minCitations),
-    sortOrder !== 'relevance',
     selectedPublicationType !== 'all',
     hasPdfOnly,
     isOpenAccessOnly,
@@ -676,19 +955,14 @@ export default function App() {
           <div className="w-8 h-8 rounded-sm bg-[#1C1B18] dark:bg-amber-400 text-[#FAF9F5] dark:text-neutral-950 flex items-center justify-center font-serif-title text-xl mx-auto animate-pulse">
             §
           </div>
-          <div>Loading Academic Depository Session...</div>
+          <div>Loading…</div>
         </div>
       </div>
     );
   }
 
-  // 2. Strict Access Gate: Without sign-in, anonymous visitors see the normal login page
-  if (!isAuthenticated) {
-    return <LoginView />;
-  }
-
-  // 3. Maintenance Gate: If maintenance mode is active and user is not an administrator
-  if (systemMaintenance.enabled && !isAdmin) {
+  // 1.5. Maintenance Gate: If maintenance mode is active and user is not an administrator
+  if (systemMaintenance.enabled && !isAdmin && !checkingMaintenance) {
     return (
       <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex flex-col justify-center items-center p-6">
         <div className="max-w-md w-full text-center space-y-6">
@@ -697,82 +971,75 @@ export default function App() {
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-serif-title font-medium tracking-tight text-[#1C1B18] dark:text-[#F0EDE6]">
-              The Thesis Archive
+              Back soon
             </h1>
-            <p className="text-xs font-mono-meta font-bold text-amber-800 dark:text-amber-400 uppercase tracking-widest">
-              MAINTENANCE IN PROGRESS
+            <p className="text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] uppercase tracking-wider">
+              The Thesis Archive
             </p>
           </div>
           <div className="p-4 bg-white dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm text-xs text-[#524F47] dark:text-[#A8A49C] leading-relaxed font-light">
-            {systemMaintenance.message || 'The Thesis Archive is currently undergoing scheduled platform upgrades and database maintenance. Search queries and catalog access are temporarily paused to protect data integrity.'}
+            {systemMaintenance.message || 'The Thesis Archive is being updated. Searching is paused for a short time. Your saved papers and account are safe.'}
           </div>
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               type="button"
               onClick={fetchSystemStatus}
-              className="w-full sm:w-auto px-4 py-2 bg-[#1C1B18] hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 text-xs font-mono-meta font-bold rounded-sm cursor-pointer shadow-2xs flex items-center justify-center gap-1.5 transition"
+              className="w-full sm:w-auto px-4 py-2 bg-[#1C1B18] hover:bg-black dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 text-xs font-mono-meta font-bold rounded-sm cursor-pointer shadow-2xs flex items-center justify-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Check System Status</span>
+              <span>Check again</span>
             </button>
-            <button
-              type="button"
-              onClick={logout}
-              className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] text-xs font-mono-meta rounded-sm cursor-pointer transition"
-            >
-              Sign Out
-            </button>
+            {!user ? (
+              <a
+                href="/api/auth/google"
+                className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] text-xs font-mono-meta rounded-sm cursor-pointer text-center"
+              >
+                Staff sign-in
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={logout}
+                className="w-full sm:w-auto px-4 py-2 bg-white dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] text-xs font-mono-meta rounded-sm cursor-pointer"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // 4. Post-Signin Student Academic Registration (if profile is incomplete)
+  // 2. Strict Access Gate: Without sign-in, user MUST NOT see anything except the login page!
+  if (!isAuthenticated) {
+    return <LoginView />;
+  }
+
+  // 3. Post-Signin Student Academic Registration (if profile is incomplete)
   if (needsRegistration) {
     return <StudentRegistrationView />;
   }
 
-  // 5. Verification Gate: If student account is awaiting verification, banned, or rejected
+  // 4. Verification Gate: If student account is awaiting verification, banned, or rejected
   if (!isApproved) {
     return <PendingView />;
   }
 
-  // 6. Dedicated Staff / Admin Portal: If user is staff (admin or editor) and not previewing student view
+  // 5. Dedicated Staff / Admin Portal: If user is staff (admin or editor) and not previewing student view
   if (isStaff && !adminPreviewStudentView) {
-    return <AdminPortalView onSwitchToStudentPreview={() => setAdminPreviewStudentView(true)} />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C]"><PartLoading /></div>}>
+        <AdminPortalView onSwitchToStudentPreview={() => setAdminPreviewStudentView(true)} />
+      </Suspense>
+    );
   }
 
-  // 7. Authenticated & Approved: Renders the Full Scholarly Discovery Repository & Workspace
+  // 6. Authenticated & Approved: Renders the Full Scholarly Discovery Repository & Workspace
   return (
     <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex flex-col justify-between transition-colors duration-150">
       <div>
-        {/* Real-time Push Notification Alert */}
-        {realtimeNotice && (
-          <div
-            className={`p-3 px-6 text-xs font-mono-meta flex items-center justify-between border-b transition ${
-              realtimeNotice.type === 'error'
-                ? 'bg-red-50 text-red-800 border-red-200'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2
-                className={`w-4 h-4 shrink-0 ${
-                  realtimeNotice.type === 'error' ? 'text-red-600' : 'text-emerald-600'
-                }`}
-              />
-              <span>{realtimeNotice.message}</span>
-            </div>
-            <button
-              onClick={clearRealtimeNotice}
-              className="p-1 hover:opacity-75 cursor-pointer text-neutral-600"
-              title="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        {/* App-wide messages are shown by <NoticeToast /> (mounted in main.jsx) on every screen */}
 
         {/* Admin Maintenance Mode Active Notice */}
         {systemMaintenance.enabled && isAdmin && (
@@ -780,7 +1047,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-neutral-950 shrink-0" />
               <span>
-                SYSTEM NOTICE: Maintenance Mode is currently ACTIVE. Public/student access is paused. You have administrator bypass access.
+                Maintenance mode is ON. Students cannot use the site right now. You can, because you are an administrator.
               </span>
             </div>
             {adminPreviewStudentView && (
@@ -788,7 +1055,7 @@ export default function App() {
                 onClick={() => setAdminPreviewStudentView(false)}
                 className="bg-neutral-950 hover:bg-neutral-900 text-amber-300 px-3 py-1 rounded-xs transition cursor-pointer text-[11px]"
               >
-                Return to Admin Console
+                Back to the admin console
               </button>
             )}
           </div>
@@ -800,7 +1067,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4" />
               <span>
-                {isAdmin ? 'EDITORIAL PREVIEW' : 'MODERATOR PREVIEW'}: You are currently inspecting the repository as verified students see it.
+                You are looking at the site as an approved student sees it.
               </span>
             </div>
             <button
@@ -808,7 +1075,7 @@ export default function App() {
               className="bg-neutral-950 hover:bg-neutral-900 text-amber-300 px-3 py-1 rounded-xs transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>{isAdmin ? 'Return to Admin Console' : 'Return to Staff Console'}</span>
+              <span>{isAdmin ? 'Back to the admin console' : 'Back to the staff console'}</span>
             </button>
           </div>
         )}
@@ -817,7 +1084,9 @@ export default function App() {
         <Header
           activeTab={activeTab === 'publications' ? 'discover' : activeTab}
           onChangeActiveTab={(tab) => {
+            if (tab === 'topic') setTopicSeed('');
             setActiveTab(tab);
+            setMobileFilterOpen(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onOpenStudentManagement={() => setIsStudentManagementOpen(true)}
@@ -827,6 +1096,8 @@ export default function App() {
           onOpenMembership={() => setIsMembershipOpen(true)}
           membershipPlan={membershipPlan}
           onOpenCoverage={() => setIsCoverageOpen(true)}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
+          onOpenAlerts={() => setIsTopicAlertsOpen(true)}
         />
 
         {/* Admin Quick Action Desk Banner */}
@@ -843,6 +1114,7 @@ export default function App() {
 
         {/* 1. Research Library Hub */}
         {activeTab === 'library' && (
+          <Suspense fallback={<PartLoading />}>
           <LibraryHub
             savedPapersCount={savedPapersCount}
             onOpenSavedPapers={() => setIsSavedPapersOpen(true)}
@@ -858,6 +1130,34 @@ export default function App() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
+          </Suspense>
+        )}
+
+        {/* Topic Check: is my thesis idea already done, and is it feasible? */}
+        {activeTab === 'topic' && (
+          <Suspense fallback={<PartLoading />}>
+          <TopicCheck
+            initialTopic={topicSeed}
+            comparisonIds={comparisonPapers.map((p) => p._id || p.id || p.paperId)}
+            onToggleCompare={handleToggleCompare}
+            onViewDetail={(item) => {
+              setSelectedDetailThesis(item);
+              setDetailInitialTab('overview');
+            }}
+            onOpenMembership={() => setIsMembershipOpen(true)}
+            onOpenTopicAlerts={() => setIsTopicAlertsOpen(true)}
+            onSearchInDiscover={(query, contextId) => {
+              // Reuse the search context so opening the same topic in Discover is not billed again
+              setSearchMode('publications');
+              setSessionId(null);
+              setSearchContextId(contextId || null);
+              setSearchQuery(query);
+              setCurrentPage(1);
+              setActiveTab('discover');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+          </Suspense>
         )}
 
         {/* 2. Open Science Datasets Discovery */}
@@ -869,14 +1169,11 @@ export default function App() {
                 <div>
                   <h3 className="text-lg font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] font-normal flex items-center gap-2">
                     <Database className="w-5 h-5 text-[#2C6B3F] dark:text-emerald-400" />
-                    <span>Open Research Datasets Discovery</span>
+                    <span>Find a dataset</span>
                   </h3>
                   <p className="text-xs text-[#605D55] dark:text-[#9A968D] mt-1 font-light">
-                    Federating official open science data depositories: <strong>DataCite</strong>, <strong>Zenodo / CERN</strong>, <strong>Figshare</strong>, <strong>Dryad</strong>, and author-deposited archives.
+                    Searches DataCite, Zenodo, Figshare, Dryad, Harvard Dataverse and Hugging Face in one go.
                   </p>
-                </div>
-                <div className="text-xs font-mono-meta text-[#2C6B3F] dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-sm self-start">
-                  ✓ Verified Metadata & Licenses
                 </div>
               </div>
 
@@ -893,7 +1190,8 @@ export default function App() {
                   <Search className="w-4 h-4 text-[#737067] dark:text-[#9A968D] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="Search open research datasets (e.g., climate change models, Bengali NLP corpora, protein structures)..."
+                    placeholder="What data do you need? e.g. Bangla sentiment, rice leaf images"
+                    aria-label="Search datasets"
                     value={datasetInput}
                     onChange={(e) => setDatasetInput(e.target.value)}
                     className="w-full pl-9 pr-8 py-2.5 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] text-xs font-mono-meta text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 shadow-2xs transition-colors"
@@ -919,7 +1217,7 @@ export default function App() {
                   className="px-4 py-2.5 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 text-xs font-mono-meta font-bold rounded-sm transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs disabled:opacity-50"
                 >
                   <Search className="w-3.5 h-3.5" />
-                  <span>Search Datasets</span>
+                  <span>Search</span>
                 </button>
               </form>
             </div>
@@ -928,21 +1226,55 @@ export default function App() {
             {loadingDatasets ? (
               <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] space-y-2">
                 <div className="w-6 h-6 border-2 border-[#2C6B3F] dark:border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                <div>Searching official research dataset repositories across DataCite, Zenodo, Figshare, and Dryad...</div>
+                <div>Searching six dataset sources…</div>
+              </div>
+            ) : datasetError ? (
+              <div role="alert" className="bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800 p-8 text-center rounded-sm space-y-3 text-rose-900 dark:text-rose-200">
+                <AlertTriangle className="w-8 h-8 text-rose-600 dark:text-rose-400 mx-auto" />
+                <p className="text-sm font-semibold">Datasets could not be loaded</p>
+                <p className="text-xs max-w-md mx-auto">{datasetError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchGlobalDatasets()}
+                  className="px-4 py-2 bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 text-xs font-mono-meta rounded-sm cursor-pointer shadow-2xs font-semibold"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : !datasetQuery.trim() ? (
+              <div className="bg-white dark:bg-[#161513] border border-[#E2DFD8] dark:border-[#2C2A26] p-8 sm:p-10 text-center rounded-sm space-y-4 transition-colors">
+                <Database className="w-8 h-8 text-[#8C887E] dark:text-[#5C5950] mx-auto" />
+                <p className="text-sm font-medium text-[#1C1B18] dark:text-[#F0EDE6]">Type what data you need, or start from one of these</p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {['Bangla sentiment', 'rice leaf disease images', 'Dhaka traffic', 'flood water level', 'handwritten Bangla characters', 'phishing URLs'].map((idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => {
+                        setDatasetInput(idea);
+                        setDatasetQuery(idea);
+                        setDatasetPage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-sm border border-[#D5D1C7] dark:border-[#38352F] bg-[#FAF9F5] dark:bg-[#201F1C] hover:border-[#2C6B3F] dark:hover:border-emerald-500 text-xs text-[#1C1B18] dark:text-[#F0EDE6] cursor-pointer"
+                    >
+                      {idea}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : datasetsList.length === 0 ? (
               <div className="bg-white dark:bg-[#161513] border border-[#E2DFD8] dark:border-[#2C2A26] p-12 text-center rounded-sm space-y-3 transition-colors">
                 <Database className="w-8 h-8 text-[#8C887E] dark:text-[#5C5950] mx-auto" />
-                <p className="text-sm font-medium text-[#1C1B18] dark:text-[#F0EDE6]">No research datasets found matching your search.</p>
-                <p className="text-xs text-[#737067] dark:text-[#9A968D] max-w-md mx-auto font-light">
-                  Try broader keywords or search for scientific disciplines like "genomics", "deep learning", or "economics".
+                <p className="text-sm font-medium text-[#1C1B18] dark:text-[#F0EDE6]">No dataset matched “{datasetQuery}”.</p>
+                <p className="text-xs text-[#737067] dark:text-[#9A968D] max-w-md mx-auto">
+                  Try fewer or more general words, or the English name of the topic.
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
-                  <span>Showing page <strong>{datasetPage}</strong> • <strong>{datasetsList.length}</strong> open science datasets found</span>
-                  <span className="text-[10px] text-[#2C6B3F] dark:text-emerald-400 font-bold uppercase tracking-wider">Indexed from DataCite, Zenodo, Figshare & Dryad</span>
+                  <span><strong>{datasetsList.length}</strong> datasets on page <strong>{datasetPage}</strong></span>
+                  <span className="text-[11px] text-[#605D55] dark:text-[#9A968D]">From DataCite, Zenodo, Figshare, Dryad, Harvard Dataverse and Hugging Face</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -952,7 +1284,7 @@ export default function App() {
                       className="bg-white dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] hover:border-[#2C6B3F] dark:hover:border-emerald-500 p-5 rounded-sm shadow-2xs space-y-3 flex flex-col justify-between transition group"
                     >
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2 text-[10px] font-mono-meta flex-wrap">
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-mono-meta flex-wrap">
                           <span className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-0.5 rounded-xs font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                             {ds.source || 'DataCite'}
                           </span>
@@ -979,16 +1311,16 @@ export default function App() {
 
                       <div className="pt-3 border-t border-[#F2EFE8] dark:border-[#24221E] space-y-2 font-mono-meta text-xs">
                         <div className="flex items-center justify-between gap-2 text-[11px] text-[#737067] dark:text-[#9A968D] flex-wrap">
-                          <span>Publisher: <strong>{ds.publisher || 'Research Depository'}</strong></span>
+                          <span>Publisher: <strong>{ds.publisher || 'not recorded'}</strong></span>
                           {ds.size && <span>• Size: {ds.size}</span>}
                         </div>
 
                         {/* Formats chips */}
                         {ds.formats && ds.formats.length > 0 && (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] uppercase text-[#8C887E] dark:text-[#5C5950]">Formats:</span>
+                            <span className="text-[11px] uppercase text-[#8C887E] dark:text-[#5C5950]">Formats:</span>
                             {ds.formats.map((fmt) => (
-                              <span key={fmt} className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] px-1.5 py-0.2 rounded-2xs text-[10px] font-bold">
+                              <span key={fmt} className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] px-1.5 py-0.2 rounded-2xs text-[11px] font-bold">
                                 {fmt}
                               </span>
                             ))}
@@ -1089,54 +1421,239 @@ export default function App() {
               onToggleFilterDrawer={() => setMobileFilterOpen((v) => !v)}
               activeFilterCount={activeFilterCount}
               onOpenCoverage={() => setIsCoverageOpen(true)}
+              onOpenTopicCheck={(typed) => {
+                setTopicSeed(typed || searchQuery || '');
+                setActiveTab('topic');
+                setMobileFilterOpen(false);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
 
-            <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-            {/* Left Column: Domains & Filters & Publishers */}
-            <aside className={`md:col-span-1 space-y-5 ${mobileFilterOpen ? 'block' : 'hidden md:block'}`}>
-            {/* Domain Categories */}
-            <div>
-              <div className="flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26] mb-2.5">
-                <span className="text-[11px] font-mono-meta font-bold uppercase tracking-wider text-[#605D55] dark:text-[#9A968D]">
-                  Research Disciplines
+            <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 grid grid-cols-1 md:grid-cols-4 gap-5">
+            {/* Left Column: Grouped Filters */}
+            <aside
+              id="discover-filters"
+              aria-label="Search filters"
+              className={`md:col-span-1 space-y-3 ${mobileFilterOpen ? 'block' : 'hidden md:block'}`}
+            >
+              {/* Filters header: one place to see how many filters are on and to reset them */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="bg-amber-400 text-neutral-950 text-[11px] px-1.5 py-0.5 rounded-2xs font-bold">
+                      {activeFilterCount}
+                    </span>
+                  )}
                 </span>
-                <span className="text-[10px] font-mono-meta text-[#8C887E] dark:text-[#5C5950]">
-                  INDEX [{subjectsList.length - 1}]
-                </span>
+                <div className="flex items-center gap-2">
+                  {hasAnyActiveFilter && (
+                    <button
+                      type="button"
+                      onClick={resetAllFilters}
+                      className="text-[11px] font-mono-meta text-amber-800 dark:text-amber-400 underline cursor-pointer font-semibold flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset all</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setMobileFilterOpen(false)}
+                    className="md:hidden p-1.5 text-[#737067] dark:text-[#9A968D] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer"
+                    aria-label="Close filters"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              <ul className="space-y-1 text-xs max-h-56 overflow-y-auto pr-1">
-                {subjectsList.map((sub) => {
-                  const isSelected = selectedSubjectId === sub.id || (!selectedSubjectId && !sub.id && selectedCategory === 'All Disciplines');
-                  return (
-                    <li key={sub.id || 'all'}>
-                      <button
-                        onClick={() => {
-                          setSelectedSubjectId(sub.id);
-                          setSelectedCategory(sub.label);
-                          setSelectedFieldId('');
-                          setSelectedFieldName('');
-                          setSelectedPublisher('');
-                          setSessionId(null);
-                          setCurrentPage(1);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-sm transition flex justify-between items-center cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 font-medium'
-                            : 'text-[#4A4740] dark:text-[#A8A49C] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#F2EFE8] dark:hover:bg-[#201F1C]'
-                        }`}
-                      >
-                        <span className="truncate">{sub.shortLabel || sub.label}</span>
-                        {isSelected && <span className="font-mono-meta text-[10px] text-neutral-400 dark:text-neutral-900">●</span>}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+              {/* Group 1: Topic */}
+              <FilterSection
+                title="Discipline"
+                icon={Layers}
+                activeCount={selectedSubjectId || selectedCategory !== 'All Disciplines' ? 1 : 0}
+                onClear={clearCategoryFilter}
+              >
+                <ul className="space-y-1 text-xs max-h-56 overflow-y-auto pr-1">
+                  {subjectsList.map((sub) => {
+                    const isSelected = selectedSubjectId === sub.id || (!selectedSubjectId && !sub.id && selectedCategory === 'All Disciplines');
+                    return (
+                      <li key={sub.id || 'all'}>
+                        <button
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            setSelectedSubjectId(sub.id);
+                            setSelectedCategory(sub.label);
+                            setSelectedFieldId('');
+                            setSelectedFieldName('');
+                            setSelectedPublisher('');
+                            setSessionId(null);
+                            setCurrentPage(1);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm transition flex justify-between items-center cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 font-medium'
+                              : 'text-[#4A4740] dark:text-[#A8A49C] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#F2EFE8] dark:hover:bg-[#201F1C]'
+                          }`}
+                        >
+                          <span className="truncate">{sub.shortLabel || sub.label}</span>
+                          {isSelected && <span className="font-mono-meta text-[11px] text-neutral-400 dark:text-neutral-900">●</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </FilterSection>
 
-            {/* Advanced Discovery Filters (Institution, Country, Citations, Author) */}
-            <div className="pt-2 border-t border-[#E2DFD8] dark:border-[#2C2A26]">
+              {/* Group 2: Time */}
+              <FilterSection
+                title="Publication Year"
+                icon={Calendar}
+                activeCount={yearMin || yearMax || draftYearMin || draftYearMax ? 1 : 0}
+                onClear={() => {
+                  setDraftYearMin('');
+                  setDraftYearMax('');
+                  setYearMin('');
+                  setYearMax('');
+                  setSessionId(null);
+                  setCurrentPage(1);
+                }}
+                defaultOpen={false}
+              >
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono-meta">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    placeholder="From (2018)"
+                    value={draftYearMin}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setDraftYearMin(v);
+                      if (v.length === 4) {
+                        commitYearMin(v);
+                      }
+                    }}
+                    onBlur={() => commitYearMin(draftYearMin)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitYearMin(draftYearMin);
+                      }
+                    }}
+                    aria-label="Filter from publication year"
+                    className="bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-1.5 rounded-sm text-xs focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 text-[#1C1B18] dark:text-[#F0EDE6]"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    placeholder="To (2026)"
+                    value={draftYearMax}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setDraftYearMax(v);
+                      if (v.length === 4) {
+                        commitYearMax(v);
+                      }
+                    }}
+                    onBlur={() => commitYearMax(draftYearMax)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitYearMax(draftYearMax);
+                      }
+                    }}
+                    aria-label="Filter to publication year"
+                    className="bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-1.5 rounded-sm text-xs focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 text-[#1C1B18] dark:text-[#F0EDE6]"
+                  />
+                </div>
+                <p className="text-[11px] font-mono-meta text-[#8C887E] dark:text-[#5C5950] leading-tight">
+                  Type a 4-digit year. Leave one side empty for an open range.
+                </p>
+              </FilterSection>
+
+              {/* Group 3: Source */}
+              {(
+                <FilterSection
+                  title="Publisher"
+                  icon={Building2}
+                  activeCount={selectedPublisher ? 1 : 0}
+                  onClear={() => {
+                    setSelectedPublisher('');
+                    setSessionId(null);
+                    setCurrentPage(1);
+                  }}
+                  defaultOpen={false}
+                >
+                  {/* Common publishers, one click. IEEE has no open search of its own; its papers
+                      come through the other sources, and this narrows the results to them. */}
+                  <div className="flex flex-wrap gap-1.5 pb-2" aria-label="Common publishers">
+                    {['IEEE', 'ACM', 'Springer', 'Elsevier'].map((name) => {
+                      const isOn = selectedPublisher === name;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          aria-pressed={isOn}
+                          onClick={() => {
+                            setSelectedPublisher(isOn ? '' : name);
+                            setSessionId(null);
+                            setCurrentPage(1);
+                          }}
+                          className={`px-2 py-1 rounded-sm border text-[11px] cursor-pointer transition ${
+                            isOn
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 font-bold border-amber-300 dark:border-amber-700'
+                              : 'bg-[#FAF9F5] dark:bg-[#201F1C] border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#E8E6E1] hover:border-[#1C1B18] dark:hover:border-[#9A968D]'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <ul className="space-y-1 text-xs">
+                    {publishersList.slice(0, 7).map((pub) => {
+                      const isSelected = selectedPublisher === pub.name;
+                      return (
+                        <li key={pub.name}>
+                          <button
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => {
+                              // Click again to deselect
+                              setSelectedPublisher(isSelected ? '' : pub.name);
+                              setSessionId(null);
+                              setCurrentPage(1);
+                            }}
+                            className={`w-full text-left px-2 py-1.5 rounded-sm transition flex justify-between items-center gap-2 cursor-pointer text-[11px] ${
+                              isSelected
+                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-700'
+                                : 'text-[#5C5950] dark:text-[#A8A49C] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#F2EFE8] dark:hover:bg-[#201F1C]'
+                            }`}
+                          >
+                            <span className="truncate" title={pub.name}>
+                              {pub.name}
+                            </span>
+                            {pub.count !== null && pub.count !== undefined && (
+                              <span className="font-mono-meta text-[11px] text-[#8C887E] dark:text-[#5C5950] shrink-0">
+                                {pub.count}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </FilterSection>
+              )}
+
+              {/* Group 4 & 5: Where (University, Country) and Impact (Citations) */}
               <DiscoveryFiltersPanel
                 subjects={subjectsList}
                 selectedSubjectId={selectedSubjectId}
@@ -1185,273 +1702,144 @@ export default function App() {
                   setSessionId(null);
                   setCurrentPage(1);
                 }}
-                sortOrder={sortOrder}
-                onChangeSortOrder={(ord) => {
-                  setSortOrder(ord);
-                  setSessionId(null);
-                  setCurrentPage(1);
-                }}
                 selectedAuthor={selectedAuthorFilter}
                 onClearAuthor={() => {
                   setSelectedAuthorFilter(null);
                   setSessionId(null);
                   setCurrentPage(1);
                 }}
-                onResetAllFilters={resetAllFilters}
+                className="space-y-3"
               />
-            </div>
 
-            {/* Publication Type Selector */}
-            <div className="pt-2 border-t border-[#E2DFD8] dark:border-[#2C2A26] space-y-2">
-              <span className="text-[11px] font-mono-meta font-bold uppercase tracking-wider text-[#605D55] dark:text-[#9A968D] block">
-                Publication Type
-              </span>
-              <select
-                value={selectedPublicationType}
-                onChange={(e) => {
-                  setSelectedPublicationType(e.target.value);
-                  setCurrentPage(1);
+              {/* Phones/tablets: close the drawer and go straight to results */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileFilterOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="w-full bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2.5 py-1.5 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm font-mono-meta focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400"
+                className="md:hidden w-full bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 py-2.5 rounded-sm text-xs font-mono-meta font-bold cursor-pointer shadow-2xs"
               >
-                <option value="all">All Document Types</option>
-                <option value="thesis">Theses & Dissertations</option>
-                <option value="article">Peer-Reviewed Journal Articles</option>
-                <option value="proceedings">Conference Proceedings</option>
-                <option value="preprint">arXiv & Preprints</option>
-              </select>
-            </div>
+                Show results
+              </button>
 
-            {/* Year Range Filter */}
-            <div className="pt-2 border-t border-[#E2DFD8] dark:border-[#2C2A26] space-y-2">
-              <span className="text-[11px] font-mono-meta font-bold uppercase tracking-wider text-[#605D55] dark:text-[#9A968D] block">
-                Publication Year Range
-              </span>
-              <div className="grid grid-cols-2 gap-2 text-xs font-mono-meta">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  placeholder="From (e.g. 2018)"
-                  value={draftYearMin}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                    setDraftYearMin(v);
-                    if (v.length === 4) {
-                      commitYearMin(v);
-                    }
-                  }}
-                  onBlur={() => commitYearMin(draftYearMin)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitYearMin(draftYearMin);
-                    }
-                  }}
-                  aria-label="Filter from publication year"
-                  className="bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-1 rounded-sm text-xs focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 text-[#1C1B18] dark:text-[#F0EDE6]"
-                />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  placeholder="To (e.g. 2026)"
-                  value={draftYearMax}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                    setDraftYearMax(v);
-                    if (v.length === 4) {
-                      commitYearMax(v);
-                    }
-                  }}
-                  onBlur={() => commitYearMax(draftYearMax)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitYearMax(draftYearMax);
-                    }
-                  }}
-                  aria-label="Filter to publication year"
-                  className="bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-1 rounded-sm text-xs focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 text-[#1C1B18] dark:text-[#F0EDE6]"
-                />
-              </div>
-              {(yearMin || yearMax || draftYearMin || draftYearMax) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftYearMin('');
-                    setDraftYearMax('');
-                    setYearMin('');
-                    setYearMax('');
-                    setCurrentPage(1);
-                  }}
-                  className="text-[10px] font-mono-meta text-amber-800 dark:text-amber-400 underline cursor-pointer font-semibold"
-                >
-                  Clear Year Range
-                </button>
-              )}
-            </div>
-
-            {/* Academic Publishers Directory */}
-            {publishersList.length > 0 && (
-              <div className="pt-2 border-t border-[#E2DFD8] dark:border-[#2C2A26]">
-                <div className="flex items-center justify-between pb-2 mb-2">
-                  <span className="text-[11px] font-mono-meta font-bold uppercase tracking-wider text-[#605D55] dark:text-[#9A968D] flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5" />
-                    <span>Academic Publishers</span>
-                  </span>
-                  {selectedPublisher && (
-                    <button
-                      onClick={() => {
-                        setSelectedPublisher('');
-                        setCurrentPage(1);
-                      }}
-                      className="text-[10px] font-mono-meta text-amber-800 dark:text-amber-400 underline cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-
-                <ul className="space-y-1 text-xs">
-                  {publishersList.slice(0, 7).map((pub) => {
-                    const isSelected = selectedPublisher === pub.name;
-                    return (
-                      <li key={pub.name}>
-                        <button
-                          onClick={() => {
-                            setSelectedPublisher(pub.name);
-                            setCurrentPage(1);
-                          }}
-                          className={`w-full text-left px-2 py-1 rounded-sm transition flex justify-between items-center cursor-pointer text-[11px] ${
-                            isSelected
-                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-700'
-                              : 'text-[#5C5950] dark:text-[#A8A49C] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#F2EFE8] dark:hover:bg-[#201F1C]'
-                          }`}
-                        >
-                          <span className="truncate max-w-[170px]" title={pub.name}>
-                            {pub.name}
-                          </span>
-                          {pub.count !== null && pub.count !== undefined && (
-                            <span className="font-mono-meta text-[10px] text-[#8C887E] dark:text-[#5C5950]">
-                              [{pub.count}]
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-
-            {/* Comparison Tray Widget (if papers selected) */}
-            {comparisonPapers.length > 0 && (
-              <div className="p-3.5 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-sm text-xs font-mono-meta space-y-2">
-                <div className="flex items-center justify-between font-bold text-purple-900 dark:text-purple-300">
-                  <span className="flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
-                    Comparison Tray
-                  </span>
-                  <span>{comparisonPapers.length}/5</span>
-                </div>
-                <div className="space-y-1">
-                  {comparisonPapers.map((cp) => (
-                    <div
-                      key={cp._id || cp.id || cp.paperId}
-                      className="flex items-center justify-between text-[11px] text-[#1C1B18] dark:text-[#F0EDE6] bg-white dark:bg-[#1E1D1A] p-1.5 rounded-xs border border-purple-100 dark:border-purple-900/40"
-                    >
-                      <span className="truncate max-w-[170px]">{cp.title}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleCompare(cp)}
-                        className="text-red-700 dark:text-red-400 hover:text-black dark:hover:text-white ml-1 cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsComparisonOpen(true)}
-                  className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-1.5 rounded-xs transition text-center cursor-pointer shadow-2xs"
-                >
-                  View Synthesis Matrix &rarr;
-                </button>
-              </div>
-            )}
-
-            {/* Live Open Science Badge */}
-            <div className="p-3.5 bg-[#F2EFE8] dark:bg-[#161513] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm text-xs space-y-1.5 transition-colors">
-              <div className="font-mono-meta text-[10px] font-bold uppercase tracking-wider text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
-                <span>Scholarly Coverage</span>
-              </div>
-              <p className="text-[11px] text-[#605D55] dark:text-[#9A968D] leading-relaxed font-light">
-                Federated discovery connecting to <strong>OpenAlex</strong>, <strong>arXiv</strong>, <strong>Europe PMC</strong>, <strong>Crossref</strong>, <strong>HAL</strong>, <strong>DOAJ</strong>, and <strong>The Thesis Archive</strong>.
-              </p>
+              {/* Quiet footer link instead of a big promo box */}
               <button
                 type="button"
                 onClick={() => setIsCoverageOpen(true)}
-                className="text-[10px] font-mono-meta text-[#1C1B18] dark:text-amber-400 underline hover:text-black dark:hover:text-amber-300 block pt-1 cursor-pointer"
+                className="flex items-center gap-1.5 text-[11px] font-mono-meta text-[#737067] dark:text-[#9A968D] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] underline cursor-pointer"
               >
-                View Sources & Disclosures &rarr;
+                <Globe className="w-3.5 h-3.5" />
+                <span>Which sources are searched?</span>
               </button>
-            </div>
-          </aside>
+            </aside>
 
           {/* Right Column: Thesis Catalog Grid */}
-          <main className="md:col-span-3 space-y-4">
-            {/* Top Bar: Summary, Search Quota & Propose Button */}
-            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26] gap-3">
-              <div className="text-xs text-[#605D55] dark:text-[#9A968D] flex items-center gap-3 flex-wrap">
-                <span aria-live="polite" aria-atomic="true">
-                  Showing page <strong className="text-[#1C1B18] dark:text-[#F0EDE6]">{currentPage}</strong> •{' '}
-                  <strong className="text-[#1C1B18] dark:text-[#F0EDE6]">{theses.length}</strong> publications retrieved
-                  {selectedCategory !== 'All Disciplines' && ` in ${selectedCategory}`}
-                  {selectedFieldName && ` in Field: ${selectedFieldName}`}
-                </span>
-
-                {/* Daily Search Quota Indicator */}
-                {searchQuota && (
-                  searchQuota.limit === 'unlimited' ? (
-                    <span className="text-[11px] font-mono-meta text-purple-900 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-xs font-semibold flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-purple-700 dark:text-purple-400" />
-                      <span>Unlimited Searches (Premium)</span>
+          <main className="md:col-span-3 space-y-3">
+            {/* Results header, one row: how many, how they are ordered, and the two things a student may want next */}
+            {(() => {
+              const sourceEntries = Object.entries(providerTelemetry);
+              const answered = sourceEntries.filter(([, m]) => m.status === 'fulfilled').length;
+              const troubled = sourceEntries.filter(([, m]) => m.status === 'degraded' || m.status === 'rejected').length;
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pb-2.5 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+                  <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#605D55] dark:text-[#9A968D]">
+                    <span aria-live="polite" aria-atomic="true">
+                      {loadingTheses ? (
+                        <span>Searching…</span>
+                      ) : (
+                        <span>
+                          <strong className="text-[#1C1B18] dark:text-[#F0EDE6]">{theses.length}</strong>{' '}
+                          {theses.length === 1 ? 'result' : 'results'} on this page
+                          {selectedCategory !== 'All Disciplines' && ` in ${selectedCategory}`}
+                          {selectedFieldName && ` · ${selectedFieldName}`}
+                          {currentPage > 1 && <span className="text-[#8C887E]"> (page {currentPage})</span>}
+                        </span>
+                      )}
                     </span>
-                  ) : (
-                    <span
-                      className={`text-[11px] font-mono-meta px-2 py-0.5 rounded-xs border flex items-center gap-1 ${
-                        searchQuota.remaining <= 2
-                          ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold'
-                          : 'bg-[#F2EFE8] dark:bg-[#1E1D1A] text-[#524F47] dark:text-[#A8A49C] border-[#D5D1C7] dark:border-[#38352F]'
-                      }`}
-                      title={`${
-                        searchQuota.plan === 'trial_v2' || searchQuota.plan === 'trial'
-                          ? '7-Day Research Trial'
-                          : 'Standard Academic'
-                      } plan includes ${searchQuota.limit} daily searches, resetting at midnight (Asia/Dhaka)`}
+
+                    {sourceEntries.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowProviderDetails((prev) => !prev)}
+                        aria-expanded={showProviderDetails}
+                        className="inline-flex items-center gap-1.5 text-xs hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] underline decoration-dotted underline-offset-4 cursor-pointer"
+                        title="Show which sources answered this search"
+                      >
+                        <span className={`inline-block w-2 h-2 rounded-full ${troubled === 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                        <span>{answered} of {sourceEntries.length} sources answered</span>
+                      </button>
+                    )}
+
+                    {searchQuota && (
+                      searchQuota.limit === 'unlimited' ? null : (
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-xs border ${
+                            searchQuota.remaining <= 2
+                              ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold'
+                              : 'bg-[#F2EFE8] dark:bg-[#1E1D1A] text-[#524F47] dark:text-[#A8A49C] border-[#D5D1C7] dark:border-[#38352F]'
+                          }`}
+                          title={`Your plan includes ${searchQuota.limit} searches a day. The count starts again at midnight, Dhaka time.`}
+                        >
+                          {searchQuota.remaining} of {searchQuota.limit} searches left today
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-[#605D55] dark:text-[#9A968D]">
+                      <ArrowUpDown className="w-3.5 h-3.5" />
+                      <span className="sr-only">Sort results</span>
+                      <select
+                        value={sortOrder}
+                        onChange={(e) => {
+                          setSortOrder(e.target.value);
+                          setSessionId(null);
+                          setCurrentPage(1);
+                        }}
+                        aria-label="Sort results"
+                        className="bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-1.5 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="relevance">Best match</option>
+                        <option value="citations">Most cited</option>
+                        <option value="newest">Newest first</option>
+                      </select>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsProposeOpen(true)}
+                      className="bg-white dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] px-2.5 py-1.5 rounded-sm text-xs transition flex items-center gap-1.5 cursor-pointer font-semibold"
+                      title="Add your own thesis to the archive"
                     >
-                      <Search className="w-3 h-3 text-[#737067] dark:text-[#9A968D]" />
-                      <span>Daily Searches: {searchQuota.used}/{searchQuota.limit} ({searchQuota.remaining} left)</span>
-                    </span>
-                  )
-                )}
-              </div>
+                      <Plus className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                      <span>Deposit a thesis</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
-              <div className="flex items-center gap-2">
+            {/* Search failed (network / server) – show a clear message instead of stale results */}
+            {searchError && !loadingTheses && (
+              <div role="alert" className="bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800 p-4 rounded-sm flex items-start justify-between gap-3 text-xs text-rose-900 dark:text-rose-200">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-bold block">Search could not be completed</strong>
+                    <span>{searchError}</span>
+                  </div>
+                </div>
                 <button
-                  onClick={() => setIsProposeOpen(true)}
-                  className="bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 px-3 py-1.5 rounded-sm text-xs font-medium transition flex items-center gap-1.5 shadow-2xs cursor-pointer font-semibold"
+                  type="button"
+                  onClick={() => fetchTheses(currentPage)}
+                  className="min-h-[44px] px-3 font-mono-meta font-bold underline hover:text-rose-950 dark:hover:text-white cursor-pointer shrink-0"
                 >
-                  <Plus className="w-3.5 h-3.5 text-amber-300 dark:text-neutral-950" />
-                  <span>Propose Thesis / Dataset</span>
+                  Try again
                 </button>
               </div>
-            </div>
+            )}
 
             {/* Daily Search Quota Exceeded Alert Banner */}
             {searchQuotaError && (
@@ -1460,15 +1848,15 @@ export default function App() {
                   <div className="flex items-center gap-2 font-bold text-amber-950 dark:text-amber-200">
                     <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
                     <span className="font-serif-title text-sm">
-                      Daily Search Limit Reached ({searchQuotaError.used || searchQuotaError.limit}/{searchQuotaError.limit} Searches Completed)
+                      You have used today's {searchQuotaError.limit} searches
                     </span>
                   </div>
-                  <span className="bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 text-[10px] font-mono-meta font-bold px-2 py-0.5 rounded-xs uppercase">
-                    {searchQuotaError.plan === 'trial_v2' || searchQuotaError.plan === 'trial' ? 'Trial Quota' : 'Free Tier Quota'}
+                  <span className="bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 text-[11px] font-mono-meta font-bold px-2 py-0.5 rounded-xs uppercase">
+                    {isTrialPlan(searchQuotaError.plan) ? '7-day trial' : 'Free plan'}
                   </span>
                 </div>
                 <p className="text-amber-900 dark:text-amber-200 text-[11px] leading-relaxed">
-                  You have completed your {searchQuotaError.limit} daily searches for today on the {searchQuotaError.plan === 'trial_v2' || searchQuotaError.plan === 'trial' ? '7-Day Research Trial' : 'Standard Academic plan'}. On the Premium plan, you get <strong>unlimited daily searches</strong> and full dataset access. Your search counter will automatically reset at midnight (Asia/Dhaka time).
+                  The count starts again at midnight, Dhaka time. Premium has <strong>no daily search limit</strong>. Saved papers, collections and Topic Check results you already have stay available.
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <button
@@ -1477,89 +1865,50 @@ export default function App() {
                     className="px-3.5 py-1.5 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 rounded-xs font-mono-meta text-xs uppercase tracking-wider font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-400 dark:text-neutral-950" />
-                    <span>Upgrade to Premium for Unlimited Searches (৳500 / 6 Mo or 7-Day Trial)</span>
+                    <span>See plans</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Federated Sources Status & Diagnostics */}
-            {Object.keys(providerTelemetry).length > 0 && (() => {
-              const entries = Object.entries(providerTelemetry);
-              const totalSources = entries.length;
-              const fulfilledCount = entries.filter(([, m]) => m.status === 'fulfilled').length;
-              const degradedCount = entries.filter(([, m]) => m.status === 'degraded' || m.status === 'rejected').length;
-              const skippedCount = entries.filter(([, m]) => m.status === 'skipped_unsupported_filter').length;
-              const isAllHealthy = degradedCount === 0;
-
-              return (
-                <div className="bg-[#FAF9F5] dark:bg-[#161513] border border-[#E5E2DA] dark:border-[#2C2A26] px-3.5 py-2 rounded-sm text-xs font-mono-meta transition-all">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`inline-block w-2 h-2 rounded-full ${isAllHealthy ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                      <span className="font-semibold text-[#1C1B18] dark:text-[#F0EDE6] text-[11px]">
-                        Federated Sources: {fulfilledCount} of {totalSources} active
-                      </span>
-                      {degradedCount > 0 && (
-                        <span className="text-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-1.5 py-0.2 rounded-xs font-medium">
-                          {degradedCount} source{degradedCount > 1 ? 's' : ''} degraded (fallback active)
-                        </span>
-                      )}
-                      {skippedCount > 0 && (
-                        <span className="text-[10px] bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-800 px-1.5 py-0.2 rounded-xs">
-                          {skippedCount} filter-skipped
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowProviderDetails((prev) => !prev)}
-                      className="text-[11px] text-[#737067] dark:text-[#9A968D] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] underline cursor-pointer flex items-center gap-1 font-mono-meta ml-auto"
+            {/* Which sources answered (opened from the results header) */}
+            {showProviderDetails && Object.keys(providerTelemetry).length > 0 && (
+              <div className="bg-[#FAF9F5] dark:bg-[#161513] border border-[#E5E2DA] dark:border-[#2C2A26] px-3 py-2 rounded-sm text-xs flex items-center gap-1.5 flex-wrap">
+                {Object.entries(providerTelemetry).map(([prov, meta]) => {
+                  const isFulfilled = meta.status === 'fulfilled';
+                  const isDegraded = meta.status === 'degraded';
+                  const isSkipped = meta.status === 'skipped_unsupported_filter' || meta.status === 'idle';
+                  const count = meta.count ?? meta.returnedCount ?? 0;
+                  return (
+                    <span
+                      key={prov}
+                      className={`px-1.5 py-0.5 rounded-xs text-[11px] border ${
+                        isFulfilled && count > 0
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 font-semibold'
+                          : isDegraded
+                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                          : isFulfilled || isSkipped
+                          ? 'bg-neutral-50 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-800'
+                          : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                      }`}
+                      title={
+                        meta.error ||
+                        (isFulfilled
+                          ? `${count} results`
+                          : isSkipped
+                          ? 'This source cannot apply the filters you chose, so it was not asked'
+                          : 'This source did not answer')
+                      }
                     >
-                      {showProviderDetails ? 'Hide source status ▴' : 'View source status ▾'}
-                    </button>
-                  </div>
-
-                  {showProviderDetails && (
-                    <div className="mt-2.5 pt-2 border-t border-[#E5E2DA] dark:border-[#2C2A26] flex items-center gap-1.5 flex-wrap animate-in fade-in duration-150">
-                      {entries.map(([prov, meta]) => {
-                        const isFulfilled = meta.status === 'fulfilled';
-                        const isDegraded = meta.status === 'degraded';
-                        const isSkipped = meta.status === 'skipped_unsupported_filter' || meta.status === 'idle';
-                        const count = meta.count ?? meta.returnedCount ?? 0;
-                        return (
-                          <span
-                            key={prov}
-                            className={`px-1.5 py-0.5 rounded-xs text-[10px] border ${
-                              isFulfilled && count > 0
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 font-bold'
-                                : isDegraded
-                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-800 font-medium'
-                                : isFulfilled && count === 0
-                                ? 'bg-neutral-50 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-800'
-                                : isSkipped
-                                ? 'bg-neutral-100 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 border-neutral-200 dark:border-neutral-800'
-                                : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
-                            }`}
-                            title={
-                              meta.error ||
-                              (isFulfilled
-                                ? `${count} records retrieved`
-                                : isSkipped
-                                ? 'This provider does not natively support the selected filter'
-                                : 'Provider unavailable')
-                            }
-                          >
-                            {prov}: {isFulfilled ? (count > 0 ? `${count} records` : '0 matches') : isDegraded ? 'degraded' : isSkipped ? 'filter unsupported' : 'unavailable'}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+                      {prov}: {isFulfilled ? (count > 0 ? count : 'nothing found') : isDegraded ? 'slow or partial' : isSkipped ? 'not asked' : 'no answer'}
+                    </span>
+                  );
+                })}
+                <button type="button" onClick={() => setIsCoverageOpen(true)} className="ml-auto underline text-[#605D55] dark:text-[#9A968D] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer">
+                  About the sources
+                </button>
+              </div>
+            )}
 
             {/* Federated Outage Alert */}
             {totalTechnicalFailure && (
@@ -1567,8 +1916,8 @@ export default function App() {
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="font-bold block">Federated Academic Sources Outage</strong>
-                    <span>Upstream providers encountered temporary connection issues. Your search quota was not charged.</span>
+                    <strong className="font-bold block">The outside sources could not be reached</strong>
+                    <span>This is usually temporary. The search was not counted against your daily limit.</span>
                   </div>
                 </div>
                 <button
@@ -1576,7 +1925,7 @@ export default function App() {
                   onClick={() => fetchTheses(currentPage)}
                   className="min-h-[44px] px-3 font-mono-meta font-bold underline hover:text-rose-950 dark:hover:text-white cursor-pointer"
                 >
-                  Retry Search
+                  Try again
                 </button>
               </div>
             )}
@@ -1584,10 +1933,10 @@ export default function App() {
             {/* Active Filter Chips */}
             {hasAnyActiveFilter && (
               <div className="p-2.5 bg-[#FAF9F5] dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm text-xs font-mono-meta flex items-center gap-1.5 flex-wrap">
-                <span className="font-bold text-[10px] uppercase text-[#737067] dark:text-[#9A968D] mr-1">Active Filters:</span>
+                <span className="text-[11px] text-[#737067] dark:text-[#9A968D] mr-1">Filters on:</span>
                 {searchQuery && (
                   <span className="inline-flex items-center gap-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-0.5 rounded-xs text-[#1C1B18] dark:text-[#F0EDE6]">
-                    <span>Query: "{searchQuery}"</span>
+                    <span>“{searchQuery}”</span>
                     <button onClick={() => { setSearchQuery(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove search query filter" className="hover:text-red-700 dark:hover:text-red-400 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
@@ -1636,7 +1985,7 @@ export default function App() {
                 )}
                 {selectedPublicationType !== 'all' && (
                   <span className="inline-flex items-center gap-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-0.5 rounded-xs text-[#1C1B18] dark:text-[#F0EDE6]">
-                    <span>Type: {selectedPublicationType}</span>
+                    <span>Type: {PUBLICATION_TYPE_LABELS[selectedPublicationType] || selectedPublicationType}</span>
                     <button onClick={() => { setSelectedPublicationType('all'); setSessionId(null); setCurrentPage(1); }} aria-label="Remove publication type filter" className="hover:text-red-700 dark:hover:text-red-400 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
@@ -1688,18 +2037,12 @@ export default function App() {
                     <button onClick={() => { setMinCitations(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove minimum citations filter" className="hover:text-red-700 dark:hover:text-red-400 font-bold ml-0.5 cursor-pointer">✕</button>
                   </span>
                 )}
-                {sortOrder !== 'relevance' && (
-                  <span className="inline-flex items-center gap-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-0.5 rounded-xs text-[#1C1B18] dark:text-[#F0EDE6]">
-                    <span>Sort: {sortOrder === 'citations' ? 'Most Cited' : sortOrder === 'newest' ? 'Newest' : sortOrder}</span>
-                    <button onClick={() => { setSortOrder('relevance'); setSessionId(null); setCurrentPage(1); }} aria-label="Reset sort order" className="hover:text-red-700 dark:hover:text-red-400 font-bold ml-0.5 cursor-pointer">✕</button>
-                  </span>
-                )}
                 <button
                   type="button"
                   onClick={resetAllFilters}
                   className="text-amber-800 dark:text-amber-400 hover:text-black dark:hover:text-white underline text-[11px] ml-auto cursor-pointer font-bold"
                 >
-                  Clear All
+                  Remove all
                 </button>
               </div>
             )}
@@ -1708,19 +2051,19 @@ export default function App() {
             {loadingTheses ? (
               <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] space-y-2">
                 <div className="w-6 h-6 border-2 border-[#1C1B18] dark:border-amber-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                <div>Querying federated academic depositories for peer-reviewed papers...</div>
+                <div>Searching the archive and the outside sources…</div>
               </div>
-            ) : theses.length === 0 ? (
+            ) : theses.length === 0 && searchError ? null : theses.length === 0 ? (
               <div className="bg-white dark:bg-[#161513] border border-[#E2DFD8] dark:border-[#2C2A26] p-12 text-center rounded-sm space-y-4 transition-colors">
                 <p className="text-sm font-medium text-[#1C1B18] dark:text-[#F0EDE6]">
                   {totalTechnicalFailure
-                    ? 'Upstream scholarly sources were temporarily unavailable.'
-                    : 'No scholarly publications found matching your query criteria.'}
+                    ? 'The sources could not be reached just now.'
+                    : 'Nothing matched this search.'}
                 </p>
                 <p className="text-xs text-[#737067] dark:text-[#9A968D] max-w-md mx-auto">
                   {totalTechnicalFailure
-                    ? 'Please retry in a moment. No search quota was consumed for this inquiry.'
-                    : 'Try broadening your search terms or clearing specific publisher, year, or discipline filters.'}
+                    ? 'Try again in a moment. This search was not counted against your daily limit.'
+                    : 'Try fewer or different words, or remove a filter such as year, publisher or discipline.'}
                 </p>
                 <div>
                   {totalTechnicalFailure ? (
@@ -1729,7 +2072,7 @@ export default function App() {
                       onClick={() => fetchTheses(currentPage)}
                       className="px-4 py-2 bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 hover:bg-black dark:hover:bg-amber-300 text-xs font-mono-meta rounded-sm cursor-pointer shadow-2xs font-semibold"
                     >
-                      Retry Federated Search
+                      Try again
                     </button>
                   ) : (
                     <button
@@ -1737,13 +2080,13 @@ export default function App() {
                       onClick={resetAllFilters}
                       className="text-xs font-mono-meta text-[#1C1B18] dark:text-amber-400 underline hover:text-black dark:hover:text-amber-300 cursor-pointer font-semibold"
                     >
-                      Reset all filters & view all publications
+                      Remove all filters
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-2.5">
                 {theses.map((thesis) => (
                   <ThesisCard
                     key={thesis._id || thesis.id}
@@ -1768,6 +2111,8 @@ export default function App() {
                     onReportIssue={(item) => setReportingThesis(item)}
                     onOpenMembership={() => setIsMembershipOpen(true)}
                     onSelectAuthor={(auth) => setInspectingAuthor(auth)}
+                    initiallySaved={savedPaperIds.has(String(thesis._id || thesis.id))}
+                    onSavedChange={fetchUserSavedCount}
                   />
                 ))}
 
@@ -1785,7 +2130,7 @@ export default function App() {
                       className="bg-white dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] px-3 py-1.5 rounded-sm flex items-center gap-1 cursor-pointer disabled:opacity-40"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
-                      <span>Previous Page</span>
+                      <span>Previous</span>
                     </button>
 
                     <button
@@ -1798,13 +2143,13 @@ export default function App() {
                       }}
                       className="bg-white dark:bg-[#1E1D1A] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] px-3 py-1.5 rounded-sm flex items-center gap-1 cursor-pointer disabled:opacity-40"
                     >
-                      <span>Next Page</span>
+                      <span>Next</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
                   <div className="text-[11px] text-[#737067] dark:text-[#9A968D]">
-                    Page <strong>{currentPage}</strong> • Limit <strong>{paperLimit}</strong> records/page
+                    Page <strong>{currentPage}</strong>
                   </div>
                 </div>
               </div>
@@ -1815,8 +2160,43 @@ export default function App() {
     )}
   </div>
 
-      {/* Global Modals (Guarded conditionally to prevent unsolicited mounting or popups) */}
-      {/* 1. Saved Papers Modal */}
+      {/* Floating comparison bar: visible on every screen size while papers are selected */}
+      {comparisonPapers.length > 0 && activeTab !== 'library' && !isComparisonOpen && (
+        <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-xl">
+          <div className="bg-purple-800 dark:bg-purple-900 text-white rounded-sm shadow-xl border border-purple-600 px-3 py-2 flex items-center justify-between gap-3 text-xs font-mono-meta">
+            <span className="flex items-center gap-2 min-w-0">
+              <Scale className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                <strong>{comparisonPapers.length}</strong>/5 selected for comparison
+              </span>
+            </span>
+            <span className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setComparisonPapers([])}
+                className="px-2 py-1 text-purple-100 hover:text-white underline cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsComparisonOpen(true)}
+                className="px-3 py-1.5 bg-white text-purple-900 rounded-xs font-bold cursor-pointer hover:bg-purple-50"
+              >
+                Compare
+              </button>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Windows (mounted only while open).
+          ORDER MATTERS: all of them share the same z-index, so a window that appears later in this
+          list is drawn on top. Anything that can be opened FROM another window must come after it.
+          Paper details can open Author, Institution, Cite, Report and Membership, so those follow it.
+          Membership can be opened from almost anywhere, so it sits near the end. */}
+      <Suspense fallback={null}>
+      {/* Saved Papers */}
       {isSavedPapersOpen && (
         <SavedPapersModal
           isOpen={isSavedPapersOpen}
@@ -1830,7 +2210,7 @@ export default function App() {
         />
       )}
 
-      {/* 2. Collections Modal */}
+      {/* Collections */}
       {isCollectionsOpen && (
         <CollectionsModal
           isOpen={isCollectionsOpen}
@@ -1838,7 +2218,7 @@ export default function App() {
         />
       )}
 
-      {/* 3. Comparison Matrix Modal */}
+      {/* Comparison Matrix */}
       {isComparisonOpen && (
         <ComparisonMatrixModal
           isOpen={isComparisonOpen}
@@ -1851,7 +2231,7 @@ export default function App() {
         />
       )}
 
-      {/* 4. Topic Alerts Modal */}
+      {/* Topic Alerts */}
       {isTopicAlertsOpen && (
         <TopicAlertsModal
           isOpen={isTopicAlertsOpen}
@@ -1859,26 +2239,7 @@ export default function App() {
         />
       )}
 
-      {/* 5. Broken Link / Retraction Report Modal */}
-      {reportingThesis && (
-        <ReportIssueModal
-          thesis={reportingThesis}
-          onClose={() => setReportingThesis(null)}
-        />
-      )}
-
-      {/* Membership & bKash Modal */}
-      {isMembershipOpen && (
-        <MembershipModal
-          isOpen={isMembershipOpen}
-          onClose={() => {
-            setIsMembershipOpen(false);
-            fetchMembershipStatus();
-          }}
-        />
-      )}
-
-      {/* 6. Propose Thesis Modal */}
+      {/* Deposit / Propose Thesis */}
       {isProposeOpen && (
         <ProposeThesisModal
           isOpen={isProposeOpen}
@@ -1887,24 +2248,18 @@ export default function App() {
         />
       )}
 
-      {/* 7. Cite Modal */}
-      {citingThesis && (
-        <CiteModal
-          thesis={citingThesis}
-          onClose={() => setCitingThesis(null)}
-        />
-      )}
-
-      {/* 8. Publication Detail Modal */}
+      {/* Paper Details */}
       {selectedDetailThesis && (
         <PublicationDetailModal
           key={selectedDetailThesis._id || selectedDetailThesis.id || selectedDetailThesis.doi || selectedDetailThesis.title || 'detail-modal'}
           thesis={selectedDetailThesis}
           initialTab={detailInitialTab}
-          onClose={() => setSelectedDetailThesis(null)}
+          onClose={closePaperDetails}
           onSelectPublisher={(pub) => {
+            setSessionId(null);
             setSelectedPublisher(pub);
             setCurrentPage(1);
+            setSelectedDetailThesis(null);
           }}
           onCite={(item) => setCitingThesis(item)}
           onAddToCompare={handleToggleCompare}
@@ -1916,9 +2271,10 @@ export default function App() {
           onSelectAuthor={(auth) => setInspectingAuthor(auth)}
           onViewInstitutionLandscape={(inst) => setInspectingLandscapeInst(inst)}
           onSavedPapersChange={fetchUserSavedCount}
+          initiallySaved={savedPaperIds.has(String(selectedDetailThesis._id || selectedDetailThesis.id))}
           onRequireAuth={(msg) => {
             if (showNotice) {
-              showNotice(msg || 'Sign in with your student account to access this feature.', 'info');
+              showNotice(msg || 'Sign in to use this.', 'info');
             }
           }}
         />
@@ -1936,7 +2292,12 @@ export default function App() {
             setSessionId(null);
             setCurrentPage(1);
           }}
-          onViewThesisDetail={(work) => setSelectedDetailThesis(work)}
+          onViewThesisDetail={(work) => {
+            // Close the author window first: Paper Details is drawn underneath it
+            setInspectingAuthor(null);
+            setDetailInitialTab('overview');
+            setSelectedDetailThesis(work);
+          }}
         />
       )}
 
@@ -1968,6 +2329,42 @@ export default function App() {
         />
       )}
 
+      {/* Cite (above Paper Details and Saved Papers) */}
+      {citingThesis && (
+        <CiteModal
+          thesis={citingThesis}
+          onClose={() => setCitingThesis(null)}
+        />
+      )}
+
+      {/* Report an issue (above Paper Details) */}
+      {reportingThesis && (
+        <ReportIssueModal
+          thesis={reportingThesis}
+          onClose={() => setReportingThesis(null)}
+        />
+      )}
+
+      {/* Membership & bKash (above Paper Details) */}
+      {isMembershipOpen && (
+        <MembershipModal
+          isOpen={isMembershipOpen}
+          onClose={() => {
+            setIsMembershipOpen(false);
+            fetchMembershipStatus();
+          }}
+        />
+      )}
+
+      {/* Message the team (feedback) */}
+      {isFeedbackOpen && (
+        <FeedbackModal
+          isOpen={isFeedbackOpen}
+          onClose={() => setIsFeedbackOpen(false)}
+          pageContext={selectedDetailThesis ? `paper:${String(selectedDetailThesis._id || selectedDetailThesis.id).slice(0, 100)}` : activeTab}
+        />
+      )}
+
       {/* Coverage & Limitations Disclosure Modal */}
       {isCoverageOpen && (
         <CoverageModal
@@ -1976,7 +2373,7 @@ export default function App() {
         />
       )}
 
-      {/* 9. Student Management Modal (Admin) */}
+      {/* Student Management (Admin) */}
       {isStudentManagementOpen && (
         <StudentManagementModal
           isOpen={isStudentManagementOpen}
@@ -1987,7 +2384,7 @@ export default function App() {
         />
       )}
 
-      {/* 10. Verification Drawer (Admin) */}
+      {/* Verification Drawer (Admin) */}
       {isDrawerOpen && (
         <VerificationDrawer
           isOpen={isDrawerOpen}
@@ -1997,12 +2394,22 @@ export default function App() {
           loading={evaluating}
         />
       )}
+      </Suspense>
+
+      {comparisonPapers.length > 0 && activeTab !== 'library' && <div className="h-16" aria-hidden="true" />}
 
       {/* Footer */}
       <footer className="border-t border-[#E2DFD8] dark:border-[#2C2A26] bg-white dark:bg-[#141312] py-4 mt-8 transition-colors">
         <div className="max-w-7xl mx-auto px-4 md:px-6 text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] flex flex-wrap items-center justify-between gap-4">
-          <span>The Thesis Archive • Academic Depository & Open Science Vault</span>
-          <span>Democratizing Scholarly Research, Benchmark Datasets & Preprints</span>
+          <span>The Thesis Archive</span>
+          <span className="flex items-center gap-4">
+            <button type="button" onClick={() => setIsFeedbackOpen(true)} className="underline hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer">
+              Message the team
+            </button>
+            <button type="button" onClick={() => setIsCoverageOpen(true)} className="underline hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer">
+              About the sources
+            </button>
+          </span>
         </div>
       </footer>
     </div>

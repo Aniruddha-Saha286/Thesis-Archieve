@@ -8,6 +8,8 @@ const { searchHal } = require('./providers/hal');
 const { searchDoaj } = require('./providers/doaj');
 const { searchSemanticScholar } = require('./providers/semanticScholar');
 const { searchOpenAire } = require('./providers/openaire');
+const { searchCore } = require('./providers/core');
+const { searchDblp } = require('./providers/dblp');
 const { mergeTwoRecords, cleanTitleForMatching, getFirstAuthorSurname } = require('./deduplicator');
 const { mapToCanonicalSubject, getSubjectById } = require('./subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('./institutionService');
@@ -24,6 +26,8 @@ const PROVIDER_NAMES = {
   doaj: 'DOAJ',
   semanticscholar: 'Semantic Scholar',
   openaire: 'OpenAIRE',
+  core: 'CORE',
+  dblp: 'DBLP',
 };
 
 const PROVIDER_CAPABILITIES = {
@@ -162,6 +166,38 @@ const PROVIDER_CAPABILITIES = {
     supportsMinCitations: false,
     supportsAwardingInstitution: false,
   },
+  // CORE and DBLP are not asked to filter by year, type or PDF themselves; their adapters
+  // apply those filters to the records that come back, so the filters do work for them.
+  core: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
+  dblp: {
+    supportsQuery: true,
+    supportsYear: true,
+    supportsPubType: true,
+    supportsPdf: true,
+    supportsOpenAccess: true,
+    supportsInstitution: false,
+    supportsCountry: false,
+    supportsAuthor: false,
+    supportsSubject: false,
+    supportsField: false,
+    supportsPublisher: false,
+    supportsMinCitations: false,
+    supportsAwardingInstitution: false,
+  },
 };
 
 const CURATED_BY_ID = new Map(
@@ -223,16 +259,48 @@ function cleanPublisherForMatching(str) {
     .trim();
 }
 
+// Publishers that sources name in two ways. "IEEE" must also find records whose publisher is
+// written out in full (as OpenAlex does), and the other way round.
+const PUBLISHER_ALIASES = [
+  ['ieee', 'institute of electrical and electronics engineers'],
+  ['acm', 'association for computing machinery'],
+  ['iet', 'institution of engineering and technology'],
+  ['aaai', 'association for the advancement of artificial intelligence'],
+  ['acl', 'association for computational linguistics'],
+  ['mdpi', 'multidisciplinary digital institute'],
+  ['iop', 'institute of physics'],
+  ['oup', 'oxford university'],
+  ['cup', 'cambridge university'],
+];
+
+// Adds the other spelling to a cleaned publisher name, so either form matches either form
+function withPublisherAliases(clean) {
+  if (!clean) return clean;
+  let out = clean;
+  const padded = ` ${clean} `;
+  for (const [short, long] of PUBLISHER_ALIASES) {
+    const hasShort = padded.includes(` ${short} `);
+    const hasLong = clean.includes(long);
+    if (hasShort && !hasLong) out += ` ${long}`;
+    if (hasLong && !hasShort) out += ` ${short}`;
+  }
+  return out;
+}
+
 function matchesPublisherFilter(record, filterPublisher) {
   if (!filterPublisher || !filterPublisher.trim()) return true;
   if (!record || !record.publisher) return false;
 
   const targetClean = cleanPublisherForMatching(filterPublisher);
-  const candClean = cleanPublisherForMatching(record.publisher);
+  const candClean = withPublisherAliases(cleanPublisherForMatching(record.publisher));
 
   if (!targetClean || !candClean) return false;
 
   if (candClean === targetClean) return true;
+  // A short name such as "ACM" must match as a whole word, or it would also match "Macmillan"
+  if (targetClean.length <= 4 && !targetClean.includes(' ')) {
+    return ` ${candClean} `.includes(` ${targetClean} `);
+  }
   if (candClean.includes(targetClean) || targetClean.includes(candClean)) return true;
 
   const targetTokens = targetClean.split(' ').filter((w) => w.length > 2);
@@ -582,6 +650,36 @@ function isProviderEligible(pKey, filters = {}, query = '') {
   return true;
 }
 
+// Where each provider starts reading for a brand-new search: the first page or offset 0.
+function buildInitialProviderStates() {
+  return {
+    local: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+    openalex: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
+    arxiv: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+    crossref: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+    europepmc: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
+    hal: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+    doaj: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
+    semanticscholar: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+    openaire: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
+    core: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+    dblp: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
+  };
+}
+
+// A search session is saved in MongoDB and can be picked up again up to 30 minutes later.
+// A session saved before a provider was added to this file has no entry for that provider,
+// and reading "providerStates.<new provider>.hasMore" would then crash that visitor's next
+// page. So any missing entry is filled in with the provider's starting position.
+function ensureProviderStates(session) {
+  if (!session.providerStates || typeof session.providerStates !== 'object') {
+    session.providerStates = {};
+  }
+  for (const [pKey, initialState] of Object.entries(buildInitialProviderStates())) {
+    if (!session.providerStates[pKey]) session.providerStates[pKey] = initialState;
+  }
+}
+
 function createNewSession(sessionId, scope, query, filters, sort, sessionHash) {
   if (sessions.size >= MAX_SESSIONS) {
     cleanupExpiredSessions();
@@ -607,17 +705,7 @@ function createNewSession(sessionId, scope, query, filters, sort, sessionHash) {
     frozenIndex: 0,
     lock: Promise.resolve(),
     providerStatus: {},
-    providerStates: {
-      local: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
-      openalex: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
-      arxiv: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
-      crossref: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
-      europepmc: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
-      hal: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
-      doaj: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
-      semanticscholar: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
-      openaire: { page: 1, hasMore: true, status: 'fulfilled', count: 0 },
-    },
+    providerStates: buildInitialProviderStates(),
     pageBoundaries: new Map(),
     allProvidersExhausted: false,
   };
@@ -648,6 +736,9 @@ async function executeSearchSessionLocked(session, {
 }) {
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(5, parseInt(limit) || 20));
+
+  // Sessions saved before CORE and DBLP were added have no entry for them yet.
+  ensureProviderStates(session);
 
   let startIndex = 0;
   if (pageNum === 1) {
@@ -779,6 +870,28 @@ async function executeSearchSessionLocked(session, {
         searchOpenAire({ query: subjectAugmentedQuery, page: curPage, limit: batchSize, filters, sort })
           .then((res) => ({ name: 'OpenAIRE', key: 'openaire', ...res, nextPage: curPage + 1 }))
           .catch((err) => ({ name: 'OpenAIRE', key: 'openaire', records: [], rawCount: 0, hasMore: false, error: err.message }))
+      );
+    }
+
+    // CORE
+    if (isProviderEligible('core', filters, subjectAugmentedQuery) && session.providerStates.core.hasMore) {
+      const curOffset = session.providerStates.core.offset || 0;
+      const batchSize = Math.max(limitNum, 20);
+      fetchPromises.push(
+        searchCore({ query: subjectAugmentedQuery, offset: curOffset, limit: batchSize, filters, sort })
+          .then((res) => ({ name: 'CORE', key: 'core', ...res, nextOffset: curOffset + (res.rawCount ?? res.records?.length ?? 0) }))
+          .catch((err) => ({ name: 'CORE', key: 'core', records: [], rawCount: 0, hasMore: false, error: err.message }))
+      );
+    }
+
+    // DBLP
+    if (isProviderEligible('dblp', filters, subjectAugmentedQuery) && session.providerStates.dblp.hasMore) {
+      const curOffset = session.providerStates.dblp.offset || 0;
+      const batchSize = Math.max(limitNum, 20);
+      fetchPromises.push(
+        searchDblp({ query: subjectAugmentedQuery, offset: curOffset, limit: batchSize, filters, sort })
+          .then((res) => ({ name: 'DBLP', key: 'dblp', ...res, nextOffset: curOffset + (res.rawCount ?? res.records?.length ?? 0) }))
+          .catch((err) => ({ name: 'DBLP', key: 'dblp', records: [], rawCount: 0, hasMore: false, error: err.message }))
       );
     }
 
@@ -1159,6 +1272,7 @@ module.exports = {
   cleanupExpiredSessions,
   normalizeSessionFilterKey,
   matchesInstitutionalAndAuthorFilters,
+  matchesPublisherFilter,
   instMatchesTarget,
   matchesPublisherFilter,
   cleanPublisherForMatching,

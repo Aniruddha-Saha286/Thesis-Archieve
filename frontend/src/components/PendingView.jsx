@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { LogOut, RefreshCw, AlertOctagon, Sun, Moon } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { LogOut, RefreshCw, AlertOctagon, Sun, Moon, MessageSquare } from 'lucide-react';
+import FeedbackModal from './FeedbackModal';
 
 export default function PendingView() {
   const { user, logout, refreshUser } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const [checking, setChecking] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const { isConnected } = useSocket();
+
+  // A short reference taken from this student's own account id (it used to be one fixed fake number)
+  const applicationRef = String(user?.id || user?._id || '').slice(-8).toUpperCase();
 
   const isBanned = user?.status === 'banned';
   const isRejected = user?.status === 'rejected';
@@ -30,9 +38,6 @@ export default function PendingView() {
             <span className="font-serif-title text-xl tracking-tight text-[#1C1B18] dark:text-neutral-100 block leading-none">
               The Thesis Archive
             </span>
-            <span className="text-[10px] font-mono-meta text-[#737067] dark:text-neutral-400 uppercase tracking-wider">
-              Open Academic Depository
-            </span>
           </div>
         </div>
 
@@ -51,7 +56,7 @@ export default function PendingView() {
             className="inline-flex items-center gap-1.5 text-xs font-mono-meta text-[#737067] dark:text-neutral-400 hover:text-[#1C1B18] dark:hover:text-white transition cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>[SIGN OUT]</span>
+            <span>Sign out</span>
           </button>
         </div>
       </header>
@@ -69,27 +74,24 @@ export default function PendingView() {
                 </div>
                 <div>
                   <h2 className="text-base font-semibold text-red-700 dark:text-red-400 font-mono-meta">
-                    [ACCESS SUSPENDED / ACCOUNT BANNED]
+                    Your account is suspended
                   </h2>
-                  <p className="text-xs text-[#737067] dark:text-neutral-400">Administrative Action Imposed</p>
+                  <p className="text-xs text-[#737067] dark:text-neutral-400">Decided by the site team</p>
                 </div>
               </div>
 
               <p className="text-xs text-[#4A4740] dark:text-neutral-300 leading-relaxed">
-                Dear <strong>{user?.name}</strong>, your access to The Thesis Archive services has been revoked by the editorial board.
+                <strong>{user?.name}</strong>, the team has suspended your access to The Thesis Archive.
               </p>
 
               <div className="bg-red-50/60 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 p-4 text-xs font-mono-meta space-y-1.5 text-red-900 dark:text-red-300">
-                <div><span>STUDENT ID:</span> <strong>{user?.studentId || 'N/A'}</strong></div>
-                <div><span>INSTITUTION:</span> {user?.university || 'University'}</div>
-                <div><span>REASON:</span> <em>{user?.banReason || 'Administrative suspension'}</em></div>
-                <div className="pt-1 text-[11px] text-red-700 dark:text-red-400 border-t border-red-200 dark:border-red-900/60">
-                  STATUS: ACCESS TO REPOSITORY, PDFS & DATASETS HAS BEEN TERMINATED
-                </div>
+                <div><span>Student ID:</span> <strong>{user?.studentId || 'Not given'}</strong></div>
+                <div><span>University:</span> {user?.university || 'Not given'}</div>
+                <div><span>Reason:</span> <em>{user?.banReason || 'No reason was recorded'}</em></div>
               </div>
 
               <p className="text-[11px] text-[#737067] dark:text-neutral-400 leading-relaxed">
-                If you believe this action was made in error or wish to appeal your academic verification, please contact the institution administrator.
+                If you think this is a mistake, write to the site team by email and include your student ID.
               </p>
 
               <div className="pt-2 border-t border-[#E2DFD8] dark:border-neutral-800 flex items-center justify-between">
@@ -98,14 +100,14 @@ export default function PendingView() {
                   className="text-xs font-mono-meta text-[#1C1B18] dark:text-neutral-200 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1.5 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
-                  <span>{checking ? 'Checking Status...' : 'Check Status'}</span>
+                  <span>{checking ? 'Checking…' : 'Check again'}</span>
                 </button>
 
                 <button
                   onClick={logout}
                   className="text-xs font-mono-meta text-[#737067] dark:text-neutral-400 hover:text-[#1C1B18] dark:hover:text-white cursor-pointer"
                 >
-                  Sign Out
+                  Sign out
                 </button>
               </div>
             </>
@@ -120,52 +122,59 @@ export default function PendingView() {
                 </div>
                 <div>
                   <h2 className="text-base font-semibold text-[#1C1B18] dark:text-neutral-100">
-                    {isRejected ? 'Academic Verification Declined' : 'Academic Verification In Progress'}
+                    {isRejected ? 'Your registration was not approved' : 'Your details are being checked'}
                   </h2>
-                  <p className="text-xs text-[#737067] dark:text-neutral-400">Application ID: #ARCH-2024-819</p>
+                  {applicationRef && (
+                    <p className="text-xs text-[#737067] dark:text-neutral-400">Your reference: #{applicationRef}</p>
+                  )}
                 </div>
               </div>
 
               <p className="text-xs text-[#4A4740] dark:text-neutral-300 leading-relaxed">
                 {isRejected ? (
-                  <>Dear <strong>{user?.name}</strong>, your academic registration application was reviewed and could not be approved at this time. Please contact the administrative desk with proof of active enrollment.</>
+                  <><strong>{user?.name}</strong>, the team looked at your registration and could not approve it. Message the team below and include proof that you are a current student.</>
                 ) : (
-                  <>Welcome, <strong>{user?.name}</strong>. Your academic registration is queued for manual credential review by the foundation's editorial team.</>
+                  <>Welcome, <strong>{user?.name}</strong>. A member of the team checks each new student by hand. You can start searching as soon as that is done.</>
                 )}
               </p>
 
               <div className="bg-[#FAF9F5] dark:bg-neutral-800/80 border border-[#E5E2DA] dark:border-neutral-700 p-4 text-xs font-mono-meta space-y-1.5 text-[#5C5950] dark:text-neutral-300">
                 <div className="flex justify-between">
-                  <span>INSTITUTION:</span> <span className="font-bold text-[#1C1B18] dark:text-neutral-100">{user?.university || 'University'}</span>
+                  <span>University</span> <span className="font-bold text-[#1C1B18] dark:text-neutral-100">{user?.university || 'Not given'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>STUDENT ID:</span> <span className="font-bold text-[#1C1B18] dark:text-neutral-100">{user?.studentId || 'N/A'}</span>
+                  <span>Student ID</span> <span className="font-bold text-[#1C1B18] dark:text-neutral-100">{user?.studentId || 'Not given'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>DEGREE PROGRAM:</span> <span className="text-[#1C1B18] dark:text-neutral-100">{user?.degreeProgram}</span>
+                  <span>Degree</span> <span className="text-[#1C1B18] dark:text-neutral-100">{user?.degreeProgram}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>RESEARCH DOMAIN:</span> <span className="text-[#1C1B18] dark:text-neutral-100">{user?.researchDomain}</span>
+                  <span>Research area</span> <span className="text-[#1C1B18] dark:text-neutral-100">{user?.researchDomain}</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-[#E5E2DA] dark:border-neutral-700">
-                  <span>STATUS:</span>{' '}
+                  <span>Status</span>{' '}
                   <span className={isRejected ? 'text-red-700 dark:text-red-400 font-bold' : 'text-amber-700 dark:text-amber-400 font-bold'}>
-                    {isRejected ? 'APPLICATION DECLINED' : 'AWAITING EDITORIAL REVIEW'}
+                    {isRejected ? 'Not approved' : 'Waiting for the team'}
                   </span>
                 </div>
               </div>
 
-              {!isRejected && (
-                <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 p-2.5 rounded-sm flex items-center justify-between text-[11px] font-mono-meta text-emerald-800 dark:text-emerald-300">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Real-time channel active: page will automatically unlock once verified.</span>
+              {!isRejected && !isBanned && (
+                isConnected ? (
+                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 p-2.5 rounded-sm flex items-center gap-2 text-[11px] font-mono-meta text-emerald-900 dark:text-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                    <span>Connected. This page opens by itself as soon as you are verified.</span>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-2.5 rounded-sm flex items-center gap-2 text-[11px] font-mono-meta text-amber-900 dark:text-amber-300">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                    <span>Live updates are not connected right now. Use “Check again” below.</span>
+                  </div>
+                )
               )}
 
               <p className="text-[11px] text-[#737067] dark:text-neutral-400 leading-relaxed">
-                To prevent automatic web scraping and preserve original thesis integrity, our staff verifies student enrollment before enabling full-text PDF downloads and raw dataset access.
+                The check confirms that accounts belong to real students. Your ID card is used for nothing else.
               </p>
 
               <div className="pt-2 border-t border-[#E5E2DA] dark:border-neutral-800 flex items-center justify-between">
@@ -174,14 +183,22 @@ export default function PendingView() {
                   className="text-xs font-mono-meta text-[#1C1B18] dark:text-neutral-200 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1.5 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
-                  <span>{checking ? 'Checking Status...' : 'Check Approval Status'}</span>
+                  <span>{checking ? 'Checking…' : 'Check again'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsFeedbackOpen(true)}
+                  className="text-xs font-mono-meta text-[#1C1B18] dark:text-neutral-200 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Message the team</span>
                 </button>
 
                 <button
                   onClick={logout}
                   className="text-xs font-mono-meta text-[#737067] dark:text-neutral-400 hover:text-[#1C1B18] dark:hover:text-white cursor-pointer"
                 >
-                  Sign Out
+                  Sign out
                 </button>
               </div>
             </>
@@ -191,8 +208,10 @@ export default function PendingView() {
       </main>
 
       <footer className="max-w-6xl mx-auto w-full py-4 border-t border-[#E2DFD8] dark:border-neutral-800 text-center text-xs font-mono-meta text-[#737067] dark:text-neutral-500">
-        Prepared and Developed by CSE IMPOSTERS TEAM
+        Prepared and developed by CSE IMPOSTERS TEAM
       </footer>
+
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} pageContext="waiting-for-approval" />
     </div>
   );
 }

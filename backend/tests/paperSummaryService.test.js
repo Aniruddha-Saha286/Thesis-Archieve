@@ -61,7 +61,7 @@ async function runPaperSummaryTests() {
 
     assert.strictEqual(res.enabled, true);
     assert.strictEqual(res.coverage, 'unavailable');
-    assert.ok(res.message.includes('Insufficient abstract'));
+    assert.ok(res.message.includes('no abstract long enough'));
   });
 
   // 3. Grounded Component Extraction
@@ -110,7 +110,17 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary.limitations.toLowerCase().includes('limitation'));
     assert.ok(Array.isArray(res.summary.keyTerms));
     assert.ok(res.summary.keyTerms.length >= 3);
-    assert.strictEqual(res.summary.disclaimer, 'AI-generated; verify against the original paper');
+    // The extractor uses keyword rules, so the label must say it is not AI-written
+    assert.ok(res.summary.disclaimer.includes('Not written by AI'));
+    assert.strictEqual(res.summary.isAiGenerated, false);
+    // Headings must not borrow sentences that belong elsewhere
+    assert.ok(!res.summary.methodology.toLowerCase().includes('outperforms'));
+    assert.ok(!res.summary.mainFindings.toLowerCase().includes('limitation'));
+    assert.strictEqual(res.summary.relevanceForThesisResearch, '');
+    assert.strictEqual(res.summary.plainLanguageOverview, '');
+    // The page is told which headings were really found in the text
+    assert.strictEqual(typeof res.summary.found, 'object');
+    assert.strictEqual(res.summary.found.findings, true);
   });
 
   // 4. Bengali / Bangla Language Support
@@ -150,7 +160,8 @@ async function runPaperSummaryTests() {
     assert.strictEqual(res.enabled, true);
     assert.strictEqual(res.language, 'bn');
     assert.ok(res.summary.tldr.includes('[সারাংশ]'));
-    assert.ok(res.summary.disclaimer.includes('কৃত্রিম বুদ্ধিমত্তা'));
+    // Bangla label must also say it is not written by AI
+    assert.ok(res.summary.disclaimer.includes('কৃত্রিম বুদ্ধিমত্তার লেখা নয়'));
   });
 
   // 5. Caching & Quota Idempotency

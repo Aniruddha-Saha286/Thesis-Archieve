@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import {
   X,
@@ -23,6 +24,7 @@ export default function AuthorProfileModal({
   onSelectAuthorPublications,
   onViewThesisDetail,
 }) {
+  useEscapeToClose(onClose, true);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -90,7 +92,7 @@ export default function AuthorProfileModal({
           <>
             {/* Header: Author Name, Institution, Provenance & Links */}
             <div className="border-b border-[#E2DFD8] dark:border-[#2C2A26] pb-4 space-y-2">
-              <div className="flex items-center gap-2 text-[10px] font-mono-meta uppercase tracking-wider text-[#737067] dark:text-[#9C988F]">
+              <div className="flex items-center gap-2 text-[11px] font-mono-meta uppercase tracking-wider text-[#737067] dark:text-[#9C988F]">
                 <span className="bg-[#1C1B18] dark:bg-[#383530] text-white px-2 py-0.5 rounded-xs font-bold">
                   Researcher Profile
                 </span>
@@ -121,7 +123,7 @@ export default function AuthorProfileModal({
                         {author.lastKnownInstitution.name}
                       </span>
                       {author.lastKnownInstitution.countryCode && (
-                        <span className="bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-1.5 py-0.2 rounded-xs text-[10px] font-mono-meta font-bold">
+                        <span className="bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-1.5 py-0.2 rounded-xs text-[11px] font-mono-meta font-bold">
                           {author.lastKnownInstitution.countryCode}
                         </span>
                       )}
@@ -176,18 +178,18 @@ export default function AuthorProfileModal({
             {/* Metrics Dashboard Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono-meta">
               <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[11px] uppercase">
                   <span>Total Works</span>
                   <BookOpen className="w-3.5 h-3.5 text-[#1C1B18] dark:text-[#F0EDE6]" />
                 </div>
                 <div className="text-xl font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                   {author?.worksCount ? author.worksCount.toLocaleString() : '0'}
                 </div>
-                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">Indexed publications</div>
+                <div className="text-[11px] text-[#737067] dark:text-[#9C988F]">Indexed publications</div>
               </div>
 
               <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[11px] uppercase">
                   <span>Total Citations</span>
                   <Quote className="w-3.5 h-3.5 text-[#2C6B3F] dark:text-emerald-400" />
                 </div>
@@ -196,36 +198,36 @@ export default function AuthorProfileModal({
                     ? author.citationCount.toLocaleString()
                     : '—'}
                 </div>
-                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">Source: OpenAlex</div>
+                <div className="text-[11px] text-[#737067] dark:text-[#9C988F]">Source: OpenAlex</div>
               </div>
 
               <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[11px] uppercase">
                   <span>h-index</span>
                   <Award className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                 </div>
                 <div className="text-xl font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                   {author?.hIndex !== null && author?.hIndex !== undefined ? author.hIndex : '—'}
                 </div>
-                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">Impact metric</div>
+                <div className="text-[11px] text-[#737067] dark:text-[#9C988F]">Impact metric</div>
               </div>
 
               <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] p-3 rounded-sm space-y-1">
-                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[10px] uppercase">
+                <div className="flex items-center justify-between text-[#737067] dark:text-[#9C988F] text-[11px] uppercase">
                   <span>i10-index</span>
                   <TrendingUp className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
                 </div>
                 <div className="text-xl font-bold text-[#1C1B18] dark:text-[#F0EDE6]">
                   {author?.i10Index !== null && author?.i10Index !== undefined ? author.i10Index : '—'}
                 </div>
-                <div className="text-[10px] text-[#737067] dark:text-[#9C988F]">≥10 citations</div>
+                <div className="text-[11px] text-[#737067] dark:text-[#9C988F]">≥10 citations</div>
               </div>
             </div>
 
             {/* Research Topics */}
             {author?.topics && author.topics.length > 0 && (
               <div className="space-y-1.5">
-                <span className="text-[10px] font-mono-meta font-bold uppercase tracking-wider text-[#737067] dark:text-[#9C988F] block">
+                <span className="text-[11px] font-mono-meta font-bold uppercase tracking-wider text-[#737067] dark:text-[#9C988F] block">
                   Core Research Topics & Concepts:
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -304,7 +306,7 @@ export default function AuthorProfileModal({
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2 text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex-wrap">
+                          <div className="flex items-center gap-2 text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex-wrap">
                             <span className="bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] px-1.5 py-0.2 rounded-xs font-bold uppercase text-[#1C1B18] dark:text-[#E8E6E1]">
                               {work.publicationType || 'Publication'}
                             </span>

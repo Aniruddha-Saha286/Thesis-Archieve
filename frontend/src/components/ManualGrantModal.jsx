@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { X, Calendar, Clock, ShieldCheck, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }) {
+  useEscapeToClose(onClose, isOpen);
   const [planCode, setPlanCode] = useState('premium_6m');
   const [overlapMode, setOverlapMode] = useState('start_now');
   const [durationPreset, setDurationPreset] = useState('7d');
@@ -210,8 +212,8 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
               <h3 className="text-sm font-bold text-[#1C1B18] dark:text-neutral-100">
                 Grant Manual Research Access
               </h3>
-              <p className="text-[10px] text-[#737067] dark:text-neutral-400">
-                Depository Director Override • Asia/Dhaka Calendar Timestamps
+              <p className="text-[11px] text-[#737067] dark:text-neutral-400">
+                Admin only · dates and times are Dhaka time
               </p>
             </div>
           </div>
@@ -222,7 +224,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="tta-light-panel p-4 sm:p-6 overflow-y-auto space-y-4">
           
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 flex items-start gap-2">
@@ -253,7 +255,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     type="button"
                     onClick={() => setShowRevokeConfirm(true)}
                     disabled={revoking}
-                    className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xs text-[10px] font-bold cursor-pointer transition disabled:opacity-50"
+                    className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xs text-[11px] font-bold cursor-pointer transition disabled:opacity-50"
                   >
                     {revoking ? 'Revoking...' : '✕ Revoke Access'}
                   </button>
@@ -280,8 +282,8 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                         : 'border-[#D5D1C7] bg-[#FAF9F5] text-[#737067]'
                     }`}
                   >
-                    <div className="font-bold text-[#1C1B18]">Premium Scholarly</div>
-                    <div className="text-[10px] text-[#737067] mt-0.5">৳500 / 6 Calendar Months</div>
+                    <div className="font-bold text-[#1C1B18]">Premium</div>
+                    <div className="text-[11px] text-[#737067] mt-0.5">৳500 / 6 Calendar Months</div>
                   </button>
 
                   <button
@@ -294,7 +296,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     }`}
                   >
                     <div className="font-bold text-amber-900">Pro Max Annual</div>
-                    <div className="text-[10px] text-amber-800 mt-0.5">৳850 / 12 Calendar Months</div>
+                    <div className="text-[11px] text-amber-800 mt-0.5">৳850 / 12 Calendar Months</div>
                   </button>
                 </div>
               </div>
@@ -315,7 +317,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     }`}
                   >
                     <div>🧪 Testing / Trial</div>
-                    <div className="text-[9px] font-normal opacity-80 mt-0.5">Complimentary Test Access</div>
+                    <div className="text-[11px] font-normal opacity-80 mt-0.5">Complimentary Test Access</div>
                   </button>
 
                   <button
@@ -328,7 +330,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     }`}
                   >
                     <div>🎓 Research Grant</div>
-                    <div className="text-[9px] font-normal opacity-80 mt-0.5">Academic Research Grant</div>
+                    <div className="text-[11px] font-normal opacity-80 mt-0.5">Academic Research Grant</div>
                   </button>
 
                   <button
@@ -341,7 +343,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     }`}
                   >
                     <div>✍ Custom Title</div>
-                    <div className="text-[9px] font-normal opacity-80 mt-0.5">Enter bespoke plan label</div>
+                    <div className="text-[11px] font-normal opacity-80 mt-0.5">Enter bespoke plan label</div>
                   </button>
                 </div>
 
@@ -525,9 +527,9 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     <strong className="text-[#1C1B18]">{planCode === 'pro_max_12m' ? 'Pro Max Tier (Full Capabilities)' : 'Premium Tier (Full Capabilities)'}</strong>
                   </div>
                   <div className="bg-white p-2 rounded border border-[#E5E2DA]">
-                    <span className="text-[#8C887E] block text-[10px] uppercase font-bold">Scholar Presentation:</span>
+                    <span className="text-[#8C887E] block text-[11px] uppercase font-bold">Scholar Presentation:</span>
                     <strong className="text-blue-900 font-mono text-xs">{getComputedLabel()}</strong>
-                    <div className="text-[10px] text-[#737067] mt-0.5">
+                    <div className="text-[11px] text-[#737067] mt-0.5">
                       No commercial pricing or misleading "6-Month" label will be presented.
                     </div>
                   </div>
@@ -543,7 +545,7 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                     <span className="text-[#8C887E]">Expires (Asia/Dhaka):</span>{' '}
                     <strong className="text-[#1C1B18]">{expiresAtLocal} (+06:00)</strong>
                   </div>
-                  <div className="text-[10px] text-[#737067] pt-1 border-t border-amber-200">
+                  <div className="text-[11px] text-[#737067] pt-1 border-t border-amber-200">
                     UTC Start: {dhakaLocalToIso(startsAtLocal)}
                     <br />
                     UTC Expiry: {dhakaLocalToIso(expiresAtLocal)}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function MembershipModal({ isOpen, onClose }) {
+  useEscapeToClose(onClose, isOpen);
   const { user } = useAuth();
   const { socket, showNotice } = useSocket();
 
@@ -258,10 +260,10 @@ export default function MembershipModal({ isOpen, onClose }) {
             </div>
             <div>
               <h2 className="text-lg font-serif-title tracking-tight leading-tight">
-                Academic Depository Membership
+                Membership
               </h2>
               <p className="text-[11px] font-mono-meta text-neutral-300 dark:text-neutral-400">
-                Transparent Scholarly Pricing · 7-Day Research Trial · Manual Renewal via bKash (No Auto-Debit)
+                7-day free trial · pay by bKash · no automatic renewal
               </p>
             </div>
           </div>
@@ -315,7 +317,7 @@ export default function MembershipModal({ isOpen, onClose }) {
               <History className="w-3.5 h-3.5" />
               <span>Payment History</span>
               {history.length > 0 && (
-                <span className="bg-[#FAF9F5] dark:bg-[#272521] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-1.5 py-0.2 rounded-xs text-[10px]">
+                <span className="bg-[#FAF9F5] dark:bg-[#272521] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-1.5 py-0.2 rounded-xs text-[11px]">
                   {history.length}
                 </span>
               )}
@@ -326,7 +328,7 @@ export default function MembershipModal({ isOpen, onClose }) {
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#737067] dark:text-[#9C988F]">Current Tier:</span>
             <span
-              className={`px-2 py-0.5 rounded-xs text-[10px] font-bold uppercase tracking-wider ${
+              className={`px-2 py-0.5 rounded-xs text-[11px] font-bold uppercase tracking-wider ${
                 activePeriod?.source === 'manual_admin'
                   ? 'bg-blue-100 dark:bg-blue-950/70 text-blue-900 dark:text-blue-300 border border-blue-400 dark:border-blue-800'
                   : currentPlanCode === 'pro_max_12m'
@@ -354,7 +356,7 @@ export default function MembershipModal({ isOpen, onClose }) {
         </div>
 
         {/* Tab Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 bg-[#FAF9F5] dark:bg-[#141412] space-y-6">
+        <div className="tta-light-panel p-4 sm:p-6 overflow-y-auto flex-1 bg-[#FAF9F5] dark:bg-[#141412] space-y-6">
           {/* Action Feedback Banner */}
           {cancelFeedback.message && (
             <div
@@ -416,7 +418,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         {activePeriod.source === 'manual_admin' ? (
                           <>
                             <span>
-                              You have complimentary research access granted by Depository Administration, active through{' '}
+                              The site team has given you free access, until{' '}
                               <strong>{activePeriod.formattedExpiry || new Date(activePeriod.expiresAt).toLocaleDateString()}</strong> (Asia/Dhaka time). Unlimited daily searches, grounded paper summaries, and full research tools active.
                             </span>
                             {activePeriod.grantReason && (
@@ -487,7 +489,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         Standard Academic
                       </h3>
                       {currentPlan === 'free' && !effectiveIsTrial && (
-                        <span className="bg-[#1C1B18] text-white text-[9px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
+                        <span className="bg-[#1C1B18] text-white text-[11px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
                           Active
                         </span>
                       )}
@@ -530,7 +532,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                   </div>
 
                   <div className="mt-4 pt-2.5 border-t border-[#F2EFE8]">
-                    <span className="text-[10px] font-mono-meta text-[#737067] block text-center">
+                    <span className="text-[11px] font-mono-meta text-[#737067] block text-center">
                       Included with verified student account
                     </span>
                   </div>
@@ -538,7 +540,7 @@ export default function MembershipModal({ isOpen, onClose }) {
 
                 {/* 2. 7-Day Research Trial */}
                 <div className="bg-white border-2 border-blue-500 rounded-sm p-4 flex flex-col justify-between shadow-xs relative">
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-mono-meta uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-2xs whitespace-nowrap">
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[11px] font-mono-meta uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-2xs whitespace-nowrap">
                     Single-Use Trial
                   </div>
 
@@ -548,7 +550,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         7-Day Research Trial
                       </h3>
                       {effectiveIsTrial && (
-                        <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
+                        <span className="bg-blue-600 text-white text-[11px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
                           Active
                         </span>
                       )}
@@ -612,7 +614,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       </span>
                     </button>
                     {!isEligibleForTrial && !effectiveIsTrial && !activePeriod && (
-                      <span className="text-[9px] text-neutral-500 block text-center mt-1">
+                      <span className="text-[11px] text-neutral-500 block text-center mt-1">
                         One trial per eligible account
                       </span>
                     )}
@@ -621,7 +623,7 @@ export default function MembershipModal({ isOpen, onClose }) {
 
                 {/* 3. Premium Scholarly Discovery (6 Months) */}
                 <div className="bg-white border-2 border-purple-600 rounded-sm p-4 flex flex-col justify-between shadow-xs relative">
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-purple-700 text-white text-[9px] font-mono-meta uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-2xs whitespace-nowrap">
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-purple-700 text-white text-[11px] font-mono-meta uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-2xs whitespace-nowrap">
                     Semiannual (6 Mo)
                   </div>
 
@@ -631,7 +633,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         Premium (6 Mo)
                       </h3>
                       {currentPlanCode === 'premium_6m' && (
-                        <span className="bg-purple-700 text-white text-[9px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
+                        <span className="bg-purple-700 text-white text-[11px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
                           {activePeriod?.source === 'manual_admin' ? 'Active (Admin Grant)' : 'Active'}
                         </span>
                       )}
@@ -683,7 +685,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       <span>Choose Premium (৳500)</span>
                     </button>
                     {activePeriod && (
-                      <span className="text-[9px] text-neutral-500 block text-center mt-1">
+                      <span className="text-[11px] text-neutral-500 block text-center mt-1">
                         Renewal extends active coverage by 6 months
                       </span>
                     )}
@@ -692,7 +694,7 @@ export default function MembershipModal({ isOpen, onClose }) {
 
                 {/* 4. Pro Max Annual (12 Months) */}
                 <div className="bg-white border-2 border-amber-500 rounded-sm p-4 flex flex-col justify-between shadow-xs relative">
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[9px] font-mono-meta uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-2xs whitespace-nowrap">
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[11px] font-mono-meta uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-2xs whitespace-nowrap">
                     Best Value · Annual
                   </div>
 
@@ -702,7 +704,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         Pro Max Annual
                       </h3>
                       {currentPlanCode === 'pro_max_12m' && (
-                        <span className="bg-amber-600 text-white text-[9px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
+                        <span className="bg-amber-600 text-white text-[11px] px-1.5 py-0.5 rounded-xs font-mono-meta uppercase">
                           {activePeriod?.source === 'manual_admin' ? 'Active (Admin Grant)' : 'Active'}
                         </span>
                       )}
@@ -714,7 +716,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       </span>
                     </div>
 
-                    <div className="p-1.5 bg-amber-50 border border-amber-300 rounded-xs text-[10px] text-amber-900 font-mono-meta font-medium mb-3">
+                    <div className="p-1.5 bg-amber-50 border border-amber-300 rounded-xs text-[11px] text-amber-900 font-mono-meta font-medium mb-3">
                       Save BDT 150 (15%) versus two BDT 500 six-month memberships
                     </div>
 
@@ -756,7 +758,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       <span>Choose Pro Max (৳850)</span>
                     </button>
                     {activePeriod && (
-                      <span className="text-[9px] text-neutral-500 block text-center mt-1">
+                      <span className="text-[11px] text-neutral-500 block text-center mt-1">
                         Renewal extends active coverage by 12 months
                       </span>
                     )}
@@ -768,7 +770,7 @@ export default function MembershipModal({ isOpen, onClose }) {
               <div className="bg-white border border-[#D5D1C7] rounded-sm p-4 shadow-2xs space-y-3">
                 <h4 className="font-serif-title text-sm font-bold text-[#1C1B18] flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-[#737067]" />
-                  <span>Comprehensive Research Entitlement Matrix</span>
+                  <span>What each plan includes</span>
                 </h4>
 
                 <div className="overflow-x-auto">
@@ -852,7 +854,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       <span className="font-serif-title font-bold text-base text-[#1C1B18]">
                         Self-Service Subscription Cancellation & Data Preservation
                       </span>
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-mono-meta font-bold px-2 py-0.5 rounded-xs">
+                      <span className="bg-emerald-100 text-emerald-800 text-[11px] font-mono-meta font-bold px-2 py-0.5 rounded-xs">
                         Zero Lock-In
                       </span>
                     </div>
@@ -946,7 +948,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                   {/* Order Summary Header */}
                   <div className="border-b border-[#E2DFD8] pb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <span className="text-[10px] font-mono-meta text-[#737067] uppercase tracking-wider block">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider block">
                         Order Snapshot Reference ({activeOrder.planName || (activeOrder.plan === 'pro_max_12m' ? 'Pro Max Annual' : 'Premium 6-Month')})
                       </span>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -969,7 +971,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] font-mono-meta text-[#737067] uppercase tracking-wider block">
+                      <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider block">
                         Payable Amount ({activeOrder.plan === 'pro_max_12m' ? '12 Months' : '6 Months'})
                       </span>
                       <span className="font-serif-title text-2xl font-bold text-purple-900 block leading-tight">
@@ -982,21 +984,21 @@ export default function MembershipModal({ isOpen, onClose }) {
                   <div className="bg-pink-50/60 border border-pink-200 rounded-sm p-4 text-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-xs bg-pink-600 text-white font-bold flex items-center justify-center text-[10px]">
+                        <div className="w-6 h-6 rounded-xs bg-pink-600 text-white font-bold flex items-center justify-center text-[11px]">
                           bK
                         </div>
                         <span className="font-bold text-pink-950 font-serif-title">
                           Official bKash Payment Details
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono-meta text-pink-800 bg-pink-100 px-2 py-0.5 rounded-xs font-semibold">
+                      <span className="text-[11px] font-mono-meta text-pink-800 bg-pink-100 px-2 py-0.5 rounded-xs font-semibold">
                         Manual Verification
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                       <div className="bg-white p-2.5 rounded-xs border border-pink-200">
-                        <span className="text-[10px] font-mono-meta text-neutral-500 block uppercase">
+                        <span className="text-[11px] font-mono-meta text-neutral-500 block uppercase">
                           Merchant / Account Number
                         </span>
                         <div className="flex items-center justify-between mt-1">
@@ -1024,7 +1026,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                       </div>
 
                       <div className="bg-white p-2.5 rounded-xs border border-pink-200">
-                        <span className="text-[10px] font-mono-meta text-neutral-500 block uppercase">
+                        <span className="text-[11px] font-mono-meta text-neutral-500 block uppercase">
                           Account Name
                         </span>
                         <span className="font-sans font-semibold text-xs text-[#1C1B18] block mt-1 truncate">
@@ -1089,7 +1091,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         placeholder="e.g. BKA7X89Q1Z"
                         className="w-full bg-[#FAF9F5] border border-[#D5D1C7] focus:border-[#1C1B18] px-3 py-2 text-sm font-mono text-[#1C1B18] rounded-xs uppercase tracking-wider focus:outline-none"
                       />
-                      <span className="text-[10px] text-[#737067] font-mono-meta block mt-0.5">
+                      <span className="text-[11px] text-[#737067] font-mono-meta block mt-0.5">
                         Found in your bKash confirmation SMS or app transaction statement.
                       </span>
                     </div>
@@ -1105,7 +1107,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                         placeholder="e.g. 017XXXXXXXX"
                         className="w-full bg-[#FAF9F5] border border-[#D5D1C7] focus:border-[#1C1B18] px-3 py-2 text-xs font-mono text-[#1C1B18] rounded-xs focus:outline-none"
                       />
-                      <span className="text-[10px] text-[#737067] font-mono-meta block mt-0.5">
+                      <span className="text-[11px] text-[#737067] font-mono-meta block mt-0.5">
                         Assists the depository administrator in locating your transaction on the bKash merchant ledger.
                       </span>
                     </div>
@@ -1268,7 +1270,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                               ৳{sub.amount} BDT
                             </span>
                             <span
-                              className={`px-2 py-0.5 rounded-xs text-[10px] font-mono-meta font-bold uppercase tracking-wider ${
+                              className={`px-2 py-0.5 rounded-xs text-[11px] font-mono-meta font-bold uppercase tracking-wider ${
                                 isApproved
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                   : isRejected
@@ -1301,7 +1303,7 @@ export default function MembershipModal({ isOpen, onClose }) {
 
                         {isRejected && (
                           <div className="bg-red-50 border border-red-200 p-2.5 rounded-xs text-red-900 text-xs">
-                            <strong>Editorial Rejection Reason:</strong> {sub.rejectionReason || 'Transaction ID could not be reconciled against merchant statement.'}
+                            <strong>Why it was not accepted:</strong> {sub.rejectionReason || 'Transaction ID could not be reconciled against merchant statement.'}
                           </div>
                         )}
 
@@ -1317,7 +1319,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                                 setCorrectionTrxId(sub.trxId);
                                 setCorrectionSender(sub.senderNumber || '');
                               }}
-                              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xs text-[10px] font-mono-meta uppercase tracking-wider font-bold cursor-pointer shrink-0"
+                              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xs text-[11px] font-mono-meta uppercase tracking-wider font-bold cursor-pointer shrink-0"
                             >
                               Correct TrxID
                             </button>
@@ -1333,7 +1335,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                           </div>
                         )}
 
-                        <div className="text-[10px] font-mono-meta text-neutral-400 pt-1 flex items-center justify-between">
+                        <div className="text-[11px] font-mono-meta text-neutral-400 pt-1 flex items-center justify-between">
                           <span>
                             Submitted: {new Date(sub.submittedAt).toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })} (Dhaka)
                           </span>
@@ -1353,13 +1355,13 @@ export default function MembershipModal({ isOpen, onClose }) {
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-[#FAF9F5] border-t border-[#E2DFD8] px-6 py-3 flex items-center justify-between text-xs font-mono-meta">
-          <span className="text-[#737067] text-[11px]">
-            The Thesis Archive Depository · Asia/Dhaka Financial Operations
+        <div className="bg-[#FAF9F5] dark:bg-[#201F1C] border-t border-[#E2DFD8] dark:border-[#2C2A26] px-4 sm:px-6 py-3 flex items-center justify-between gap-3 text-xs font-mono-meta">
+          <span className="text-[#737067] dark:text-[#9C988F] text-[11px]">
+            The Thesis Archive · dates and times are Dhaka time
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-[#1C1B18] hover:bg-[#2E2C28] text-white rounded-xs text-xs font-mono-meta uppercase tracking-wider cursor-pointer"
+            className="px-4 py-1.5 bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-[#F0EDE6] dark:hover:bg-[#E2DFD8] text-white dark:text-[#141412] rounded-xs text-xs font-mono-meta uppercase tracking-wider cursor-pointer shrink-0"
           >
             Close
           </button>
@@ -1369,7 +1371,7 @@ export default function MembershipModal({ isOpen, onClose }) {
       {/* Cancellation Confirmation Dialog */}
       {showCancelModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-[#FAF9F5] border border-[#D5D1C7] rounded-sm shadow-2xl w-full max-w-lg p-6 text-[#1C1B18] space-y-4">
+          <div className="tta-light-panel bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm shadow-2xl w-full max-w-lg p-5 sm:p-6 text-[#1C1B18] dark:text-[#F0EDE6] space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-sm bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
@@ -1380,7 +1382,7 @@ export default function MembershipModal({ isOpen, onClose }) {
                     Cancel Subscription
                   </h3>
                   <p className="text-[11px] font-mono-meta text-[#737067]">
-                    Academic Depository Vault Guarantee
+                    What stays and what stops
                   </p>
                 </div>
               </div>

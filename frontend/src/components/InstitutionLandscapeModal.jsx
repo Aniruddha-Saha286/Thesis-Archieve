@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import {
   X,
@@ -35,6 +36,7 @@ export default function InstitutionLandscapeModal({
   onClose,
   onFilterByField,
 }) {
+  useEscapeToClose(onClose, isOpen);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
@@ -167,17 +169,6 @@ export default function InstitutionLandscapeModal({
       fetchLandscape();
     }
   }, [isOpen, canonicalId, fetchLandscape]);
-
-  // Handle Escape key to close
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   // Apply Year Filter Handler
   const handleApplyYearFilter = (e) => {
@@ -360,7 +351,7 @@ export default function InstitutionLandscapeModal({
         {/* ========================================================================= */}
         {/* MODAL BODY (SCROLLABLE)                                                   */}
         {/* ========================================================================= */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-5 grow">
+        <div className="tta-light-panel p-4 sm:p-5 overflow-y-auto space-y-5 grow">
           {/* Feature disabled notice */}
           {disabledNotice && (
             <div className="bg-amber-50 border border-amber-200 p-5 rounded-sm text-center space-y-2">
@@ -623,7 +614,7 @@ export default function InstitutionLandscapeModal({
 
                         {/* Donut Center Display */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
-                          <span className="text-[10px] font-mono-meta uppercase tracking-wider text-[#737067] truncate max-w-[120px]">
+                          <span className="text-[11px] font-mono-meta uppercase tracking-wider text-[#737067] truncate max-w-[120px]">
                             {activeSliceInfo?.name || activeSliceInfo?.fieldName || 'Classified'}
                           </span>
                           <span className="text-xl font-bold font-serif-title text-[#1C1B18] mt-0.5">
@@ -795,7 +786,7 @@ export default function InstitutionLandscapeModal({
                             className="flex-1 flex flex-col items-center gap-1 group relative h-full justify-end"
                           >
                             {/* Hover tooltip */}
-                            <div className="opacity-0 group-hover:opacity-100 transition absolute -top-7 bg-[#1C1B18] text-white text-[10px] font-mono-meta px-1.5 py-0.5 rounded-2xs whitespace-nowrap pointer-events-none z-10">
+                            <div className="opacity-0 group-hover:opacity-100 transition absolute -top-7 bg-[#1C1B18] text-white text-[11px] font-mono-meta px-1.5 py-0.5 rounded-2xs whitespace-nowrap pointer-events-none z-10">
                               {pt.year}: {pt.count.toLocaleString()} works
                             </div>
 
@@ -831,7 +822,7 @@ export default function InstitutionLandscapeModal({
         {/* MODAL FOOTER                                                              */}
         {/* ========================================================================= */}
         <div className="bg-white dark:bg-[#201F1C] border-t border-[#E2DFD8] dark:border-[#2C2A26] p-3 sm:p-4 shrink-0 flex items-center justify-between gap-3 text-xs font-mono-meta text-[#737067] dark:text-[#9C988F]">
-          <span>Source: OpenAlex Open Scholarly Knowledge Graph</span>
+          <span>Data from OpenAlex</span>
           <button
             type="button"
             onClick={onClose}

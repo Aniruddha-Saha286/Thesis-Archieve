@@ -25,6 +25,9 @@ const notificationSchema = new mongoose.Schema({
       'permissions_updated',
       'report_created',
       'editorial_update',
+      // A user sent a message to the team / the team replied to that message
+      'feedback_new',
+      'feedback_reply',
       'general',
     ],
     default: 'general',

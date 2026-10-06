@@ -9,6 +9,8 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [realtimeNotice, setRealtimeNotice] = useState(null);
+  // Goes up by one each time the server pushes a notification, so the bell knows to reload
+  const [notificationTick, setNotificationTick] = useState(0);
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
@@ -96,6 +98,7 @@ export const SocketProvider = ({ children }) => {
 
     // Handle incoming direct notifications
     s.on('notification:new', (notif) => {
+      setNotificationTick((n) => n + 1);
       if (notif?.message) {
         setRealtimeNotice({
           type: notif.type === 'membership_cancelled' ? 'error' : 'info',
@@ -118,6 +121,7 @@ export const SocketProvider = ({ children }) => {
     socket,
     isConnected,
     realtimeNotice,
+    notificationTick,
     clearRealtimeNotice: () => setRealtimeNotice(null),
     setRealtimeNotice,
     showNotice: (msg, type = 'info') =>
@@ -134,6 +138,7 @@ export const useSocket = () => {
       socket: null,
       isConnected: false,
       realtimeNotice: null,
+      notificationTick: 0,
       clearRealtimeNotice: () => {},
       setRealtimeNotice: () => {},
       showNotice: () => {},

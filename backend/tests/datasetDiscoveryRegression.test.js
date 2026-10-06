@@ -57,7 +57,7 @@ async function runDatasetDiscoveryRegressionTests() {
       assert.ok(ds.url, 'Dataset must have valid access URL');
       assert.ok(isSafeDatasetUrl(ds.url), 'Dataset access URL must pass SSRF safety validation');
       assert.ok(
-        ['DataCite', 'Zenodo', 'Figshare', 'Dryad'].includes(ds.source),
+        ['DataCite', 'Zenodo', 'Figshare', 'Dryad', 'Harvard Dataverse', 'Hugging Face'].includes(ds.source),
         `Source '${ds.source}' must be authentic repository`
       );
     }

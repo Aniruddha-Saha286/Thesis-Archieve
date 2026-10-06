@@ -254,6 +254,14 @@ function createNormalizedRecord(data) {
     abstract: data.abstract ? String(data.abstract).replace(/<[^>]*>/g, '').trim() : null,
     publicationType: publicationType,
     degreeType: degreeType,
+    // Thesis-only context (kept for locally deposited theses; null for outside sources)
+    advisor: data.advisor ? String(data.advisor).trim() : null,
+    department: data.department ? String(data.department).trim() : null,
+    // Records copied from a university repository: where they came from and the link back to the original
+    origin: data.origin === 'harvest' ? 'harvest' : (data.origin || null),
+    sourceRepositoryName: data.sourceRepositoryName ? String(data.sourceRepositoryName).trim() : null,
+    sourceUrl: data.sourceUrl ? String(data.sourceUrl).trim() : null,
+    sourceRights: data.sourceRights ? String(data.sourceRights).trim() : null,
     isPeerReviewed: typeof data.isPeerReviewed === 'boolean' ? data.isPeerReviewed : Boolean(data.hasJournalRef),
     publicationDate: data.publicationDate || (publishedYear ? `${publishedYear}-01-01` : null),
     publishedYear: publishedYear,

@@ -6,7 +6,8 @@ import axios from 'axios';
 
 export default function StudentRegistrationView() {
   const { user, refreshUser, logout } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const [formData, setFormData] = useState({
     name: user?.name || '',
     university: '',
@@ -113,7 +114,7 @@ export default function StudentRegistrationView() {
             <span className="font-serif-title text-xl tracking-tight text-[#1C1B18] dark:text-neutral-100 block leading-none">
               The Thesis Archive
             </span>
-            <span className="text-[10px] font-mono-meta text-[#737067] dark:text-neutral-400 uppercase tracking-wider">
+            <span className="text-[11px] font-mono-meta text-[#737067] dark:text-neutral-400 uppercase tracking-wider">
               Student Registration Gateway
             </span>
           </div>
@@ -144,14 +145,14 @@ export default function StudentRegistrationView() {
         <div className="bg-white dark:bg-neutral-900 border border-[#E2DFD8] dark:border-neutral-800 p-8 rounded-sm shadow-sm space-y-5">
           
           <div className="pb-3 border-b border-[#E5E2DA] dark:border-neutral-800">
-            <span className="text-[10px] font-mono-meta text-[#2C6B3F] dark:text-emerald-400 uppercase tracking-wider font-semibold block flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" /> Authenticated Identity: {user?.email}
+            <span className="text-[11px] font-mono-meta text-[#2C6B3F] dark:text-emerald-400 uppercase tracking-wider font-semibold block flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" /> Signed in as {user?.email}
             </span>
             <h2 className="text-2xl font-serif-title font-normal text-[#1C1B18] dark:text-neutral-100 mt-1">
-              Scholarly Credentials Verification
+              Tell us where you study
             </h2>
             <p className="text-xs text-[#737067] dark:text-neutral-400 mt-0.5">
-              Please register your academic program and university affiliation to request editorial verification.
+              The team uses these details and your ID card to confirm you are a student. It is done once.
             </p>
           </div>
 
@@ -274,7 +275,7 @@ export default function StudentRegistrationView() {
                       <div className="flex items-center gap-1 text-[#2C6B3F] dark:text-emerald-400 font-bold text-[11px]">
                         <CheckCircle className="w-3.5 h-3.5" /> ID Uploaded Securely
                       </div>
-                      <div className="text-[10px] text-[#737067] dark:text-neutral-400">
+                      <div className="text-[11px] text-[#737067] dark:text-neutral-400">
                         Verified asset stored privately for depository moderation.
                       </div>
                     </div>
@@ -303,7 +304,7 @@ export default function StudentRegistrationView() {
                     <span className="font-medium text-[#1C1B18] dark:text-neutral-200">
                       {uploading ? 'Uploading to private storage...' : 'Click or drag student ID card to upload'}
                     </span>
-                    <span className="text-[10px] text-[#737067] dark:text-neutral-400">
+                    <span className="text-[11px] text-[#737067] dark:text-neutral-400">
                       JPEG, PNG, WebP, or PDF (Maximum 10 MB)
                     </span>
                   </div>
@@ -313,7 +314,7 @@ export default function StudentRegistrationView() {
 
             {/* Privacy & Evaluation Note */}
             <div className="p-3 bg-[#FAF9F5] dark:bg-neutral-800/60 border border-[#E2DFD8] dark:border-neutral-700/80 rounded-sm text-[11px] font-mono-meta text-[#605D55] dark:text-neutral-400 space-y-1">
-              <span className="font-semibold text-[#1C1B18] dark:text-neutral-200 block uppercase tracking-wider text-[10px]">
+              <span className="font-semibold text-[#1C1B18] dark:text-neutral-200 block uppercase tracking-wider text-[11px]">
                 Identity Verification Notice
               </span>
               <p className="leading-relaxed">

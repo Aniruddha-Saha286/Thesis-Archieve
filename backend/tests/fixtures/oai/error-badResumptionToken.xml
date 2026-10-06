@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fixture: ASSUMED shape (same envelope as the confirmed noRecordsMatch answer, with the standard
+  OAI-PMH error code for an expired or invalid token).
+-->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+  <responseDate>2026-10-05T21:08:00Z</responseDate>
+  <request verb="ListRecords">https://dspace.bracu.ac.bd/server/oai/request</request>
+  <error code="badResumptionToken">The resumption token is invalid</error>
+</OAI-PMH>

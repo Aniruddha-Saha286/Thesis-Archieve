@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="static/style.xsl"?>
+<!--
+  Fixture: oai_dc ListRecords answer mirroring https://dspace.bracu.ac.bd/server/oai/request,
+  looked at on 2026-10-06.
+
+  CONFIRMED against the live server:
+    - record 1 is the oai_dc version of oai:dspace.bracu.ac.bd:10361/22810: element order,
+      namespaces and all non-personal values are real (personal names and student ID numbers were
+      replaced with made-up ones; the abstract is shortened). Note how advisor and department both
+      arrive as plain dc:contributor, and how four unlabelled dc:date values arrive together.
+    - record 2 is the real non-thesis record oai:dspace.bracu.ac.bd:10361/21650 (type "Drawings"),
+      copied as served.
+    - a short result list has NO resumptionToken element at all (seen on live pages of 25 to 50 records).
+-->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+  <responseDate>2026-10-05T21:05:58Z</responseDate>
+  <request verb="ListRecords" metadataPrefix="oai_dc" from="2025-09-01T00:00:00Z">https://dspace.bracu.ac.bd/server/oai/request</request>
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/22810</identifier>
+        <datestamp>2026-07-16T04:21:00Z</datestamp>
+        <setSpec>com_10361_28391</setSpec>
+        <setSpec>com_10361_28390</setSpec>
+        <setSpec>com_10361_28388</setSpec>
+        <setSpec>col_10361_28396</setSpec>
+      </header>
+      <metadata>
+        <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/ http://www.openarchives.org/OAI/2.0/oai_dc.xsd">
+          <dc:title>Effect of free DNA of environment surface water on bacterial biofilm formation</dc:title>
+          <dc:creator>Roy, Anika</dc:creator>
+          <dc:creator>Das, Mitu</dc:creator>
+          <dc:creator>Hasan, Sadia Binte</dc:creator>
+          <dc:contributor>Bin Karim, Tahmid</dc:contributor>
+          <dc:contributor>Department of Mathematics and Natural Sciences</dc:contributor>
+          <dc:subject>Free DNA</dc:subject>
+          <dc:subject>Surface water</dc:subject>
+          <dc:subject>Bacteria</dc:subject>
+          <dc:subject>Bacterial biofilms</dc:subject>
+          <dc:subject>Water</dc:subject>
+          <dc:subject>Biofilms</dc:subject>
+          <dc:subject>Bacteria</dc:subject>
+          <dc:description>This thesis is submitted in partial fulfillment of the requirements for the degree of Bachelor of Science in Biotechnology, 2023.</dc:description>
+          <dc:description>Catalogued from PDF version of thesis.</dc:description>
+          <dc:description>Includes bibliographical references (pages 58-60).</dc:description>
+          <dc:description>Bacteriophages, commonly referred to as bacterial viruses, have long been recognized as natural&#xd;
+adversaries of bacteria. They find application in medical settings for eliminating bacterial&#xd;
+infections. This study seeks to explore whether the free DNA introduced by Bacteriophages&#xd;
+influences the formation of bacterial biofilms.</dc:description>
+          <dc:description>Anika Roy</dc:description>
+          <dc:description>Mitu Das</dc:description>
+          <dc:description>Sadia Binte Hasan</dc:description>
+          <dc:description>Bachelor of Science in Biotechnology</dc:description>
+          <dc:date>2024-05-14T04:06:06Z</dc:date>
+          <dc:date>2024-05-14T04:06:06Z</dc:date>
+          <dc:date>©2023</dc:date>
+          <dc:date>2023-11</dc:date>
+          <dc:type>Thesis</dc:type>
+          <dc:identifier>ID 00000001</dc:identifier>
+          <dc:identifier>ID 00000002</dc:identifier>
+          <dc:identifier>ID 00000003</dc:identifier>
+          <dc:identifier>http://hdl.handle.net/10361/22810</dc:identifier>
+          <dc:language>en</dc:language>
+          <dc:rights>Brac University theses are protected by copyright. They may be viewed from this source for any purpose, but reproduction or distribution in any format is prohibited without written permission.</dc:rights>
+          <dc:format>60 pages</dc:format>
+          <dc:format>application/pdf</dc:format>
+          <dc:publisher>BRAC University</dc:publisher>
+        </oai_dc:dc>
+      </metadata>
+    </record>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/21650</identifier>
+        <datestamp>2024-03-10T21:00:10Z</datestamp>
+        <setSpec>com_10361_18844</setSpec>
+        <setSpec>com_10361_18637</setSpec>
+        <setSpec>com_10361_18343</setSpec>
+        <setSpec>com_10361_18066</setSpec>
+        <setSpec>col_10361_18845</setSpec>
+      </header>
+      <metadata>
+        <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/ http://www.openarchives.org/OAI/2.0/oai_dc.xsd">
+          <dc:title>Brick wall layout of toilet AT1.AT2  6F-12F (RFA-437_Rev D)</dc:title>
+          <dc:creator>WOHA Designs PTE LTD</dc:creator>
+          <dc:creator>BUCG-ABC Joint Venture (BUCG-ABC JV)</dc:creator>
+          <dc:creator>Web Structures</dc:creator>
+          <dc:subject>New campus project</dc:subject>
+          <dc:subject>Architectural drawings</dc:subject>
+          <dc:subject>Architectural designs</dc:subject>
+          <dc:subject>Contractor shop drawing</dc:subject>
+          <dc:description>This record contains architectural contractor shop drawings of Brac University New Campus Project. It consists of both PDF and DWG version of drawings.</dc:description>
+          <dc:description>Brick wall layout of toilet AT1.AT2  6F-12F;  AT1.AT1-R; AT1-1 ;  AT1-RR;  AT2.AT2-R;  AT2-RR; Toilet layout plan of 6-12F ; WC brick wall-3D; Brick wall layout of 6-12F</dc:description>
+          <dc:date>2023-10-05T09:22:56Z</dc:date>
+          <dc:date>2023-10-05T09:22:56Z</dc:date>
+          <dc:date>©2021</dc:date>
+          <dc:date>2021-01-04</dc:date>
+          <dc:type>Drawings</dc:type>
+          <dc:identifier>Ref.: RFA-437_Rev D</dc:identifier>
+          <dc:identifier>Design no.: AT1-AT2</dc:identifier>
+          <dc:identifier>http://hdl.handle.net/10361/21650</dc:identifier>
+          <dc:language>en</dc:language>
+          <dc:format>application/pdf</dc:format>
+          <dc:publisher>Brac University</dc:publisher>
+        </oai_dc:dc>
+      </metadata>
+    </record>
+  </ListRecords>
+</OAI-PMH>

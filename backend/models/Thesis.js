@@ -127,6 +127,16 @@ const thesisSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  // Set only when the PDF was uploaded through the deposit form: where the file is stored
+  // (so it can be removed with the record) and how large it is.
+  pdfStorageRef: {
+    type: String,
+    default: '',
+  },
+  pdfSizeBytes: {
+    type: Number,
+    default: null,
+  },
   isOpenAccess: {
     type: Boolean,
     default: null,
@@ -226,6 +236,73 @@ const thesisSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+
+  // ---------------------------------------------------------------------------------------
+  // Harvested records (services/repositoryHarvester.js)
+  // A thesis copied from a university repository over OAI-PMH. Every field below is optional
+  // and unset on theses deposited through this site, so existing records are not affected.
+  // ---------------------------------------------------------------------------------------
+
+  // Where the record came from. 'deposit' = submitted on this site (the default, and what
+  // every older record counts as). 'harvest' = copied from an outside repository.
+  // The harvester only ever updates records whose origin is 'harvest'.
+  origin: {
+    type: String,
+    enum: ['deposit', 'harvest'],
+    default: 'deposit',
+  },
+  // Registry key of the repository (services/repositoryRegistry.js), e.g. 'bracu'.
+  sourceRepository: {
+    type: String,
+    trim: true,
+  },
+  // Name of that repository for display, e.g. 'BRAC University Institutional Repository'.
+  sourceRepositoryName: {
+    type: String,
+    trim: true,
+  },
+  // Permanent link back to the original record (the handle URL). Show this as
+  // "View in original repository". It is a landing page, not a PDF, so it is NOT put in pdfUrl.
+  sourceUrl: {
+    type: String,
+    trim: true,
+  },
+  // The rights / copyright statement the repository publishes with the record, kept word for
+  // word so it can be shown next to the link back.
+  sourceRights: {
+    type: String,
+  },
+  // The record's OAI-PMH identifier, e.g. 'oai:dspace.bracu.ac.bd:10361/22810'. This is how a
+  // later harvest finds the same record again instead of creating a duplicate.
+  // No default on purpose: the unique index is sparse, which only skips documents where the
+  // field is missing altogether. A default of null would make every deposited thesis collide.
+  externalId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+  },
+  // When the harvester last wrote this record.
+  harvestedAt: {
+    type: Date,
+  },
+  // When the record last changed in the source repository (OAI datestamp).
+  sourceUpdatedAt: {
+    type: Date,
+  },
+  // Set when the source repository reported the record as deleted. The harvester then hides the
+  // record (status 'rejected') instead of removing it, and can bring it back if the source does.
+  sourceDeletedAt: {
+    type: Date,
+  },
+  // Fingerprint of the fields the harvester wrote last time. If the stored fields no longer
+  // match it, somebody edited the record by hand, and the harvester leaves it alone from then on.
+  harvestChecksum: {
+    type: String,
+  },
 });
+
+// Lets admin screens and reports list "everything harvested from repository X" without a full scan.
+thesisSchema.index({ origin: 1, sourceRepository: 1 });
 
 module.exports = mongoose.model('Thesis', thesisSchema);

@@ -15,6 +15,7 @@ import {
   Shield,
   Zap,
 } from 'lucide-react';
+import { getPlanInfo } from '../utils/plan';
 
 export default function LibraryHub({
   savedPapersCount = 0,
@@ -36,13 +37,13 @@ export default function LibraryHub({
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-xs bg-[#FAF9F5] dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] text-[#737067] dark:text-[#9E9A90] text-xs font-mono-meta uppercase tracking-wider font-semibold">
               <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Personal Research Workspace</span>
+              <span>Your library</span>
             </div>
             <h1 className="text-2xl md:text-4xl font-serif-title font-normal tracking-tight text-[#1C1B18] dark:text-[#FAF9F5]">
-              Scholarly Library & Workspace
+              Library
             </h1>
             <p className="text-xs md:text-sm text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-              Manage your bookmarked literature, annotated notes, project collections, side-by-side synthesis matrices, and automated topic tracking in one unified hub.
+              Your saved papers and notes, collections, paper comparisons and topic alerts.
             </p>
           </div>
 
@@ -52,7 +53,7 @@ export default function LibraryHub({
               <span className="block text-2xl font-serif-title font-bold text-[#1C1B18] dark:text-[#FAF9F5]">
                 {savedPapersCount}
               </span>
-              <span className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9E9A90] uppercase tracking-wider">
+              <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9E9A90] uppercase tracking-wider">
                 Saved Papers
               </span>
             </div>
@@ -61,17 +62,17 @@ export default function LibraryHub({
               <span className="block text-2xl font-serif-title font-bold text-purple-700 dark:text-purple-400">
                 {comparisonCount} <span className="text-xs text-[#737067] dark:text-[#9E9A90] font-normal">/ 5</span>
               </span>
-              <span className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9E9A90] uppercase tracking-wider">
-                In Matrix
+              <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9E9A90] uppercase tracking-wider">
+                To compare
               </span>
             </div>
 
             <div className="bg-[#FAF9F5] dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] px-4 py-3 rounded-sm text-center min-w-[100px]">
               <span className="block text-xs font-mono-meta font-bold uppercase text-amber-700 dark:text-amber-400 mt-2 mb-1">
-                {membershipPlan === 'premium' ? '★ Premium' : membershipPlan === 'trial' ? '⚡ 7-Day Trial' : 'Standard'}
+                {getPlanInfo(membershipPlan).badge}
               </span>
-              <span className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9E9A90] uppercase tracking-wider">
-                Plan Tier
+              <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9E9A90] uppercase tracking-wider">
+                Plan
               </span>
             </div>
           </div>
@@ -97,7 +98,7 @@ export default function LibraryHub({
                 Saved Papers & Notes
               </h2>
               <p className="text-xs text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-                Your personal repository of bookmarked publications with custom annotations, private research notes, and direct links to manuscript PDFs.
+                Every paper you saved, with your own notes and a link to its PDF where one exists.
               </p>
             </div>
           </div>
@@ -121,17 +122,17 @@ export default function LibraryHub({
               <div className="w-10 h-10 rounded-sm bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 flex items-center justify-center">
                 <Folder className="w-5 h-5" />
               </div>
-              <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-mono-meta text-[10px] px-2 py-0.5 rounded-xs border border-blue-200 dark:border-blue-800 uppercase font-bold">
+              <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 font-mono-meta text-[11px] px-2 py-0.5 rounded-xs border border-blue-200 dark:border-blue-800 uppercase font-bold">
                 BibTeX & RIS
               </span>
             </div>
 
             <div className="space-y-1.5">
               <h2 className="text-lg font-serif-title font-bold text-[#1C1B18] dark:text-[#FAF9F5] group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
-                Project Collections
+                Collections
               </h2>
               <p className="text-xs text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-                Organize literature into themed research folders. Batch-export standard BibTeX (.bib) and RIS citations for seamless import into Zotero, Mendeley, and EndNote.
+                Sort saved papers into folders, for example one per chapter. Export a whole folder as BibTeX or RIS for Zotero, Mendeley or EndNote.
               </p>
             </div>
           </div>
@@ -155,17 +156,17 @@ export default function LibraryHub({
               <div className="w-10 h-10 rounded-sm bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 flex items-center justify-center">
                 <Scale className="w-5 h-5" />
               </div>
-              <span className="bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 font-mono-meta text-[10px] px-2 py-0.5 rounded-xs border border-purple-200 dark:border-purple-800 uppercase font-bold">
-                Synthesis Matrix
+              <span className="bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 font-mono-meta text-[11px] px-2 py-0.5 rounded-xs border border-purple-200 dark:border-purple-800 uppercase font-bold">
+                Compare papers
               </span>
             </div>
 
             <div className="space-y-1.5">
               <h2 className="text-lg font-serif-title font-bold text-[#1C1B18] dark:text-[#FAF9F5] group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors">
-                Comparison Matrix
+                Compare papers
               </h2>
               <p className="text-xs text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-                Compare up to 5 papers side-by-side across methodology, sample size, empirical findings, datasets, limitations, and user criteria. Save and reload synthesis sets.
+                Put up to 5 papers side by side: method, sample size, findings, datasets and limitations. You can save a comparison and open it again later.
               </p>
             </div>
           </div>
@@ -189,17 +190,17 @@ export default function LibraryHub({
               <div className="w-10 h-10 rounded-sm bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 flex items-center justify-center">
                 <Bell className="w-5 h-5" />
               </div>
-              <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-mono-meta text-[10px] px-2 py-0.5 rounded-xs border border-emerald-200 dark:border-emerald-800 uppercase font-bold">
-                Automated
+              <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-mono-meta text-[11px] px-2 py-0.5 rounded-xs border border-emerald-200 dark:border-emerald-800 uppercase font-bold">
+                By email
               </span>
             </div>
 
             <div className="space-y-1.5">
               <h2 className="text-lg font-serif-title font-bold text-[#1C1B18] dark:text-[#FAF9F5] group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
-                Scholarly Topic Alerts
+                Topic alerts
               </h2>
               <p className="text-xs text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-                Set up automated keywords and discipline monitors. Receive push notices and email summaries whenever new matching papers and preprints are indexed.
+                Name a topic and get a notice here, and by email, when a new paper on it appears.
               </p>
             </div>
           </div>
@@ -223,17 +224,17 @@ export default function LibraryHub({
               <div className="w-10 h-10 rounded-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 flex items-center justify-center">
                 <Plus className="w-5 h-5" />
               </div>
-              <span className="bg-[#FAF9F5] dark:bg-[#1C1A18] text-[#737067] dark:text-[#9E9A90] font-mono-meta text-[10px] px-2 py-0.5 rounded-xs border border-[#D5D1C7] dark:border-[#383530] uppercase font-bold">
-                Intake
+              <span className="bg-[#FAF9F5] dark:bg-[#1C1A18] text-[#737067] dark:text-[#9E9A90] font-mono-meta text-[11px] px-2 py-0.5 rounded-xs border border-[#D5D1C7] dark:border-[#383530] uppercase font-bold">
+                Reviewed
               </span>
             </div>
 
             <div className="space-y-1.5">
               <h2 className="text-lg font-serif-title font-bold text-[#1C1B18] dark:text-[#FAF9F5] group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
-                Deposit Thesis / Work
+                Deposit a thesis
               </h2>
               <p className="text-xs text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-                Submit an approved master&apos;s or undergraduate thesis, manuscript preprint, or benchmark dataset to index it into the local institutional archive.
+                Add your own thesis to the archive. Upload the PDF or give a link; the team checks it before it appears in search.
               </p>
             </div>
           </div>
@@ -257,19 +258,19 @@ export default function LibraryHub({
               <div className="w-10 h-10 rounded-sm bg-purple-100 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 flex items-center justify-center">
                 <Zap className="w-5 h-5 fill-current" />
               </div>
-              <span className="bg-purple-100 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 font-mono-meta text-[10px] px-2 py-0.5 rounded-xs border border-purple-300 dark:border-purple-700 uppercase font-bold">
-                {membershipPlan}
+              <span className="bg-purple-100 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 font-mono-meta text-[11px] px-2 py-0.5 rounded-xs border border-purple-300 dark:border-purple-700 uppercase font-bold">
+                {getPlanInfo(membershipPlan).label}
               </span>
             </div>
 
             <div className="space-y-1.5">
               <h2 className="text-lg font-serif-title font-bold text-[#1C1B18] dark:text-[#FAF9F5]">
-                Membership & Plan
+                Membership
               </h2>
               <p className="text-xs text-[#737067] dark:text-[#9E9A90] leading-relaxed">
-                {membershipPlan === 'premium'
-                  ? 'Your account has active Premium Access with unlimited exports, unconstrained search quota, and multi-format citation downloads.'
-                  : 'Upgrade to Premium via bKash or activate your 7-Day Free Trial for unlimited search queries, batch citation exports, and full-text downloads.'}
+                {getPlanInfo(membershipPlan).isPaid
+                  ? 'Your plan is active: unlimited searches, dataset search, summaries from the full paper and whole-folder citation export.'
+                  : 'Start the 7-day free trial, or pay by bKash, for unlimited searches, dataset search, summaries from the full paper and whole-folder citation export.'}
               </p>
             </div>
           </div>
@@ -280,7 +281,7 @@ export default function LibraryHub({
               onClick={onOpenMembership}
               className="w-full bg-purple-700 hover:bg-purple-800 dark:bg-purple-600 dark:hover:bg-purple-500 text-white px-4 py-2 rounded-sm text-xs font-mono-meta uppercase tracking-wider font-semibold transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
-              <span>{membershipPlan === 'premium' ? 'View Membership' : 'Explore Plans & Trial'}</span>
+              <span>{getPlanInfo(membershipPlan).isPaid ? 'View Membership' : 'Explore Plans & Trial'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

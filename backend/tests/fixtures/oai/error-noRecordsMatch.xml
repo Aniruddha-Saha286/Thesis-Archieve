@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="static/style.xsl"?>
+<!--
+  Fixture: CONFIRMED. This is the answer https://dspace.bracu.ac.bd/server/oai/request gave on
+  2026-10-06 for a date range in which nothing changed. It is sent with HTTP 200 and is not a failure.
+-->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+  <responseDate>2026-10-05T21:05:58Z</responseDate>
+  <request verb="ListRecords" metadataPrefix="oai_dc" from="2025-06-01T00:00:00Z" until="2025-06-03T00:00:00Z">https://dspace.bracu.ac.bd/server/oai/request</request>
+  <error code="noRecordsMatch">No matches for the query</error>
+</OAI-PMH>

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { REPORT_ISSUE_TYPES } = require('../utils/reportIssueType');
 
 const reportSchema = new mongoose.Schema({
   recordId: {
@@ -11,8 +12,8 @@ const reportSchema = new mongoose.Schema({
   },
   issueType: {
     type: String,
-    enum: ['dead-link', 'metadata-inaccuracy', 'retraction-unflagged', 'copyright-claim', 'other'],
-    default: 'dead-link',
+    enum: REPORT_ISSUE_TYPES,
+    default: 'other',
   },
   description: {
     type: String,

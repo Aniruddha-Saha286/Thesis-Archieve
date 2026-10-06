@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="static/style.xsl"?>
+<!--
+  Fixture for tests/repositoryHarvester.test.js
+
+  Mirrors a live answer from https://dspace.bracu.ac.bd/server/oai/request
+  (verb=ListRecords, metadataPrefix=dim), looked at on 2026-10-06.
+
+  CONFIRMED against the live server:
+    - the OAI-PMH envelope, the <request> element, the header layout and the setSpec style
+    - record 1: the complete list and order of dim:field elements, their attributes and all
+      non-personal values of the real record oai:dspace.bracu.ac.bd:10361/22810
+      (personal names and student ID numbers were replaced with made-up ones; the abstract is shortened)
+    - the dc.type value "Internship Report" used for record 2
+    - "&#xd;" line breaks inside abstracts (seen in the oai_dc version of the same record)
+  ASSUMED (standard OAI-PMH / DSpace behaviour, not seen on a live page):
+    - records 2, 4 and 5 (written by hand in the same style)
+    - record 3, the deleted header (the server declares deletedRecord "transient")
+    - the text of the resumptionToken. The token style "prefix/from/until/set/offset" was
+      confirmed on the same server for ListSets ("////100").
+-->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+  <responseDate>2026-10-05T21:05:58Z</responseDate>
+  <request verb="ListRecords" metadataPrefix="dim" from="2025-09-01T00:00:00Z">https://dspace.bracu.ac.bd/server/oai/request</request>
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/22810</identifier>
+        <datestamp>2026-07-16T04:21:00Z</datestamp>
+        <setSpec>com_10361_28391</setSpec>
+        <setSpec>com_10361_28390</setSpec>
+        <setSpec>com_10361_28388</setSpec>
+        <setSpec>col_10361_28396</setSpec>
+      </header>
+      <metadata>
+        <dim:dim xmlns:dim="http://www.dspace.org/xmlns/dspace/dim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.dspace.org/xmlns/dspace/dim http://www.dspace.org/schema/dim.xsd">
+          <dim:field mdschema="dc" element="contributor" qualifier="advisor">Bin Karim, Tahmid</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Roy, Anika</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Das, Mitu</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Hasan, Sadia Binte</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="department">Department of Mathematics and Natural Sciences</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="accessioned">2024-05-14T04:06:06Z</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="available">2024-05-14T04:06:06Z</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="copyright">©2023</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="issued">2023-11</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="other">ID 00000001</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="other">ID 00000002</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="other">ID 00000003</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="uri">http://hdl.handle.net/10361/22810</dim:field>
+          <dim:field mdschema="dc" element="description" lang="en_US">This thesis is submitted in partial fulfillment of the requirements for the degree of Bachelor of Science in Biotechnology, 2023.</dim:field>
+          <dim:field mdschema="dc" element="description">Catalogued from PDF version of thesis.</dim:field>
+          <dim:field mdschema="dc" element="description">Includes bibliographical references (pages 58-60).</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="abstract" lang="en_US">Bacteriophages, commonly referred to as bacterial viruses, have long been recognized as natural&#xd;
+adversaries of bacteria. They find application in medical settings for eliminating bacterial&#xd;
+infections. This study seeks to explore whether the free DNA introduced by Bacteriophages&#xd;
+influences the formation of bacterial biofilms.</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="statementofresponsibility">Anika Roy</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="statementofresponsibility">Mitu Das</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="statementofresponsibility">Sadia Binte Hasan</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="degree">Bachelor of Science in Biotechnology</dim:field>
+          <dim:field mdschema="dc" element="format" qualifier="extent">60 pages</dim:field>
+          <dim:field mdschema="dc" element="language" qualifier="iso" lang="en_US">en</dim:field>
+          <dim:field mdschema="dc" element="publisher" lang="en_US">BRAC University</dim:field>
+          <dim:field mdschema="dc" element="rights">Brac University theses are protected by copyright. They may be viewed from this source for any purpose, but reproduction or distribution in any format is prohibited without written permission.</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Free DNA</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Surface water</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Bacteria</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Bacterial biofilms</dim:field>
+          <dim:field mdschema="dc" element="subject" qualifier="lcsh">Water</dim:field>
+          <dim:field mdschema="dc" element="subject" qualifier="lcsh">Biofilms</dim:field>
+          <dim:field mdschema="dc" element="subject" qualifier="lcsh">Bacteria</dim:field>
+          <dim:field mdschema="dc" element="title" lang="en_US">Effect of free DNA of environment surface water on bacterial biofilm formation</dim:field>
+          <dim:field mdschema="dc" element="type" lang="en_US">Thesis</dim:field>
+          <dim:field mdschema="datacite" element="rights">Open Access</dim:field>
+          <dim:field mdschema="bracu" element="type" qualifier="group">Student Works</dim:field>
+          <dim:field mdschema="bracu" element="degree" qualifier="level">Undergraduate</dim:field>
+          <dim:field mdschema="others" element="access-status">open.access</dim:field>
+        </dim:dim>
+      </metadata>
+    </record>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/23001</identifier>
+        <datestamp>2025-09-03T06:10:00Z</datestamp>
+        <setSpec>col_10361_28400</setSpec>
+      </header>
+      <metadata>
+        <dim:dim xmlns:dim="http://www.dspace.org/xmlns/dspace/dim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.dspace.org/xmlns/dspace/dim http://www.dspace.org/schema/dim.xsd">
+          <dim:field mdschema="dc" element="contributor" qualifier="advisor">Chowdhury, Nabil</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Akter, Rumana</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="department">BRAC Business School</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="issued">2024-08</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="uri">http://hdl.handle.net/10361/23001</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="abstract" lang="en_US">This internship report describes three months of work in the retail banking division of a commercial bank, covering account opening, customer service and daily reconciliation tasks.</dim:field>
+          <dim:field mdschema="dc" element="publisher" lang="en_US">BRAC University</dim:field>
+          <dim:field mdschema="dc" element="title" lang="en_US">General banking activities of a commercial bank</dim:field>
+          <dim:field mdschema="dc" element="type" lang="en_US">Internship Report</dim:field>
+        </dim:dim>
+      </metadata>
+    </record>
+    <record>
+      <header status="deleted">
+        <identifier>oai:dspace.bracu.ac.bd:10361/9999</identifier>
+        <datestamp>2025-09-04T10:00:00Z</datestamp>
+        <setSpec>com_10361_28391</setSpec>
+        <setSpec>col_10361_28396</setSpec>
+      </header>
+    </record>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/23002</identifier>
+        <datestamp>2025-09-05T08:00:00Z</datestamp>
+        <setSpec>col_10361_28396</setSpec>
+      </header>
+      <metadata>
+        <dim:dim xmlns:dim="http://www.dspace.org/xmlns/dspace/dim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.dspace.org/xmlns/dspace/dim http://www.dspace.org/schema/dim.xsd">
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Islam, Farhan</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="department">Department of Architecture</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="issued">2021</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="uri">http://hdl.handle.net/10361/23002</dim:field>
+          <dim:field mdschema="dc" element="description">Catalogued from PDF version of thesis.</dim:field>
+          <dim:field mdschema="dc" element="publisher" lang="en_US">BRAC University</dim:field>
+          <dim:field mdschema="dc" element="title" lang="en_US">A riverside community centre for Keraniganj</dim:field>
+          <dim:field mdschema="dc" element="type" lang="en_US">Thesis</dim:field>
+        </dim:dim>
+      </metadata>
+    </record>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/23003</identifier>
+        <datestamp>2025-09-06T09:30:00Z</datestamp>
+        <setSpec>com_10361_28391</setSpec>
+        <setSpec>col_10361_28410</setSpec>
+      </header>
+      <metadata>
+        <dim:dim xmlns:dim="http://www.dspace.org/xmlns/dspace/dim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.dspace.org/xmlns/dspace/dim http://www.dspace.org/schema/dim.xsd">
+          <dim:field mdschema="dc" element="contributor" qualifier="advisor">Rahman, Shafiq</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="advisor">Alam, Nusrat</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Karim, Tanvir</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="department">Department of Computer Science and Engineering</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="accessioned">2024-02-11T05:00:00Z</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="available">2024-02-11T05:00:00Z</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="copyright">©2022</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="issued">2022-09</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="uri">http://hdl.handle.net/10361/23003</dim:field>
+          <dim:field mdschema="dc" element="description" lang="en_US">This thesis is submitted in partial fulfillment of the requirements for the degree of Master of Science in Computer Science and Engineering, 2022.</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="abstract" lang="en_US">&lt;p&gt;Social media posts in Bangla mix scripts &amp;amp; dialects, so tools built for English do badly on them.&lt;/p&gt;&lt;p&gt;We fine-tune a transformer on 40,000 labelled posts and reach an F1 score of 0.91 (p &lt; 0.05, n &gt; 30) on a held-out set, using CO&lt;sub&gt;2&lt;/sub&gt;-aware training&amp;nbsp;schedules.&lt;/p&gt;</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="degree">M.Sc. in Computer Science and Engineering</dim:field>
+          <dim:field mdschema="dc" element="publisher" lang="en_US">Brac University</dim:field>
+          <dim:field mdschema="dc" element="rights">Brac University theses are protected by copyright. They may be viewed from this source for any purpose, but reproduction or distribution in any format is prohibited without written permission.</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Natural language processing</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Sentiment analysis</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Machine learning</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Bangla language</dim:field>
+          <dim:field mdschema="dc" element="title" lang="en_US">Sentiment analysis of   Bangla social media posts &amp;amp; comments using &lt;i&gt;transformer&lt;/i&gt; models</dim:field>
+          <dim:field mdschema="dc" element="type" lang="en_US">Thesis</dim:field>
+          <dim:field mdschema="bracu" element="degree" qualifier="level">Postgraduate</dim:field>
+        </dim:dim>
+      </metadata>
+    </record>
+    <resumptionToken completeListSize="6" cursor="0">dim/2025-09-01T00:00:00Z///100</resumptionToken>
+  </ListRecords>
+</OAI-PMH>

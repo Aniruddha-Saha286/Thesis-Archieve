@@ -43,8 +43,8 @@ export default class ErrorBoundary extends React.Component {
                 <span className="font-serif-title text-lg tracking-tight text-[#1C1B18] block leading-none">
                   The Thesis Archive
                 </span>
-                <span className="text-[10px] font-mono-meta text-[#737067] uppercase tracking-wider">
-                  Academic Depository & Research Vault
+                <span className="text-[11px] font-mono-meta text-[#737067] uppercase tracking-wider">
+                  The Thesis Archive
                 </span>
               </div>
             </div>

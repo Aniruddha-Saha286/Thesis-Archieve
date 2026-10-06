@@ -1,0 +1,90 @@
+% Test fixture for tests/fullText.test.js. Everything in this paper is invented.
+%
+% Unlike the other fixtures this one is typeset by LaTeX, as most real papers are, so that the
+% reader is tested against real TeX output: a title and abstract across both columns, words
+% hyphenated at line ends, web addresses broken over two lines, a table that floats into the
+% middle of a paragraph, a footnote with a link, a "Limitations." paragraph heading and a
+% numbered reference list with other people's links.
+%
+% Rebuild (only needed when this file changes; the PDF is committed):
+%     SOURCE_DATE_EPOCH=1700000000 pdflatex latex_two_column.tex   (run twice)
+\documentclass[10pt,twocolumn]{article}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{times}
+\usepackage{url}
+\usepackage{booktabs}
+\title{Detecting Water Stress in Tea Plants from Low-Cost Thermal Images}
+\author{Rina Das \and Paul Keller \and Min-Jung Seo}
+\date{}
+\begin{document}
+\twocolumn[
+\maketitle
+\begin{abstract}
+Water stress lowers tea yields long before leaves show visible damage. We study whether inexpensive thermal cameras mounted on a phone can detect stress early. On 2,300 images from four estates our classifier reaches an F1 score of 0.87, and a simplified index computed on the phone reaches 0.81. The approach needs no network connection and costs under two hundred dollars per estate.
+\end{abstract}
+\vspace{1em}
+]
+\section{Introduction}
+Tea is grown on steep slopes where irrigation is expensive and uneven. Estate managers decide where to irrigate by walking the rows and judging the colour of the leaves, which is slow and subjective. Stressed plants close their stomata and warm up by a few degrees, so canopy temperature is an established indicator of stress~\cite{jones2004}. Scientific thermal cameras are costly, but clip-on cameras for phones have become cheap enough for routine use.
+
+This paper asks whether such cameras are accurate enough. We make three contributions: a labelled dataset of thermal and visible images, a comparison of a learned classifier with a hand-computed stress index, and a field trial in which managers used the phone application for one dry season. The comparison matters because a hand-computed index can be explained to a manager in a sentence, whereas a learned classifier cannot.
+
+\section{Related Work}
+The crop water stress index was introduced for cereals and later adapted to orchards~\cite{idso1981}. For tea, earlier studies used research-grade cameras under controlled conditions. Low-cost cameras have a coarse resolution of 160 by 120 pixels and drift with ambient temperature, which earlier work corrected with a reference panel. Deep networks for thermal images are usually pre-trained on visible images, as in the well-known implementation at \url{https://github.com/other-lab/thermal-nets}.
+
+\section{Method}
+\subsection{Data collection}
+We photographed 2,300 bushes on four estates between March and June. Each bush was photographed with a visible and a thermal camera within ten seconds. Leaf water potential was measured with a pressure chamber on the same day and used as the ground truth. Bushes below a threshold of minus 1.2 MPa were labelled as stressed.\footnote{The measurement protocol is described at \url{https://osf.io/ab3cd}.}
+
+\subsection{Models}
+The classifier is a small convolutional network with 1.1 million parameters. The stress index subtracts the temperature of a wet reference cloth from the canopy temperature and divides by the difference between a dry and a wet reference. The following steps are applied to every image:
+\begin{enumerate}
+\item Align the thermal and the visible image.
+\item Remove soil pixels with a colour threshold.
+\item Average the remaining canopy pixels.
+\end{enumerate}
+Table 1 lists the estates. Figure 1 is omitted in this version.
+
+\begin{table}[t]
+\caption{Estates in the dataset and the number of bushes photographed on each of them.}
+\centering
+\begin{tabular}{lrr}
+\toprule
+Estate & Bushes & Stressed \\
+\midrule
+Upper Valley & 610 & 201 \\
+Rangapani & 540 & 133 \\
+Hill Top & 590 & 240 \\
+Lakeside & 560 & 98 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Results}
+The classifier reaches an F1 score of 0.87 on held-out estates and the index reaches 0.81. Errors of the index concentrate on windy days, when the reference cloth dries quickly. Managers who used the application irrigated 18 percent less water over the season without a measurable loss of yield. We did not observe any difference between morning and afternoon images once the reference correction was applied.
+
+\subsection{Effect of image resolution}
+Down-sampling the thermal images to 80 by 60 pixels lowers the F1 score of the classifier by only 0.02, which suggests that even cheaper sensors would be usable.
+
+\section{Discussion}
+The results show that inexpensive thermal cameras carry enough signal for irrigation decisions. The hand-computed index is nearly as accurate as the classifier and is easier to explain to managers, who were reluctant to trust a number they could not check.
+
+\paragraph{Limitations.} All four estates lie in one district and share a single tea cultivar, so the thresholds may not transfer to other regions. The season we studied was unusually dry, and we did not test the method under frequent rain. Leaf water potential was measured on a sub-sample of bushes, which limits the precision of our labels.
+
+\paragraph{Practical implications.} Estates can adopt the index without any training data, provided they carry a reference cloth. A single phone can survey roughly two hectares per hour.
+
+\section{Conclusion}
+Clip-on thermal cameras can detect water stress in tea early enough to guide irrigation. A simple index performs almost as well as a learned classifier. In future work we will extend the dataset to two further districts and study whether the index can be computed without a reference cloth.
+
+\section*{Data and Code Availability}
+The images and labels are available at \url{https://doi.org/10.5281/zenodo.1234567}, and the code used for all experiments is available at \url{https://github.com/tea-lab/thermal-stress-detection-toolkit-for-phones}.
+
+\section*{Acknowledgements}
+We thank the estate managers for their patience. This work was funded by the Tea Research Fund.
+
+\begin{thebibliography}{9}
+\bibitem{jones2004} H. G. Jones. Irrigation scheduling: advantages and pitfalls of plant-based methods. \emph{Journal of Experimental Botany}, 55(407):2427--2436, 2004.
+\bibitem{idso1981} S. B. Idso, R. D. Jackson, P. J. Pinter, R. J. Reginato, and J. L. Hatfield. Normalizing the stress-degree-day parameter for environmental variability. \emph{Agricultural Meteorology}, 24:45--55, 1981. \url{https://doi.org/10.1016/0002-1571(81)90032-7}.
+\bibitem{repo} A. Author. A thermal toolbox. \url{https://github.com/someone/else-toolbox}, 2020.
+\end{thebibliography}
+\end{document}

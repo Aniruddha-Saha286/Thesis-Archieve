@@ -10,7 +10,8 @@ const PaperSummary = require('../models/PaperSummary');
 const { isValidHttpUrl, isPrivateIpOrHost } = require('../utils/urlValidator');
 const { reserveUsage, releaseReservedCredit } = require('./usageReservationService');
 
-const PROMPT_VERSION = 'v2';
+// v3: one sentence per heading, no fixed filler text, honest "not AI" label (older cached summaries are regenerated)
+const PROMPT_VERSION = 'v3';
 const MODEL_VERSION = 'grounded-extractor-v2';
 const memorySummaryCache = new Map();
 
@@ -36,22 +37,32 @@ function extractKeyTerms(text) {
     'paper', 'study', 'results', 'using', 'based', 'model', 'approach', 'system',
     'proposed', 'analysis', 'research', 'present', 'between', 'these', 'their', 'data',
     'method', 'different', 'various', 'during', 'through', 'about', 'under', 'further',
+    'thesis', 'studies', 'also', 'into', 'than', 'such', 'show', 'shows',
   ]);
 
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 3 && !stopwords.has(w) && !/^\d+$/.test(w));
-
+  // Count words case-insensitively, but remember how the paper itself writes each one,
+  // so names keep their form ("BanglaBERT", "XLM-R") instead of becoming "Banglabert", "Xlm-r".
   const freq = new Map();
-  for (const w of words) {
+  const asWritten = new Map();
+  const rawWords = text.replace(/[^A-Za-z0-9\s-]/g, ' ').split(/\s+/);
+  for (const raw of rawWords) {
+    const original = raw.replace(/^-+|-+$/g, '');
+    const w = original.toLowerCase();
+    if (w.length <= 3 || stopwords.has(w) || /^\d+$/.test(w)) continue;
     freq.set(w, (freq.get(w) || 0) + 1);
+    const seen = asWritten.get(w);
+    // Prefer a spelling with capitals inside the word; a capital only at the start is usually just the start of a sentence
+    if (!seen || (!/[A-Z]/.test(seen.slice(1)) && /[A-Z]/.test(original.slice(1)))) {
+      asWritten.set(w, original);
+    }
   }
 
   const sorted = Array.from(freq.entries())
     .sort((a, b) => b[1] - a[1])
-    .map(([w]) => w.charAt(0).toUpperCase() + w.slice(1));
+    .map(([w]) => {
+      const written = asWritten.get(w) || w;
+      return /[A-Z]/.test(written.slice(1)) ? written : w;
+    });
 
   return sorted.slice(0, 6);
 }
@@ -66,9 +77,11 @@ function generateCautiousInferredScope(abstractText, dataset, methodology, objec
   // Extract a clean benchmark / dataset snippet if available
   let samplePhrase = '';
   if (dataset) {
-    const match = dataset.match(/(?:evaluated on|tested on|benchmark|dataset|corpus|sample of|cohort of)\s+([^,.;]+)/i);
-    if (match && match[1]) {
-      samplePhrase = match[1].trim();
+    // Stop at a clause break (", " or ; or the sentence end) but not inside a number such as 12,000
+    const match = dataset.match(/(?:evaluated on|tested on|benchmark|dataset|corpus|sample of|cohort of)\s+((?:[^,.;]|,(?=\d)|\.(?=\d))+)/i);
+    const cleaned = match && match[1] ? match[1].trim().replace(/^(?:of|on|with|for)\s+/i, '') : '';
+    if (cleaned && cleaned.split(/\s+/).length >= 2) {
+      samplePhrase = cleaned.split(/\s+/).slice(0, 10).join(' ');
     } else {
       const words = dataset.split(/\s+/).slice(0, 8).join(' ');
       samplePhrase = words.replace(/[.;]+$/, '');
@@ -211,51 +224,78 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     limitations = foundLimitationSentences.slice(0, 2).join(' ');
   }
 
-  // 3. Extract other sections without conflicting with limitation statements
-  for (const s of sentences) {
-    const sLower = s.toLowerCase();
-    const isLimSentence = foundLimitationSentences.includes(s);
+  // 3. Sort the remaining sentences under headings.
+  // Rules that keep headings truthful:
+  //   - a limitation or future-work sentence is never reused as a finding or a method
+  //   - a sentence that reports a result (a percentage, a metric, "outperforms"...) is a finding, not a method
+  //   - when no sentence fits a heading, the heading stays empty instead of borrowing a sentence by position
+  const isLimSentence = (s) => foundLimitationSentences.includes(s);
+  const looksLikeResult = (sLower) =>
+    /\d+(?:\.\d+)?\s?%/.test(sLower) ||
+    /\b(?:accuracy|f1|f-score|f-measure|precision|recall|auc|bleu|rouge|rmse|mae|error rate)\b/.test(sLower) ||
+    findKeywords.some((k) => sLower.includes(k));
+  const methodVerbs = ['fine-tun', 'we train', 'we evaluate', 'we apply', 'we use ', 'we employ', 'we design', 'we build', 'we develop', 'is trained', 'are trained'];
 
-    if (!objective && objKeywords.some((k) => sLower.includes(k)) && !isLimSentence) {
-      objective = s;
-    }
-    if (!methodology && methKeywords.some((k) => sLower.includes(k)) && !isLimSentence) {
-      methodology = s;
-    }
-    if (!dataset && dataKeywords.some((k) => sLower.includes(k))) {
-      dataset = s;
-    }
-    if (!findings && findKeywords.some((k) => sLower.includes(k)) && !isLimSentence) {
-      findings = s;
-    }
-    if (!contributions && contribKeywords.some((k) => sLower.includes(k)) && !isLimSentence) {
-      contributions = s;
-    }
-    if (!future && futureKeywords.some((k) => sLower.includes(k))) {
+  for (const s of sentences) {
+    if (!future && futureKeywords.some((k) => s.toLowerCase().includes(k))) {
       future = s;
     }
   }
 
-  // Fallbacks if distinct keywords were not segregated
+  for (const s of sentences) {
+    if (!findings && !isLimSentence(s) && s !== future && looksLikeResult(s.toLowerCase())) {
+      findings = s;
+    }
+  }
+
+  for (const s of sentences) {
+    const sLower = s.toLowerCase();
+    const reusable = !isLimSentence(s) && s !== future;
+
+    if (!objective && reusable && objKeywords.some((k) => sLower.includes(k))) {
+      objective = s;
+    }
+    if (
+      !methodology &&
+      reusable &&
+      s !== findings &&
+      (methKeywords.some((k) => sLower.includes(k)) || methodVerbs.some((k) => sLower.includes(k)))
+    ) {
+      methodology = s;
+    }
+    if (!dataset && s !== future && dataKeywords.some((k) => sLower.includes(k))) {
+      dataset = s;
+    }
+    if (!contributions && reusable && contribKeywords.some((k) => sLower.includes(k))) {
+      contributions = s;
+    }
+  }
+
+  // Fallbacks, only where they cannot mislabel a sentence
   if (!objective && sentences[0]) {
     objective = sentences[0];
   }
   if (!findings) {
     for (let i = sentences.length - 1; i >= 0; i--) {
-      if (!foundLimitationSentences.includes(sentences[i])) {
-        findings = sentences[i];
+      const s = sentences[i];
+      if (!isLimSentence(s) && s !== future && s !== objective && s !== methodology) {
+        findings = s;
         break;
       }
     }
   }
-  if (!findings && sentences.length > 2) {
-    findings = sentences[sentences.length - 1];
-  }
-  if (!methodology && sentences.length > 1) {
-    methodology = !foundLimitationSentences.includes(sentences[1]) ? sentences[1] : (sentences[2] || sentences[1]);
+  if (!methodology) {
+    for (let i = 1; i < sentences.length; i++) {
+      const s = sentences[i];
+      if (!isLimSentence(s) && s !== future && s !== findings && s !== objective) {
+        methodology = s;
+        break;
+      }
+    }
   }
 
-  const tldrSentences = sentences.slice(0, Math.min(3, sentences.length)).join(' ');
+  // The takeaway is one sentence: the opening sentence of the abstract
+  const tldrSentences = sentences[0];
   const keyTerms = extractKeyTerms(abstractText);
 
   // Substantive, domain-aware inferred scope calculation
@@ -274,6 +314,18 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
   if (!limitations) missing.push('Author-stated limitations not detailed in abstract');
   if (!future) missing.push('Future research directions not explicitly outlined in abstract');
 
+  // Tells the page which headings really came from the paper (true) and which hold only a
+  // "not stated" placeholder (false), so the page never has to guess from the wording.
+  const found = {
+    objective: Boolean(objective),
+    methodology: Boolean(methodology),
+    dataset: Boolean(dataset),
+    findings: Boolean(findings),
+    contributions: Boolean(contributions),
+    limitations: Boolean(limitations),
+    futureWork: Boolean(future),
+  };
+
   const confidenceRating = (objective && methodology && findings) ? 'high' : (objective || methodology ? 'moderate' : 'cautious');
 
   const fallbackLimEn = 'None explicitly stated by the authors in the abstract text.';
@@ -283,7 +335,7 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     return {
       tldr: `[সারাংশ] ${tldrSentences}`,
       oneSentenceTakeaway: `[সারাংশ] ${tldrSentences}`,
-      plainLanguageOverview: tldrSentences,
+      plainLanguageOverview: '',
       researchObjective: objective || 'নির্দিষ্ট লক্ষ্য উল্লিখিত হয়নি',
       researchQuestion: objective || 'নির্দিষ্ট লক্ষ্য উল্লিখিত হয়নি',
       methodology: methodology || 'পদ্ধতি উল্লিখিত হয়নি',
@@ -292,28 +344,29 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
       dataOrSample: dataset || 'তথ্যসেট বা নমুনা উল্লিখিত নেই',
       mainFindings: findings || 'প্রধান ফলাফল উল্লিখিত নেই',
       keyFindings: findings || 'প্রধান ফলাফল উল্লিখিত নেই',
-      mainContributions: contributions || objective || 'প্রধান অবদান উল্লিখিত নেই',
+      mainContributions: contributions || '',
       limitations: limitations || fallbackLimBn,
       authorStatedLimitations: limitations || fallbackLimBn,
       inferredLimitations: inferredScope,
       cautiousInferredLimitations: inferredScope,
       futureWork: future || 'ভবিষ্যৎ কাজের দিকনির্দেশ উল্লিখিত নেই',
-      relevanceForThesisResearch: 'সম্পর্কিত বিষয়ে সাহিত্য পর্যালোচনা এবং পদ্ধতিগত রেফারেন্স হিসেবে উপযোগী।',
+      relevanceForThesisResearch: '',
       missingInformation: missing.join('; '),
       confidence: confidenceRating,
+      found,
       isAiGenerated: false,
       generationType: 'grounded_extractive',
       keyTerms,
       evidence: [],
       evidenceReferences: [],
-      disclaimer: 'কৃত্রিম বুদ্ধিমত্তা দ্বারা সংক্ষিপ্তকৃত; মূল গবেষণাপত্রের সাথে মিলিয়ে নিন।',
+      disclaimer: 'গবেষণাপত্রের নিজস্ব বাক্য থেকে নিয়ম অনুযায়ী বাছাই করা; এটি কৃত্রিম বুদ্ধিমত্তার লেখা নয়। মূল গবেষণাপত্রের সাথে মিলিয়ে নিন।',
     };
   }
 
   return {
     tldr: tldrSentences,
     oneSentenceTakeaway: tldrSentences,
-    plainLanguageOverview: tldrSentences,
+    plainLanguageOverview: '',
     researchObjective: objective || 'Objective not explicitly distinguished in abstract text.',
     researchQuestion: objective || 'Objective not explicitly distinguished in abstract text.',
     methodology: methodology || 'Methodology details not separated in available abstract text.',
@@ -322,21 +375,22 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     dataOrSample: dataset || 'Not reported',
     mainFindings: findings || 'Findings not explicitly segregated in abstract text.',
     keyFindings: findings || 'Findings not explicitly segregated in abstract text.',
-    mainContributions: contributions || objective || 'Core contribution presented in the reported methodology.',
+    mainContributions: contributions || '',
     limitations: limitations || fallbackLimEn,
     authorStatedLimitations: limitations || fallbackLimEn,
     inferredLimitations: inferredScope,
     cautiousInferredLimitations: inferredScope,
     futureWork: future || 'Not detailed in available abstract text.',
-    relevanceForThesisResearch: 'Useful as a methodological benchmark, background citation, or comparative baseline in related thesis inquiries.',
+    relevanceForThesisResearch: '',
     missingInformation: missing.join('; '),
     confidence: confidenceRating,
+    found,
     isAiGenerated: false,
     generationType: 'grounded_extractive',
     keyTerms,
     evidence: [],
     evidenceReferences: [],
-    disclaimer: 'AI-generated; verify against the original paper',
+    disclaimer: "Sentences taken from the paper's own text by keyword rules. Not written by AI. Check the original paper.",
   };
 }
 
@@ -418,7 +472,7 @@ async function getOrGeneratePaperSummary({
       enabled: true,
       coverage: 'unavailable',
       message:
-        'Insufficient abstract or authorized full-text content available for grounded summarization. Project Panther strictly avoids hallucinating paper findings.',
+        'This record has no abstract long enough to summarise, so no summary is shown. Open the paper itself to read it.',
     };
   }
 

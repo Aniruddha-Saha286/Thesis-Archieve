@@ -250,7 +250,7 @@ function buildHtmlTemplate({ badgeLabel, badgeBg = '#FEF3C7', badgeColor = '#924
     <!-- Depository Footer -->
     <div style="background-color: #F9FAFB; padding: 16px 28px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #9CA3AF; text-align: center;">
       <p style="margin: 0 0 4px 0;">
-        Project Panther — Unified Academic Thesis &amp; Research Discovery
+        The Thesis Archive — theses and research papers in one search
       </p>
       <p style="margin: 0; font-size: 11px;">
         Automated Depository Notice &bull; Asia/Dhaka Standard Time &bull; Do not reply directly to this automated email.
@@ -398,6 +398,63 @@ Review and resolve in Admin Portal -> Grievance & Reports Desk.
   `.trim();
 
   return sendEmail({ to: adminEmail, subject, html, text });
+}
+
+/**
+ * Alerts Admin when a signed-in user sends a message to the team (bug, idea, complaint, question).
+ * Fail-safe: any problem while building or sending is logged and returned, never thrown,
+ * so the user's message is still saved and answered normally.
+ */
+async function notifyAdminNewFeedback({ feedbackId, category, categoryLabel, message, pageContext, userName, userEmail } = {}) {
+  try {
+    const adminEmail = getAdminNotificationEmail();
+    const label = categoryLabel || category || 'Feedback';
+    // A name is typed by the user, so keep it on one line and short before it goes in the subject.
+    const sender = String(userName || userEmail || 'A user').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const subject = `[Feedback] ${label} — from ${sender}`;
+    const body = String(message || '').trim() || 'No message text.';
+
+    const html = buildHtmlTemplate({
+      badgeLabel: 'User Feedback',
+      badgeBg: '#E0E7FF',
+      badgeColor: '#3730A3',
+      title: 'New Message from a User',
+      introText: 'A signed-in user has sent a message to the team from inside The Thesis Archive.',
+      items: [
+        { label: 'From', value: userName || 'Not specified' },
+        { label: 'Email', value: userEmail || 'Not specified' },
+        { label: 'About', value: label },
+        // Escaped first, then line breaks restored, so the message keeps its paragraphs safely.
+        { label: 'Message', value: escapeHtml(body).replace(/\n/g, '<br>'), isHtml: true },
+        { label: 'Sent From Page', value: pageContext || 'Not specified' },
+        { label: 'Feedback ID', value: String(feedbackId || 'N/A') },
+        { label: 'Received At', value: formatDhakaDateTime(new Date()) },
+      ],
+      footerNote: 'Please open the feedback queue in the Admin Portal to reply. The user is notified in the app and by email when you answer.',
+    });
+
+    const text = `
+[The Thesis Archive - User Feedback]
+${subject}
+
+A user has sent a message to the team:
+- From: ${userName || 'Not specified'} (${userEmail || 'N/A'})
+- About: ${label}
+- Sent From Page: ${pageContext || 'Not specified'}
+- Feedback ID: ${feedbackId || 'N/A'}
+- Received At: ${formatDhakaDateTime(new Date())}
+
+Message:
+${body}
+
+Reply from Admin Portal -> Feedback queue.
+    `.trim();
+
+    return await sendEmail({ to: adminEmail, subject, html, text });
+  } catch (err) {
+    console.error('[EmailService] Feedback notification build error:', err.message);
+    return { success: false, error: err.message };
+  }
 }
 
 // =========================================================================
@@ -720,6 +777,60 @@ Your editorial capabilities on The Thesis Archive have been updated:
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
+/**
+ * Alerts User when the team replies to a message they sent from the feedback form.
+ * Fail-safe: any problem while building or sending is logged and returned, never thrown,
+ * so the reply is still saved and shown in the app.
+ */
+async function notifyUserFeedbackReply({ userEmail, userName, categoryLabel, originalMessage, reply } = {}) {
+  try {
+    if (!userEmail || !isValidEmail(userEmail)) {
+      return { success: false, reason: 'NO_RECIPIENT' };
+    }
+    const subject = `Reply to Your Feedback — The Thesis Archive`;
+    const replyText = String(reply || '').trim();
+    const original = String(originalMessage || '').trim();
+
+    const html = buildHtmlTemplate({
+      badgeLabel: 'Reply Received',
+      badgeBg: '#DEF7EC',
+      badgeColor: '#03543F',
+      title: 'We Have Replied to Your Message',
+      introText: `Hello <strong>${escapeHtml(userName || 'Scholar')}</strong>,<br><br>Thank you for writing to us. Our team has read your message and replied below.`,
+      items: [
+        { label: 'About', value: categoryLabel || 'Feedback' },
+        // Escaped first, then line breaks restored, so both texts keep their paragraphs safely.
+        { label: 'Your Message', value: escapeHtml(original || 'Not available').replace(/\n/g, '<br>'), isHtml: true },
+        { label: 'Our Reply', value: escapeHtml(replyText).replace(/\n/g, '<br>'), isHtml: true },
+        { label: 'Replied At', value: formatDhakaDateTime(new Date()) },
+      ],
+      footerNote: 'To continue the conversation, sign in to The Thesis Archive and send us a new message from the feedback form.',
+    });
+
+    const text = `
+[The Thesis Archive]
+Reply to Your Feedback
+
+Hello ${userName || 'Scholar'},
+
+Thank you for writing to us. Our team has replied to your message.
+
+Your message:
+${original || 'Not available'}
+
+Our reply:
+${replyText}
+
+To continue the conversation, sign in to The Thesis Archive and send us a new message from the feedback form.
+    `.trim();
+
+    return await sendEmail({ to: userEmail, subject, html, text });
+  } catch (err) {
+    console.error('[EmailService] Feedback reply email build error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 // =========================================================================
 // TEST & AUDIT HELPERS
 // =========================================================================
@@ -744,6 +855,7 @@ module.exports = {
   notifyAdminNewVerification,
   notifyAdminNewPayment,
   notifyAdminNewReport,
+  notifyAdminNewFeedback,
   notifyUserVerificationRequested,
   notifyUserPaymentSubmitted,
   notifyUserReportSubmitted,
@@ -752,6 +864,7 @@ module.exports = {
   notifyUserVerificationApproved,
   notifyUserEditorAppointed,
   notifyUserEditorPermissionsUpdated,
+  notifyUserFeedbackReply,
   getSentEmails,
   clearSentEmails,
   resetTransporterForTesting,

@@ -135,9 +135,19 @@ const paperSummarySchema = new mongoose.Schema(
           quote: { type: String, default: '' },
         },
       ],
+      // Which headings were really found in the paper's text (false = placeholder only)
+      found: {
+        objective: { type: Boolean, default: false },
+        methodology: { type: Boolean, default: false },
+        dataset: { type: Boolean, default: false },
+        findings: { type: Boolean, default: false },
+        contributions: { type: Boolean, default: false },
+        limitations: { type: Boolean, default: false },
+        futureWork: { type: Boolean, default: false },
+      },
       disclaimer: {
         type: String,
-        default: 'AI-generated; verify against the original paper',
+        default: "Sentences taken from the paper's own text by keyword rules. Not written by AI. Check the original paper.",
       },
     },
     modelVersion: {

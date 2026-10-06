@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { Scale, Trash2, Save, FileText, Check, Download, X, FolderOpen, Plus, Clock, ExternalLink } from 'lucide-react';
 
@@ -10,6 +11,7 @@ export default function ComparisonMatrixModal({
   onClear,
   onSetComparisonPapers,
 }) {
+  useEscapeToClose(onClose, isOpen);
   const [viewTab, setViewTab] = useState('matrix'); // 'matrix' | 'saved'
   const [matrixTitle, setMatrixTitle] = useState('Comparative Literature Matrix');
   const [currentMatrixId, setCurrentMatrixId] = useState(null);
@@ -169,7 +171,7 @@ export default function ComparisonMatrixModal({
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Literature Review Comparison Matrix</h2>
                 {currentMatrixId && (
-                  <span className="bg-purple-100 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[10px] font-mono-meta px-2 py-0.5 rounded-sm font-bold">
+                  <span className="bg-purple-100 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[11px] font-mono-meta px-2 py-0.5 rounded-sm font-bold">
                     Editing Saved Matrix
                   </span>
                 )}
@@ -307,7 +309,7 @@ export default function ComparisonMatrixModal({
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <h4 className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6] line-clamp-1">{matrix.title}</h4>
-                        <span className="text-[10px] font-mono-meta bg-purple-50 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded-xs shrink-0 font-bold">
+                        <span className="text-[11px] font-mono-meta bg-purple-50 dark:bg-purple-950/70 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded-xs shrink-0 font-bold">
                           {matrix.paperIds?.length || 0} papers
                         </span>
                       </div>
@@ -343,7 +345,7 @@ export default function ComparisonMatrixModal({
             {/* Matrix Title Input */}
             <div className="py-2 flex items-center gap-3">
               <label className="text-xs font-mono-meta text-[#737067] dark:text-[#9C988F] uppercase font-bold shrink-0">
-                Synthesis Topic:
+                Title:
               </label>
               <input
                 type="text"
@@ -377,7 +379,7 @@ export default function ComparisonMatrixModal({
                           <th key={pId} className="p-3 font-serif-title font-normal text-base text-[#1C1B18] dark:text-[#F0EDE6] min-w-[240px] max-w-[320px] border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 relative align-top">
                             <div className="pr-6">
                               <div className="line-clamp-2 leading-snug">{paper.title}</div>
-                              <div className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] font-normal mt-1">
+                              <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] font-normal mt-1">
                                 {paper.publishedYear || paper.year || 'N/A'} • {paper.publicationType || paper.degreeType || 'Article'}
                               </div>
                             </div>
@@ -414,7 +416,7 @@ export default function ComparisonMatrixModal({
                       </td>
                       {comparisonPapers.map((paper) => (
                         <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#524F47] dark:text-[#B0ACA2]">
-                          {paper.venue || paper.publisher || paper.university || 'Scholarly Repository'}
+                          {paper.venue || paper.publisher || paper.university || 'Source not recorded'}
                         </td>
                       ))}
                     </tr>

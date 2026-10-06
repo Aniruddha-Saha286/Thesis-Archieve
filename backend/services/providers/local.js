@@ -4,6 +4,65 @@ const { createNormalizedRecord } = require('../scholarlyRecord');
 const { SUBJECT_CATALOG, getSubjectById, mapToCanonicalSubject } = require('../subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('../institutionService');
 
+const TEXT_SEARCH_FIELDS = ['title', 'abstract', 'author', 'university', 'department', 'publisher', 'catalogId'];
+const QUERY_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'into', 'using', 'based', 'via', 'that', 'this', 'are', 'was', 'its', 'our', 'use', 'used',
+]);
+
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function combinations(items, size) {
+  if (size <= 0) return [[]];
+  if (size > items.length) return [];
+  const out = [];
+  const walk = (start, picked) => {
+    if (picked.length === size) {
+      out.push(picked.slice());
+      return;
+    }
+    for (let i = start; i <= items.length - (size - picked.length); i += 1) {
+      picked.push(items[i]);
+      walk(i + 1, picked);
+      picked.pop();
+    }
+  };
+  walk(0, []);
+  return out;
+}
+
+// Builds the text part of the Mongo filter.
+// Before: the whole query had to appear as one exact phrase, so "bangla sentiment transformers"
+// missed a thesis titled "Sentiment analysis in Bangla using transformers".
+// Now: the exact phrase still matches, and so does a record that contains most of the
+// meaningful words in any order (all of 2, 2 of 3, 3 of 4, 3 of 5, 4 of 6).
+// Single-word queries behave exactly as before. Ranking is done later by the search manager.
+function buildTextSearchClause(query) {
+  const phrase = String(query || '').trim();
+  if (!phrase) return null;
+
+  const anyField = (regex) => ({ $or: TEXT_SEARCH_FIELDS.map((field) => ({ [field]: regex })) });
+  const phraseClause = anyField(new RegExp(escapeRegex(phrase), 'i'));
+
+  const words = [
+    ...new Set(
+      phrase
+        .toLowerCase()
+        .split(/[^\p{L}\p{M}\p{N}]+/u)
+        .filter((w) => w.length >= 3 && !QUERY_STOPWORDS.has(w))
+    ),
+  ].slice(0, 6);
+
+  if (words.length < 2) return phraseClause;
+
+  const need = words.length <= 2 ? words.length : words.length <= 4 ? words.length - 1 : words.length - 2;
+  const wordClauses = words.map((w) => anyField(new RegExp(escapeRegex(w), 'i')));
+  const groups = combinations(wordClauses, need).map((group) => (group.length === 1 ? group[0] : { $and: group }));
+
+  return { $or: [phraseClause, ...groups] };
+}
+
 async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitOffset = null, filters = {}, sort = 'relevance' }) {
   try {
     if (mongoose.connection.readyState !== 1) {
@@ -12,19 +71,9 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
 
     const andClauses = [{ status: 'approved' }];
 
-    if (query && query.trim()) {
-      const regex = new RegExp(query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      andClauses.push({
-        $or: [
-          { title: regex },
-          { abstract: regex },
-          { author: regex },
-          { university: regex },
-          { department: regex },
-          { publisher: regex },
-          { catalogId: regex },
-        ],
-      });
+    const textClause = buildTextSearchClause(query);
+    if (textClause) {
+      andClauses.push(textClause);
     }
 
     // Discipline / Subject filter
@@ -183,6 +232,16 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
           isDirectPdf: isDirectPdf,
         });
       }
+      // A record copied from a university repository links back to its original page
+      const sourceUrl = doc.sourceUrl && String(doc.sourceUrl).trim() ? String(doc.sourceUrl).trim() : null;
+      if (sourceUrl) {
+        fullTextLocations.push({
+          type: 'landing',
+          url: sourceUrl,
+          source: doc.sourceRepositoryName || 'Original repository',
+          isDirectPdf: false,
+        });
+      }
 
       // Preserve rich authorships with institutions
       const authorships = (doc.authorships && doc.authorships.length > 0)
@@ -258,6 +317,12 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         abstract: doc.abstract,
         publicationType: doc.publicationType || 'thesis',
         degreeType: doc.degreeType || null,
+        advisor: doc.advisor || null,
+        department: doc.department || null,
+        origin: doc.origin || 'deposit',
+        sourceRepositoryName: doc.sourceRepositoryName || null,
+        sourceUrl: sourceUrl,
+        sourceRights: doc.sourceRights || null,
         isPeerReviewed: doc.publicationType === 'journal-article' || doc.publicationType === 'conference-paper',
         publishedYear: doc.publishedYear,
         venue: doc.university ? `${doc.university} • ${doc.department}` : doc.publisher,
@@ -266,7 +331,7 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         license: doc.license || null,
         pdfUrl: isDirectPdf ? directPdf : null,
         isDirectPdf: isDirectPdf,
-        fullTextUrl: directPdf,
+        fullTextUrl: directPdf || sourceUrl,
         fullTextLocations: fullTextLocations,
         isRetracted: doc.isRetracted || false,
         datasetUrl: doc.datasetUrl || null,
@@ -275,7 +340,7 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         upvotes: doc.upvotes || 0,
         isPinned: doc.isPinned || false,
         isSample: doc.isSample || false,
-        source: doc.source || 'Local Archive',
+        source: doc.origin === 'harvest' && doc.sourceRepositoryName ? doc.sourceRepositoryName : (doc.source || 'Local Archive'),
       });
     });
 
@@ -294,4 +359,4 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
   }
 }
 
-module.exports = { searchLocal };
+module.exports = { searchLocal, buildTextSearchClause };

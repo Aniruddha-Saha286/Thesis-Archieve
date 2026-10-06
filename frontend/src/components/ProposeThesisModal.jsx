@@ -1,13 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, X, Upload, FileText, Loader2 } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+
+// The same disciplines the search filters use. A deposited thesis must carry one of these labels,
+// otherwise it does not show up when a student filters by discipline.
+const FALLBACK_DISCIPLINES = [
+  'Cybersecurity / Information Security',
+  'Data Science / Data Analytics',
+  'Artificial Intelligence and Machine Learning',
+  'Natural Language Processing',
+  'Computer Vision',
+  'Software Engineering',
+  'Computer Networks and Distributed Systems',
+  'Databases and Data Management',
+  'Human–Computer Interaction',
+  'Internet of Things and Embedded Systems',
+  'Renewable Energy & Materials',
+  'Biomedical & Clinical Science',
+  'Agricultural Systems & Soil',
+  'Development Economics',
+  'Other Disciplines / Unclassified',
+];
+
+// Shown to the student; the server enforces its own limit (THESIS_PDF_MAX_MB)
+const MAX_UPLOAD_MB = 20;
+
+// Removes an uploaded file that will not be used (the student removed it, replaced it, or
+// closed the form). A failure is ignored: nothing the student can do about it.
+function discardUpload(storageRef) {
+  if (!storageRef) return;
+  axios.delete('/api/upload/thesis-pdf', { data: { storageRef } }).catch(() => {});
+}
 
 export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSuccess }) {
   const [formData, setFormData] = useState({
     title: '',
     abstract: '',
-    category: 'Renewable Energy & Materials',
-    degreeType: 'M.Sc. Thesis',
+    category: '',
+    degreeType: '',
     university: '',
     department: '',
     author: '',
@@ -16,12 +48,46 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
     pdfUrl: '',
     datasetUrl: '',
     datasetSize: '',
-    datasetFormat: 'CSV',
+    datasetFormat: '',
     codeUrl: '',
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // The thesis PDF: either uploaded here (kept in `uploaded`) or given as a link (formData.pdfUrl)
+  const [uploaded, setUploaded] = useState(null); // { pdfUrl, storageRef, sizeBytes, fileName }
+  const [uploading, setUploading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState(0);
+  const [uploadError, setUploadError] = useState('');
+  const [disciplines, setDisciplines] = useState(FALLBACK_DISCIPLINES);
+  const { showNotice } = useSocket();
+
+  // Closing without submitting: the uploaded file is not needed any more
+  const closeForm = () => {
+    if (uploaded) {
+      discardUpload(uploaded.storageRef);
+      setUploaded(null);
+    }
+    onClose();
+  };
+  useEscapeToClose(closeForm, isOpen);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let cancelled = false;
+    axios
+      .get('/api/subjects')
+      .then((res) => {
+        const labels = Array.isArray(res.data) ? res.data.map((sub) => sub && sub.label).filter(Boolean) : [];
+        if (!cancelled && labels.length > 0) setDisciplines(labels);
+      })
+      .catch(() => {
+        // Keep the built-in list
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -29,18 +95,71 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  const formatSize = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+  // Uploads the chosen PDF straight away, so a slow or failed upload is known before the form is sent
+  const handleFileChosen = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // the same file can be chosen again after an error
+    if (!file) return;
+    setUploadError('');
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      setUploadError('Please choose a PDF file.');
+      return;
+    }
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setUploadError(`This file is ${formatSize(file.size)}. The limit is ${MAX_UPLOAD_MB} MB. Compress the PDF, or paste a link instead.`);
+      return;
+    }
+    try {
+      setUploading(true);
+      setUploadPercent(0);
+      if (uploaded) {
+        discardUpload(uploaded.storageRef); // a second file replaces the first
+        setUploaded(null);
+      }
+      const body = new FormData();
+      body.append('thesisPdf', file);
+      const res = await axios.post('/api/upload/thesis-pdf', body, {
+        onUploadProgress: (event) => {
+          if (event.total) setUploadPercent(Math.round((event.loaded / event.total) * 100));
+        },
+      });
+      setUploaded({
+        pdfUrl: res.data.pdfUrl,
+        storageRef: res.data.storageRef,
+        sizeBytes: res.data.sizeBytes || file.size,
+        fileName: res.data.fileName || file.name,
+      });
+      setFormData((prev) => ({ ...prev, pdfUrl: '' }));
+    } catch (err) {
+      setUploadError(err.response?.data?.message || 'The file could not be uploaded. Try again, or paste a link instead.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (uploading) return;
     setError('');
     setLoading(true);
 
     try {
-      const res = await axios.post('/api/thesis', formData);
+      const payload = uploaded
+        ? { ...formData, pdfUrl: uploaded.pdfUrl, pdfStorageRef: uploaded.storageRef, pdfSizeBytes: uploaded.sizeBytes }
+        : formData;
+      const res = await axios.post('/api/thesis', payload);
       if (typeof onCreated === 'function') onCreated(res.data);
       if (typeof onSuccess === 'function') onSuccess(res.data);
+      // The window closes on success, so say what happened and what comes next
+      if (showNotice) {
+        showNotice(res.data?.message || 'Thesis submitted. It will appear in search after staff review.', 'info');
+      }
+      setUploaded(null); // the file now belongs to the submitted thesis
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to deposit thesis record.');
+      setError(err.response?.data?.message || 'The thesis could not be submitted. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -50,21 +169,21 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
         <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer"
+          type="button"
+          onClick={closeForm}
+          aria-label="Close"
+          title="Close (Esc)"
+          className="absolute top-3 right-3 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-sm text-[#605D55] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] cursor-pointer"
         >
-          [✕ CLOSE]
+          <X className="w-5 h-5" />
         </button>
 
         <div className="mb-4 pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
-          <span className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] uppercase tracking-wider block">
-            Archival Intake
-          </span>
-          <h3 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] mt-0.5">
-            Deposit Thesis & Empirical Dataset
+          <h3 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] pr-10">
+            Deposit a thesis
           </h3>
-          <p className="text-xs text-[#737067] dark:text-[#9C988F] font-light">
-            Share approved academic research to assist upcoming student cohorts.
+          <p className="text-xs text-[#737067] dark:text-[#9C988F]">
+            Add your finished thesis so the next students can find it. The team checks it before it appears in search.
           </p>
         </div>
 
@@ -77,54 +196,60 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div>
-            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Thesis Title *</label>
+            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Title *</label>
             <input
               type="text"
               name="title"
               required
               value={formData.title}
               onChange={handleChange}
-              placeholder="e.g. Degradation Kinetics of Lead-Free Perovskite Absorbers..."
+              placeholder="The full title, as on the cover page"
               className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Research Domain *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Discipline *</label>
               <select
                 name="category"
+                required
                 value={formData.category}
                 onChange={handleChange}
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               >
-                <option>Renewable Energy & Materials</option>
-                <option>Computer Science & NLP</option>
-                <option>Biomedical & Clinical Science</option>
-                <option>Agricultural Systems & Soil</option>
-                <option>Development Economics</option>
-                <option>Other Disciplines</option>
+                <option value="" disabled>
+                  Choose the closest discipline
+                </option>
+                {disciplines.map((label) => (
+                  <option key={label} value={label}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Degree Level *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Degree *</label>
               <select
                 name="degreeType"
+                required
                 value={formData.degreeType}
                 onChange={handleChange}
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               >
-                <option>B.Sc. Capstone</option>
+                <option value="" disabled>Choose…</option>
+                <option>B.Sc. Thesis</option>
                 <option>M.Sc. Thesis</option>
-                <option>M.Phil Researcher</option>
+                <option>M.Phil. Thesis</option>
                 <option>Ph.D. Dissertation</option>
+                <option>Other</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">University / Institute *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">University *</label>
               <input
                 type="text"
                 name="university"
@@ -136,14 +261,14 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Department / Faculty *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Department *</label>
               <input
                 type="text"
                 name="department"
                 required
                 value={formData.department}
                 onChange={handleChange}
-                placeholder="e.g. Computer Science & Eng."
+                placeholder="e.g. Computer Science and Engineering"
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
@@ -151,7 +276,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Author / Researcher *</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Author *</label>
               <input
                 type="text"
                 name="author"
@@ -163,7 +288,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Faculty Advisor</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Supervisor</label>
               <input
                 type="text"
                 name="advisor"
@@ -186,36 +311,81 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
           </div>
 
           <div>
-            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Abstract Summary *</label>
+            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Abstract *</label>
             <textarea
               name="abstract"
               rows="3"
               required
               value={formData.abstract}
               onChange={handleChange}
-              placeholder="Provide background, methodology, experimental setup, and main findings..."
+              placeholder="Paste the abstract from your thesis"
               className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
             ></textarea>
           </div>
 
-          <div>
-            <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Direct PDF Document URL (Optional)</label>
-            <input
-              type="url"
-              name="pdfUrl"
-              value={formData.pdfUrl}
-              onChange={handleChange}
-              placeholder="e.g. https://arxiv.org/pdf/2301.12345.pdf or https://zenodo.org/records/.../files/manuscript.pdf"
-              className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] text-xs font-mono-meta"
-            />
-            <p className="text-[10px] text-[#737067] dark:text-[#9C988F] mt-1 font-mono-meta">
-              Direct URL to full manuscript. If left blank, users can search full-text citations via Google Scholar & Semantic Scholar mirrors.
+          {/* The thesis file: upload it here, or give a link to where it already is */}
+          <fieldset className="border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm p-3 space-y-2.5">
+            <legend className="px-1 font-medium text-[#1C1B18] dark:text-[#E8E6E1]">Thesis PDF (optional)</legend>
+
+            {uploaded ? (
+              <div className="flex items-center justify-between gap-3 p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-sm" data-testid="uploaded-pdf">
+                <span className="flex items-center gap-2 min-w-0 text-emerald-950 dark:text-emerald-200">
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <span className="truncate font-medium">{uploaded.fileName}</span>
+                  <span className="shrink-0 text-emerald-800 dark:text-emerald-300">· {formatSize(uploaded.sizeBytes)} · uploaded</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    discardUpload(uploaded.storageRef);
+                    setUploaded(null);
+                  }}
+                  className="shrink-0 underline text-emerald-900 dark:text-emerald-200 hover:text-black dark:hover:text-white cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <>
+                <label
+                  className={`flex items-center justify-center gap-2 p-3 border border-dashed rounded-sm text-center transition ${
+                    uploading
+                      ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200'
+                      : 'border-[#BDB9AF] dark:border-[#47433C] bg-[#FAF9F5] dark:bg-[#201F1C] hover:border-[#1C1B18] dark:hover:border-[#9C988F] text-[#1C1B18] dark:text-[#E8E6E1] cursor-pointer'
+                  }`}
+                >
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span>{uploading ? `Uploading… ${uploadPercent}%` : `Choose a PDF from your device (up to ${MAX_UPLOAD_MB} MB)`}</span>
+                  <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={uploading} onChange={handleFileChosen} aria-label="Choose the thesis PDF" />
+                </label>
+
+                {uploadError && (
+                  <p role="alert" className="text-red-700 dark:text-red-300">{uploadError}</p>
+                )}
+
+                <div>
+                  <label htmlFor="deposit-pdf-link" className="block text-[#605D55] dark:text-[#A8A49C] mb-1">Or paste a link to the PDF</label>
+                  <input
+                    id="deposit-pdf-link"
+                    type="url"
+                    name="pdfUrl"
+                    value={formData.pdfUrl}
+                    onChange={handleChange}
+                    disabled={uploading}
+                    placeholder="https://…"
+                    className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] text-xs"
+                  />
+                </div>
+              </>
+            )}
+            <p className="text-[11px] text-[#737067] dark:text-[#9C988F]">
+              With a PDF, readers can open your thesis here, and members can read its limitations and future work without leaving the site.
             </p>
-          </div>
+          </fieldset>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset Repository URL (Optional)</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset link (optional)</label>
               <input
                 type="url"
                 name="datasetUrl"
@@ -224,12 +394,12 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
                 placeholder="https://zenodo.org/... or https://dataverse.harvard.edu/..."
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] text-xs font-mono-meta"
               />
-              <p className="text-[10px] text-[#737067] dark:text-[#9C988F] mt-1 font-mono-meta">
-                Approved scholarly repositories only (Zenodo, Harvard Dataverse, Dryad, Figshare, OSF, Hugging Face). Arbitrary cloud drives are rejected.
+              <p className="text-[11px] text-[#737067] dark:text-[#9C988F] mt-1 font-mono-meta">
+                Must be on a research data site: Zenodo, Harvard Dataverse, Dryad, Figshare, OSF, Kaggle, Hugging Face or GitHub. Links to personal drives are not accepted.
               </p>
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset Size</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset size</label>
               <input
                 type="text"
                 name="datasetSize"
@@ -240,13 +410,13 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
               />
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset Format</label>
+              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Dataset format</label>
               <input
                 type="text"
                 name="datasetFormat"
                 value={formData.datasetFormat}
                 onChange={handleChange}
-                placeholder="CSV / Parquet / HDF5"
+                placeholder="e.g. CSV"
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
@@ -255,10 +425,10 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
           <div className="pt-2">
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-[#1C1B18] dark:bg-amber-600 hover:bg-[#2E2C28] dark:hover:bg-amber-700 text-white font-medium py-2 rounded-sm transition text-xs shadow-sm cursor-pointer disabled:opacity-50"
+              disabled={loading || uploading}
+              className="w-full min-h-[40px] bg-[#1C1B18] dark:bg-amber-600 hover:bg-[#2E2C28] dark:hover:bg-amber-700 text-white font-semibold py-2 rounded-sm transition text-sm shadow-sm cursor-pointer disabled:opacity-50"
             >
-              {loading ? 'Depositing Document...' : 'Index Thesis to Archive'}
+              {loading ? 'Submitting…' : uploading ? 'Waiting for the upload…' : 'Submit for review'}
             </button>
           </div>
         </form>

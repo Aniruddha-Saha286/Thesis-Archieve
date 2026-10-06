@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { Bell, Plus, Trash2, CheckCircle, Clock, RefreshCw, ExternalLink, Sparkles } from 'lucide-react';
 
 export default function TopicAlertsModal({ isOpen, onClose }) {
+  useEscapeToClose(onClose, isOpen);
   const [alerts, setAlerts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -108,9 +110,9 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             <div>
-              <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Scholarly Topic Alerts</h2>
+              <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Topic alerts</h2>
               <span className="text-xs font-mono-meta text-[#737067] dark:text-[#9C988F]">
-                Automated monitoring of newly deposited academic publications matching your inquiry
+                Get a notice when new papers match a topic you follow
               </span>
             </div>
           </div>
@@ -217,7 +219,7 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
                   >
                     <div className="space-y-0.5">
                       <div className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6]">{al.topic}</div>
-                      <div className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center gap-2">
+                      <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center gap-2">
                         <span>Discipline: <strong>{al.category}</strong></span>
                         <span>•</span>
                         <span>Last scanned: {al.lastCheckedAt ? new Date(al.lastCheckedAt).toLocaleDateString() : 'Pending first scan'}</span>
@@ -273,7 +275,7 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
                     {!notif.read && (
                       <button
                         onClick={() => handleMarkRead(notif._id)}
-                        className="text-[10px] text-blue-800 dark:text-blue-400 hover:underline shrink-0 cursor-pointer"
+                        className="text-[11px] text-blue-800 dark:text-blue-400 hover:underline shrink-0 cursor-pointer"
                       >
                         Mark Read
                       </button>

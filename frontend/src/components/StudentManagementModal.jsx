@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { Users, Shield, Ban, CheckCircle, Search, ExternalLink, Trash2, X, AlertTriangle, Eye } from 'lucide-react';
 import DocumentViewerModal from './DocumentViewerModal';
 import { useSocket } from '../context/SocketContext';
 
 export default function StudentManagementModal({ isOpen, onClose, onRefreshStats }) {
+  useEscapeToClose(onClose, isOpen);
   const { showNotice } = useSocket();
   const [students, setStudents] = useState([]);
   const [filterTab, setFilterTab] = useState('all'); // 'all', 'approved', 'pending', 'banned'
@@ -250,7 +252,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
                         <button
                           type="button"
                           onClick={() => setInspectingStudent(s)}
-                          className="inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-400 hover:underline font-mono-meta mt-1 cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-400 hover:underline font-mono-meta mt-1 cursor-pointer"
                         >
                           <Eye className="w-2.5 h-2.5" />
                           <span>View ID Proof</span>
@@ -262,7 +264,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
                     <td className="p-3 text-[11px]">
                       <div className="font-medium text-[#1C1B18] dark:text-neutral-200">{s.university || 'Not Provided'}</div>
                       <div className="font-mono-meta text-[#737067] dark:text-neutral-400">ID: {s.studentId || 'N/A'}</div>
-                      <div className="text-[10px] text-[#8C887E] dark:text-neutral-500">{s.degreeProgram}</div>
+                      <div className="text-[11px] text-[#8C887E] dark:text-neutral-500">{s.degreeProgram}</div>
                     </td>
 
                     {/* Domain & Thesis Inquiry */}
@@ -276,29 +278,29 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
                     {/* Status Badge */}
                     <td className="p-3">
                       {s.status === 'approved' && (
-                        <span className="px-2 py-0.5 rounded-sm bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono-meta text-[10px] font-bold">
+                        <span className="px-2 py-0.5 rounded-sm bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono-meta text-[11px] font-bold">
                           ✓ ACTIVE
                         </span>
                       )}
                       {s.status === 'pending' && (
-                        <span className="px-2 py-0.5 rounded-sm bg-amber-50 text-amber-800 border border-amber-300 font-mono-meta text-[10px] font-bold">
+                        <span className="px-2 py-0.5 rounded-sm bg-amber-50 text-amber-800 border border-amber-300 font-mono-meta text-[11px] font-bold">
                           ⏳ PENDING
                         </span>
                       )}
                       {s.status === 'banned' && (
                         <div className="space-y-0.5">
-                          <span className="px-2 py-0.5 rounded-sm bg-red-100 text-red-800 border border-red-300 font-mono-meta text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded-sm bg-red-100 text-red-800 border border-red-300 font-mono-meta text-[11px] font-bold">
                             ⛔ BANNED
                           </span>
                           {s.banReason && (
-                            <div className="text-[10px] text-red-600 truncate max-w-[120px]" title={s.banReason}>
+                            <div className="text-[11px] text-red-600 truncate max-w-[120px]" title={s.banReason}>
                               {s.banReason}
                             </div>
                           )}
                         </div>
                       )}
                       {s.status === 'rejected' && (
-                        <span className="px-2 py-0.5 rounded-sm bg-neutral-200 text-neutral-800 font-mono-meta text-[10px]">
+                        <span className="px-2 py-0.5 rounded-sm bg-neutral-200 text-neutral-800 font-mono-meta text-[11px]">
                           ✕ DECLINED
                         </span>
                       )}

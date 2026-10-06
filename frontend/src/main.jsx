@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary';
+import NoticeToast from './components/NoticeToast';
 import { AuthProvider } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')).render(
           <AuthProvider>
             <SocketProvider>
               <App />
+              <NoticeToast />
             </SocketProvider>
           </AuthProvider>
         </GoogleOAuthProvider>

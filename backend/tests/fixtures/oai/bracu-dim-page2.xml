@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="static/style.xsl"?>
+<!--
+  Fixture: the LAST page of a dim ListRecords answer in the style of
+  https://dspace.bracu.ac.bd/server/oai/request.
+  ASSUMED, not copied from a live page: the record itself (written by hand in the confirmed field
+  style) and the empty <resumptionToken/> that OAI-PMH requires on the final page of a paged list.
+  The record has no department and no issue date on purpose.
+-->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+  <responseDate>2026-10-05T21:06:01Z</responseDate>
+  <request verb="ListRecords" resumptionToken="dim/2025-09-01T00:00:00Z///100">https://dspace.bracu.ac.bd/server/oai/request</request>
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>oai:dspace.bracu.ac.bd:10361/23004</identifier>
+        <datestamp>2025-09-07T11:45:00Z</datestamp>
+        <setSpec>col_10361_28420</setSpec>
+      </header>
+      <metadata>
+        <dim:dim xmlns:dim="http://www.dspace.org/xmlns/dspace/dim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:doc="http://www.lyncode.com/xoai" xsi:schemaLocation="http://www.dspace.org/xmlns/dspace/dim http://www.dspace.org/schema/dim.xsd">
+          <dim:field mdschema="dc" element="contributor" qualifier="advisor">Sultana, Farzana</dim:field>
+          <dim:field mdschema="dc" element="contributor" qualifier="author">Ahmed, Rezaul</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="accessioned">2020-03-02T04:00:00Z</dim:field>
+          <dim:field mdschema="dc" element="date" qualifier="available">2019-12-20T04:00:00Z</dim:field>
+          <dim:field mdschema="dc" element="identifier" qualifier="uri">http://hdl.handle.net/10361/23004</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="abstract" lang="en_US">Community health workers are the first point of care for most rural households. This dissertation follows 1,200 households over four years to measure how regular home visits change the uptake of antenatal care.</dim:field>
+          <dim:field mdschema="dc" element="description" qualifier="degree">Doctor of Philosophy in Public Health</dim:field>
+          <dim:field mdschema="dc" element="publisher" lang="en_US">BRAC University</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Community health workers</dim:field>
+          <dim:field mdschema="dc" element="subject" lang="en_US">Epidemiology</dim:field>
+          <dim:field mdschema="dc" element="title" lang="en_US">Home visits and antenatal care uptake in rural Bangladesh</dim:field>
+          <dim:field mdschema="dc" element="type" lang="en_US">Thesis</dim:field>
+          <dim:field mdschema="others" element="access-status">restricted</dim:field>
+        </dim:dim>
+      </metadata>
+    </record>
+    <resumptionToken completeListSize="6" cursor="5"/>
+  </ListRecords>
+</OAI-PMH>

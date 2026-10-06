@@ -17,6 +17,14 @@ const { runArchiveReviewRepairsRegressionTests } = require('./archiveReviewRepai
 const { runEmailNotificationTests } = require('./emailNotification.test');
 const { runProviderIntegrationTests } = require('./providerIntegration.test');
 const { runMaintenanceModeTests } = require('./maintenanceMode.test');
+const { runLocalTextSearchTests } = require('./localTextSearch.test');
+const { runStep1FixTests } = require('./step1Fixes.test');
+const { runFeedbackTests } = require('./feedback.test');
+const { runNewProviderTests } = require('./newProviders.test');
+const { runDatasetSourcesAndOaFinderTests } = require('./datasetSourcesAndOaFinder.test');
+const { runRepositoryHarvesterTests } = require('./repositoryHarvester.test');
+const { runFullTextTests } = require('./fullText.test');
+const { runReleaseBackendTests } = require('./releaseBackend.test');
 
 console.log('===============================================================');
 console.log('  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   ');
@@ -65,9 +73,25 @@ async function main() {
     await runProviderIntegrationTests();
     console.log('');
     await runMaintenanceModeTests();
+    console.log('');
+    runLocalTextSearchTests();
+    console.log('');
+    runStep1FixTests();
+    console.log('');
+    await runFeedbackTests();
+    console.log('');
+    await runNewProviderTests();
+    console.log('');
+    await runDatasetSourcesAndOaFinderTests();
+    console.log('');
+    await runRepositoryHarvesterTests();
+    console.log('');
+    await runFullTextTests();
+    console.log('');
+    await runReleaseBackendTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 19 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 27 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

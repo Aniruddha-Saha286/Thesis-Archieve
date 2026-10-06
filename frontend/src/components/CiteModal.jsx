@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { Copy, Check, Download, Quote, FileText, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function CiteModal({ thesis, onClose }) {
+  useEscapeToClose(onClose, Boolean(thesis));
   const [activeTab, setActiveTab] = useState('bibtex'); // 'bibtex', 'ris', 'apa'
   const [copied, setCopied] = useState(false);
   const [citations, setCitations] = useState({ bibtex: '', ris: '', apa: '' });
@@ -75,7 +77,7 @@ export default function CiteModal({ thesis, onClose }) {
         </button>
 
         <div className="mb-4 pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
-          <span className="text-[10px] font-mono-meta text-[#737067] dark:text-[#9C988F] uppercase tracking-wider block">
+          <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] uppercase tracking-wider block">
             Academic Attribution & Citation Export
           </span>
           <h3 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] mt-0.5 line-clamp-2">

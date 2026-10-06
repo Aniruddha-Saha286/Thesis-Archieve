@@ -17,6 +17,7 @@ router.get('/saved-papers', async (req, res) => {
     const user = await User.findById(req.user._id).select('savedPapers');
     return res.json(user ? user.savedPapers : []);
   } catch (err) {
+    console.error('[routes/user.js] Failed to retrieve saved papers:', err);
     return res.status(500).json({ message: 'Failed to retrieve saved papers.' });
   }
 });
@@ -89,6 +90,7 @@ router.post('/saved-papers', async (req, res) => {
     await user.save();
     return res.json({ message: 'Paper saved to your personal library.', savedPapers: user.savedPapers });
   } catch (err) {
+    console.error('[routes/user.js] Failed to save paper:', err);
     return res.status(500).json({ message: 'Failed to save paper.' });
   }
 });
@@ -104,6 +106,7 @@ router.delete('/saved-papers/:paperId', async (req, res) => {
 
     return res.json({ message: 'Paper removed from your library.', savedPapers: user.savedPapers });
   } catch (err) {
+    console.error('[routes/user.js] Failed to remove saved paper:', err);
     return res.status(500).json({ message: 'Failed to remove saved paper.' });
   }
 });
@@ -123,6 +126,7 @@ router.patch('/saved-papers/:paperId/notes', async (req, res) => {
 
     return res.json({ message: 'Personal research notes updated.', savedPaper: item });
   } catch (err) {
+    console.error('[routes/user.js] Failed to update notes:', err);
     return res.status(500).json({ message: 'Failed to update notes.' });
   }
 });
@@ -147,6 +151,7 @@ router.patch('/saved-papers/:paperId/reading-status', async (req, res) => {
 
     return res.json({ message: 'Reading status updated.', savedPaper: item });
   } catch (err) {
+    console.error('[routes/user.js] Failed to update reading status:', err);
     return res.status(500).json({ message: 'Failed to update reading status.' });
   }
 });
@@ -173,6 +178,7 @@ router.patch('/saved-papers/:paperId/structured-notes', async (req, res) => {
 
     return res.json({ message: 'Structured research notes updated.', savedPaper: item });
   } catch (err) {
+    console.error('[routes/user.js] Failed to update structured notes:', err);
     return res.status(500).json({ message: 'Failed to update structured notes.' });
   }
 });
@@ -183,6 +189,7 @@ router.get('/collections', async (req, res) => {
     const user = await User.findById(req.user._id).select('collections');
     return res.json(user ? user.collections : []);
   } catch (err) {
+    console.error('[routes/user.js] Failed to retrieve collections:', err);
     return res.status(500).json({ message: 'Failed to retrieve collections.' });
   }
 });
@@ -237,6 +244,7 @@ router.post('/collections/templates/thesis-chapters', async (req, res) => {
       requestedCount: templates.length,
     });
   } catch (err) {
+    console.error('[routes/user.js] Failed to create thesis chapter template collections:', err);
     return res.status(500).json({ message: 'Failed to create thesis chapter template collections.' });
   }
 });
@@ -264,6 +272,7 @@ router.post('/collections', enforceQuota('collections'), async (req, res) => {
 
     return res.status(201).json({ message: 'Project collection created.', collection: user.collections[user.collections.length - 1] });
   } catch (err) {
+    console.error('[routes/user.js] Failed to create collection:', err);
     return res.status(500).json({ message: 'Failed to create collection.' });
   }
 });
@@ -287,7 +296,54 @@ router.post('/collections/:id/papers', async (req, res) => {
 
     return res.json({ message: 'Paper added to collection.', collection: coll });
   } catch (err) {
+    console.error('[routes/user.js] Failed to add paper to collection:', err);
     return res.status(500).json({ message: 'Failed to add paper to collection.' });
+  }
+});
+
+// DELETE /api/user/collections/:id/papers/:paperId
+// Remove one paper from a collection (the paper stays in Saved Papers)
+router.delete('/collections/:id/papers/:paperId', async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const coll = user.collections.id(req.params.id);
+    if (!coll) return res.status(404).json({ message: 'Collection not found.' });
+
+    const target = String(req.params.paperId);
+    const before = coll.paperIds.length;
+    coll.paperIds = coll.paperIds.filter((id) => String(id) !== target);
+    if (coll.paperIds.length !== before) {
+      await user.save();
+    }
+
+    return res.json({ message: 'Paper removed from collection.', collection: coll });
+  } catch (err) {
+    console.error('[User] Remove paper from collection error:', err);
+    return res.status(500).json({ message: 'Failed to remove paper from collection.' });
+  }
+});
+
+// DELETE /api/user/collections/:id
+// Delete a collection. Saved papers are not touched.
+router.delete('/collections/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const coll = user.collections.id(req.params.id);
+    if (!coll) return res.status(404).json({ message: 'Collection not found.' });
+
+    // Rewrite the list without this collection (a plain write that every MongoDB-compatible store handles the same way)
+    const targetId = String(coll._id);
+    user.collections = user.collections.filter((item) => String(item._id) !== targetId);
+    await user.save();
+
+    return res.json({ message: 'Collection deleted.', collections: user.collections });
+  } catch (err) {
+    console.error('[User] Delete collection error:', err);
+    return res.status(500).json({ message: 'Failed to delete collection.' });
   }
 });
 
@@ -333,6 +389,7 @@ router.get('/collections/:id/export', enforceQuota('bulkExport'), async (req, re
     res.setHeader('Content-Type', format === 'ris' ? 'application/x-research-info-systems' : 'application/x-bibtex');
     return res.send(output);
   } catch (err) {
+    console.error('[routes/user.js] Failed to export collection:', err);
     return res.status(500).json({ message: 'Failed to export collection.' });
   }
 });
@@ -343,6 +400,7 @@ router.get('/comparisons', async (req, res) => {
     const user = await User.findById(req.user._id).select('comparisons');
     return res.json(user ? user.comparisons : []);
   } catch (err) {
+    console.error('[routes/user.js] Failed to retrieve paper comparisons:', err);
     return res.status(500).json({ message: 'Failed to retrieve paper comparisons.' });
   }
 });
@@ -367,6 +425,7 @@ router.post('/comparisons', enforceQuota('comparisons'), async (req, res) => {
     await user.save();
     return res.status(201).json({ message: 'Comparison matrix saved.', comparison: user.comparisons[user.comparisons.length - 1] });
   } catch (err) {
+    console.error('[routes/user.js] Failed to save comparison:', err);
     return res.status(500).json({ message: 'Failed to save comparison.' });
   }
 });
@@ -390,6 +449,7 @@ router.put('/comparisons/:id', enforceQuota('comparisonsAccess'), async (req, re
     await user.save();
     return res.json({ message: 'Comparison matrix updated successfully.', comparison: matrix });
   } catch (err) {
+    console.error('[routes/user.js] Failed to update comparison matrix:', err);
     return res.status(500).json({ message: 'Failed to update comparison matrix.' });
   }
 });
@@ -406,6 +466,7 @@ router.delete('/comparisons/:id', async (req, res) => {
 
     return res.json({ message: 'Comparison matrix deleted.', comparisons: user.comparisons });
   } catch (err) {
+    console.error('[routes/user.js] Failed to delete comparison matrix:', err);
     return res.status(500).json({ message: 'Failed to delete comparison matrix.' });
   }
 });
@@ -416,6 +477,7 @@ router.get('/alerts', async (req, res) => {
     const user = await User.findById(req.user._id).select('topicAlerts');
     return res.json(user ? user.topicAlerts : []);
   } catch (err) {
+    console.error('[routes/user.js] Failed to retrieve alerts:', err);
     return res.status(500).json({ message: 'Failed to retrieve alerts.' });
   }
 });
@@ -439,6 +501,7 @@ router.post('/alerts', enforceQuota('topicAlerts'), async (req, res) => {
     await user.save();
     return res.status(201).json({ message: 'New-paper topic alert created.', alerts: user.topicAlerts });
   } catch (err) {
+    console.error('[routes/user.js] Failed to create alert:', err);
     return res.status(500).json({ message: 'Failed to create alert.' });
   }
 });
@@ -453,6 +516,7 @@ router.delete('/alerts/:id', async (req, res) => {
     await user.save();
     return res.json({ message: 'Alert deleted.', alerts: user.topicAlerts });
   } catch (err) {
+    console.error('[routes/user.js] Failed to delete alert:', err);
     return res.status(500).json({ message: 'Failed to delete alert.' });
   }
 });
@@ -464,6 +528,7 @@ router.post('/alerts/check', async (req, res) => {
     const result = await checkAlertsForUser(req.user._id);
     return res.json({ message: 'Topic alerts evaluated.', ...result });
   } catch (err) {
+    console.error('[routes/user.js] Failed to evaluate topic alerts:', err);
     return res.status(500).json({ message: 'Failed to evaluate topic alerts.' });
   }
 });
@@ -477,7 +542,20 @@ router.get('/notifications', async (req, res) => {
       .limit(30);
     return res.json(notifications);
   } catch (err) {
+    console.error('[routes/user.js] Failed to retrieve notifications:', err);
     return res.status(500).json({ message: 'Failed to retrieve notifications.' });
+  }
+});
+
+// PUT /api/user/notifications/read-all
+// Marks every notification of the signed-in user as read (the bell's "Mark all read")
+router.put('/notifications/read-all', async (req, res) => {
+  try {
+    const result = await Notification.updateMany({ user: req.user._id, read: { $ne: true } }, { read: true });
+    return res.json({ message: 'All notifications marked as read.', updated: result.modifiedCount || 0 });
+  } catch (err) {
+    console.error('[routes/user.js] Failed to mark notifications as read:', err);
+    return res.status(500).json({ message: 'Failed to update notifications.' });
   }
 });
 
@@ -493,6 +571,7 @@ router.put('/notifications/:id/read', async (req, res) => {
     if (!notif) return res.status(404).json({ message: 'Notification not found.' });
     return res.json({ message: 'Notification marked as read.', notification: notif });
   } catch (err) {
+    console.error('[routes/user.js] Failed to update notification:', err);
     return res.status(500).json({ message: 'Failed to update notification.' });
   }
 });

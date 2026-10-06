@@ -31,8 +31,13 @@ const {
   isAlreadyBilled,
   guestSearchStore,
 } = require('../services/usageReservationService');
-const { summaryGenerationLimiter } = require('../middleware/rateLimit');
+const { summaryGenerationLimiter, fullTextLimiter, openAccessFinderLimiter } = require('../middleware/rateLimit');
+const { readPaperFullText } = require('../services/fullTextService');
+const { findOpenAccessPdf } = require('../services/openAccessFinder');
+const { fullTextMessage, isRetryableFullTextReason } = require('../utils/fullTextMessages');
+const thesisFileStorage = require('../services/thesisFileStorage');
 const emailService = require('../services/emailService');
+const { normalizeReportIssueType } = require('../utils/reportIssueType');
 const { getOrGeneratePaperSummary } = require('../services/paperSummaryService');
 const {
   isValidDatasetRepositoryUrl,
@@ -269,6 +274,7 @@ router.get('/publishers/list', async (req, res) => {
 
     return res.json(list);
   } catch (err) {
+    console.error('[routes/thesis.js] Failed to load publisher list:', err);
     return res.status(500).json({ message: 'Failed to load publisher list.' });
   }
 });
@@ -305,6 +311,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
       const directPdf = doc.pdfUrl && doc.pdfUrl.trim() ? doc.pdfUrl.trim() : null;
       const isDirectPdf = Boolean(directPdf && (doc.isDirectPdf || directPdf.includes('/pdf') || directPdf.endsWith('.pdf')));
 
+      const sourceUrl = doc.sourceUrl && String(doc.sourceUrl).trim() ? String(doc.sourceUrl).trim() : null;
+
       const record = createNormalizedRecord({
         id: String(doc._id),
         doi: doc.doi || null,
@@ -313,6 +321,14 @@ router.get('/:id', optionalAuth, async (req, res) => {
         authors: doc.authors && doc.authors.length > 0 ? doc.authors : [{ name: doc.author, affiliation: doc.university || null }],
         abstract: doc.abstract,
         publicationType: doc.publicationType || 'thesis',
+        degreeType: doc.degreeType || null,
+        advisor: doc.advisor || null,
+        department: doc.department || null,
+        origin: doc.origin || 'deposit',
+        sourceRepositoryName: doc.sourceRepositoryName || null,
+        sourceUrl: sourceUrl,
+        sourceRights: doc.sourceRights || null,
+        fullTextLocations: sourceUrl ? [{ type: 'landing', url: sourceUrl, source: doc.sourceRepositoryName || 'Original repository', isDirectPdf: false }] : undefined,
         isPeerReviewed: doc.publicationType === 'journal-article' || doc.publicationType === 'conference-paper',
         publishedYear: doc.publishedYear,
         venue: doc.university ? `${doc.university} • ${doc.department}` : doc.publisher,
@@ -321,7 +337,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
         license: doc.license || null,
         pdfUrl: isDirectPdf ? directPdf : null,
         isDirectPdf: isDirectPdf,
-        fullTextUrl: directPdf,
+        fullTextUrl: directPdf || sourceUrl,
         isRetracted: doc.isRetracted || false,
         datasetUrl: doc.datasetUrl || null,
         codeUrl: doc.codeUrl || null,
@@ -329,7 +345,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
         upvotes: doc.upvotes || 0,
         isPinned: doc.isPinned || false,
         isSample: doc.isSample || false,
-        source: doc.source || 'Local Archive',
+        source: doc.origin === 'harvest' && doc.sourceRepositoryName ? doc.sourceRepositoryName : (doc.source || 'Local Archive'),
       });
 
       // Dataset locking for individual record
@@ -350,6 +366,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     // For external IDs, return 404 with guidance to use client-held metadata
     return res.status(404).json({ message: 'External provider record. Details provided via search index.' });
   } catch (err) {
+    console.error('[routes/thesis.js] Error retrieving record:', err);
     return res.status(500).json({ message: 'Error retrieving record.' });
   }
 });
@@ -454,7 +471,7 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
     // without consuming trial quota
     if (enrichment.hasOutage && enrichment.totalCount === 0) {
       return res.status(503).json({
-        message: 'Scholarly dataset discovery providers (DataCite and Zenodo) are temporarily unreachable. Please retry in a few moments.',
+        message: 'The dataset sources could not be reached just now. Please try again in a few moments.',
         code: 'DATASET_PROVIDERS_UNAVAILABLE',
         providerErrors: enrichment.providerErrors,
       });
@@ -497,6 +514,23 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
   }
 });
 
+// An approved paper is visible to everyone. A paper still waiting for review (or rejected)
+// is visible only to staff who moderate publications and to the person who deposited it.
+function canSeeUnapprovedPaper(user, doc) {
+  if (!doc) return false;
+  if (doc.status === 'approved' || doc.isApproved === true) return true;
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (
+    user.role === 'editor' &&
+    Array.isArray(user.permissions) &&
+    (user.permissions.includes(PERMISSIONS.PUBLICATIONS_MODERATE) || user.permissions.includes(PERMISSIONS.DOCUMENTS_VIEW))
+  ) {
+    return true;
+  }
+  return Boolean(doc.submittedBy && String(doc.submittedBy) === String(user._id));
+}
+
 // POST /api/thesis/:id/summary
 // Grounded Quick Summary endpoint (feature flagged under PAPER_SUMMARIZER_ENABLED).
 // Extracts grounded research components from authorized abstract or full text.
@@ -516,7 +550,7 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
         error: true,
         code: 'FEATURE_LOCKED',
         feature: 'paper_summary',
-        message: 'Sign in to Project Panther and activate your 7-Day Trial or Premium membership to access grounded Quick Summaries.',
+        message: 'Sign in and start your 7-day trial or a Premium membership to use Quick Summary.',
       });
     }
 
@@ -527,7 +561,7 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
         error: true,
         code: 'FEATURE_LOCKED',
         feature: 'paper_summary',
-        message: 'Quick Summary is a Premium research benefit. Please activate your 7-Day Trial or upgrade to Premium for grounded paper summaries.',
+        message: 'Quick Summary is included in the 7-day trial and in Premium. It is not part of the free plan.',
       });
     }
 
@@ -538,9 +572,15 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
     if (mongoose.Types.ObjectId.isValid(id)) {
       const localDoc = await Thesis.findById(id).lean();
       if (localDoc) {
+        // Same visibility rule as the GET route: a paper still waiting for review is only
+        // summarised for staff and for the person who deposited it.
+        if (!canSeeUnapprovedPaper(req.user, localDoc)) {
+          return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
+        }
+        // The archive's own record wins over anything the browser sends
         paper = {
-          ...localDoc,
           ...(paper || {}),
+          ...localDoc,
         };
       }
     }
@@ -601,7 +641,7 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
         error: true,
         code: 'FEATURE_LOCKED',
         feature: 'paper_summary',
-        message: 'Sign in to Project Panther and activate your 7-Day Trial or Premium membership to access grounded Quick Summaries.',
+        message: 'Sign in and start your 7-day trial or a Premium membership to use Quick Summary.',
       });
     }
 
@@ -612,7 +652,7 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
         error: true,
         code: 'FEATURE_LOCKED',
         feature: 'paper_summary',
-        message: 'Quick Summary is a Premium research benefit. Please activate your 7-Day Trial or upgrade to Premium for grounded paper summaries.',
+        message: 'Quick Summary is included in the 7-day trial and in Premium. It is not part of the free plan.',
       });
     }
 
@@ -624,20 +664,8 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
     if (mongoose.Types.ObjectId.isValid(id)) {
       const doc = await Thesis.findById(id).lean();
       if (doc) {
-        const isApproved = doc.status === 'approved' || doc.isApproved === true;
-        if (!isApproved) {
-          const isStaff = req.user && (
-            req.user.role === 'admin' ||
-            (req.user.role === 'editor' && Array.isArray(req.user.permissions) && (
-              req.user.permissions.includes(PERMISSIONS.PUBLICATIONS_MODERATE) ||
-              req.user.permissions.includes(PERMISSIONS.DOCUMENTS_VIEW)
-            ))
-          );
-          const isSubmitter = req.user && doc.submittedBy && String(doc.submittedBy) === String(req.user._id);
-
-          if (!isStaff && !isSubmitter) {
-            return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
-          }
+        if (!canSeeUnapprovedPaper(req.user, doc)) {
+          return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
         }
         paper = doc;
       }
@@ -682,8 +710,126 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
   }
 });
 
+// GET /api/thesis/open-access/find?doi=...
+// "Find a free PDF": asks Unpaywall whether a legal free copy of a paper exists.
+// Open to every signed-in member, because sending a student elsewhere to look is how they leave.
+router.get('/open-access/find', openAccessFinderLimiter, optionalAuth, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Sign in to look for a free PDF.' });
+    }
+    const doi = String(req.query.doi || '').trim().slice(0, 300);
+    if (!doi) {
+      return res.status(400).json({ found: false, reason: 'invalid_doi', message: 'This paper has no DOI, so a free copy cannot be looked up.' });
+    }
+
+    const result = await findOpenAccessPdf({ doi });
+    if (result.found) {
+      return res.json(result);
+    }
+
+    const messages = {
+      not_configured: 'The free-PDF finder is not switched on for this site yet.',
+      invalid_doi: 'This paper has no usable DOI, so a free copy cannot be looked up.',
+      no_open_copy: 'No free legal copy of this paper is known.',
+      not_found: 'This DOI is not known to the free-PDF index.',
+      rate_limited: 'The free-PDF index is busy. Try again in a minute.',
+      unavailable: 'The free-PDF index could not be reached. Try again in a moment.',
+    };
+    return res.json({ found: false, reason: result.reason, message: messages[result.reason] || messages.unavailable });
+  } catch (err) {
+    console.error('[routes/thesis.js] Free PDF lookup failed:', err);
+    return res.status(500).json({ found: false, reason: 'unavailable', message: 'The free-PDF lookup failed.' });
+  }
+});
+
+// POST /api/thesis/:id/full-text
+// Reads the paper's free PDF and returns the authors' own Limitations, Future work, Conclusion
+// and Data/Code availability text, plus dataset and code links found in the paper.
+// No AI: only text that is in the PDF is returned. Same members as Quick Summary.
+router.post('/:id/full-text', fullTextLimiter, optionalAuth, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(403).json({
+        code: 'FEATURE_LOCKED',
+        feature: 'paper_full_text',
+        message: 'Sign in and start your 7-day trial or a Premium membership to read limitations from the full paper.',
+      });
+    }
+
+    const entitlements = await getEffectiveEntitlements(req.user._id);
+    const quotas = entitlements && entitlements.quotas;
+    if (!quotas || entitlements.plan === 'free' || quotas.canUsePaperSummarizer === false || quotas.canAccessFullTextSummary !== true) {
+      return res.status(403).json({
+        code: 'FEATURE_LOCKED',
+        feature: 'paper_full_text',
+        message: 'Reading limitations from the full paper is included in the 7-day trial and in Premium. It is not part of the free plan.',
+      });
+    }
+
+    const { id } = req.params;
+    const inputPaper = (req.body && typeof req.body.paper === 'object' && req.body.paper) || {};
+    let pdfUrl = typeof inputPaper.pdfUrl === 'string' ? inputPaper.pdfUrl.trim() : '';
+    let doi = typeof inputPaper.doi === 'string' ? inputPaper.doi.trim().slice(0, 300) : '';
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      const localDoc = await Thesis.findById(id).lean();
+      if (localDoc) {
+        if (!canSeeUnapprovedPaper(req.user, localDoc)) {
+          return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
+        }
+        // The archive's own record wins over anything the browser sends
+        pdfUrl = localDoc.pdfUrl && String(localDoc.pdfUrl).trim() ? String(localDoc.pdfUrl).trim() : '';
+        doi = localDoc.doi || '';
+      }
+    }
+
+    let foundVia = 'record';
+    if (pdfUrl && !isValidDocumentUrl(pdfUrl)) {
+      pdfUrl = '';
+    }
+    if (!pdfUrl && doi) {
+      // No PDF on the record: see whether a free legal copy exists and read that one
+      const openCopy = await findOpenAccessPdf({ doi });
+      if (openCopy.found && openCopy.pdfUrl) {
+        pdfUrl = openCopy.pdfUrl;
+        foundVia = 'unpaywall';
+      }
+    }
+
+    if (!pdfUrl) {
+      return res.json({ available: false, reason: 'no_pdf', retryable: false, message: fullTextMessage('no_pdf') });
+    }
+
+    const result = await readPaperFullText({ pdfUrl });
+    if (!result.ok) {
+      return res.json({
+        available: false,
+        reason: result.reason,
+        retryable: isRetryableFullTextReason(result.reason),
+        message: fullTextMessage(result.reason),
+      });
+    }
+
+    return res.json({
+      available: true,
+      foundVia,
+      pdfUrl: result.finalUrl || pdfUrl,
+      pageCount: result.pageCount,
+      pagesRead: result.pagesRead,
+      truncated: Boolean(result.truncated),
+      keySections: result.keySections,
+      links: result.links,
+      sectionTitles: result.sectionTitles,
+    });
+  } catch (err) {
+    console.error('[routes/thesis.js] Full-text reading failed:', err);
+    return res.status(500).json({ available: false, reason: 'unreadable', retryable: true, message: 'The full text could not be read for this paper.' });
+  }
+});
+
 // GET /api/thesis/datasets/discover
-// Global dataset search querying DataCite and Zenodo
+// Global dataset search across the dataset sources (DataCite, Zenodo, Figshare, Dryad, Harvard Dataverse, Hugging Face)
 router.get('/datasets/discover', optionalAuth, async (req, res) => {
   try {
     const { q, query, page = 1, limit = 15 } = req.query;
@@ -716,6 +862,7 @@ router.post('/cite', (req, res) => {
       missingFields: Array.from(new Set([...apa.missingFields, ...bibtex.missingFields])),
     });
   } catch (err) {
+    console.error('[routes/thesis.js] Failed to generate citations:', err);
     return res.status(500).json({ message: 'Failed to generate citations.' });
   }
 });
@@ -724,12 +871,12 @@ router.post('/cite', (req, res) => {
 // Dead link / metadata inaccuracy report
 router.post('/:id/report', optionalAuth, async (req, res) => {
   try {
-    const { issueType, description, userEmail, title } = req.body;
+    const { issueType, description, userEmail, title } = req.body || {};
     const newReport = new Report({
-      recordId: req.params.id,
-      title: title || 'Scholarly Publication',
-      issueType: issueType || 'dead-link',
-      description: description || 'User reported issue with metadata or access.',
+      recordId: String(req.params.id).slice(0, 200),
+      title: String(title || 'Scholarly Publication').slice(0, 300),
+      issueType: normalizeReportIssueType(issueType),
+      description: String(description || '').trim().slice(0, 2000) || 'No details were given.',
       reportedBy: req.user ? req.user.email : (userEmail || 'anonymous'),
       status: 'pending',
     });
@@ -778,6 +925,7 @@ router.post('/:id/report', optionalAuth, async (req, res) => {
       report: newReport,
     });
   } catch (err) {
+    console.error('[Thesis] Report submission error:', err);
     return res.status(500).json({ message: 'Failed to submit report.' });
   }
 });
@@ -887,6 +1035,8 @@ router.post('/', authenticateToken, async (req, res) => {
       datasetFormat,
       codeUrl,
       bibtex,
+      pdfStorageRef,
+      pdfSizeBytes,
     } = req.body;
 
     if (!title || !abstract || !university || !department || !author) {
@@ -917,6 +1067,23 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
+    // A PDF uploaded through the deposit form: accepted only when the address really is this
+    // site's stored copy of that file, so a form cannot claim somebody else's upload.
+    const isUploadedPdf = Boolean(pdfStorageRef) && thesisFileStorage.isOwnStorageUrl(cleanPdfUrl, pdfStorageRef);
+    if (isUploadedPdf) {
+      // The file must be one this member uploaded, and each upload belongs to one thesis only.
+      // Otherwise deleting one record could remove a file another record still needs.
+      if (!thesisFileStorage.isUploadedBy(pdfStorageRef, req.user._id)) {
+        return res.status(400).json({ message: 'That uploaded file cannot be used here. Please upload your PDF again.' });
+      }
+      if (await Thesis.exists({ pdfStorageRef })) {
+        return res.status(409).json({
+          code: 'ALREADY_SUBMITTED',
+          message: 'This PDF is already attached to a thesis you submitted. You do not need to send it again.',
+        });
+      }
+    }
+
     const newThesis = new Thesis({
       title: title.trim(),
       abstract: abstract.trim(),
@@ -930,7 +1097,9 @@ router.post('/', authenticateToken, async (req, res) => {
       publisher: publisher ? publisher.trim() : `${university.trim()} Academic Depository`,
       publishedYear: publishedYear ? parseInt(publishedYear) : new Date().getFullYear(),
       pdfUrl: cleanPdfUrl,
-      isDirectPdf: Boolean(cleanPdfUrl && (cleanPdfUrl.includes('/pdf') || cleanPdfUrl.endsWith('.pdf'))),
+      isDirectPdf: Boolean(cleanPdfUrl && (isUploadedPdf || cleanPdfUrl.includes('/pdf') || cleanPdfUrl.endsWith('.pdf'))),
+      pdfStorageRef: isUploadedPdf ? pdfStorageRef : '',
+      pdfSizeBytes: isUploadedPdf && Number.isFinite(Number(pdfSizeBytes)) ? Number(pdfSizeBytes) : null,
       datasetUrl: datasetUrl ? datasetUrl.trim() : '',
       datasetSize: datasetSize ? datasetSize.trim() : '',
       datasetFormat: datasetFormat ? datasetFormat.trim() : '',
@@ -975,6 +1144,7 @@ router.put('/:id/approve', authenticateToken, requirePermission(PERMISSIONS.PUBL
 
     return res.json({ message: 'Thesis approved for public discovery.', thesis });
   } catch (err) {
+    console.error('[routes/thesis.js] Failed to approve thesis:', err);
     return res.status(500).json({ message: 'Failed to approve thesis.' });
   }
 });
@@ -1005,6 +1175,7 @@ router.put('/:id/reject', authenticateToken, requirePermission(PERMISSIONS.PUBLI
 
     return res.json({ message: 'Thesis rejected.', thesis });
   } catch (err) {
+    console.error('[routes/thesis.js] Failed to reject thesis:', err);
     return res.status(500).json({ message: 'Failed to reject thesis.' });
   }
 });
@@ -1122,6 +1293,11 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
 
     // Broadcast deletion in real-time
     emitThesisDeleted(thesis._id);
+
+    // Remove the uploaded PDF with the record (does nothing for linked PDFs; never blocks the delete)
+    if (thesis.pdfStorageRef) {
+      await thesisFileStorage.destroyThesisPdfIfUnused(thesis.pdfStorageRef, Thesis);
+    }
 
     return res.json({ message: 'Thesis record purged from repository.' });
   } catch (err) {

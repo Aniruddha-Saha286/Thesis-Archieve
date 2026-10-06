@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fixture: ASSUMED shape (standard OAI-PMH error for a metadataPrefix the repository does not offer).
+-->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">
+  <responseDate>2026-10-05T21:09:00Z</responseDate>
+  <request verb="ListRecords" metadataPrefix="dim">http://repository.example.edu.bd/oai/request</request>
+  <error code="cannotDisseminateFormat">The metadata format identified by the value given for the metadataPrefix argument is not supported by the item or by the repository.</error>
+</OAI-PMH>

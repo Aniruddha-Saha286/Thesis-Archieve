@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import { Check, X, FileText, Eye } from 'lucide-react';
 import DocumentViewerModal from './DocumentViewerModal';
 
 export default function VerificationDrawer({ isOpen, onClose, pendingStudents, onEvaluate, loading }) {
+  useEscapeToClose(onClose, isOpen);
   const [inspectingCandidate, setInspectingCandidate] = useState(null);
 
   if (!isOpen) return null;
@@ -55,7 +57,7 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
                       <h4 className="text-sm font-bold text-[#1C1B18] dark:text-neutral-100">{candidate.name}</h4>
                       <p className="text-xs font-mono-meta text-[#737067] dark:text-neutral-400">{candidate.email}</p>
                     </div>
-                    <span className="px-2 py-0.5 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-[10px] font-mono-meta font-bold">
+                    <span className="px-2 py-0.5 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-[11px] font-mono-meta font-bold">
                       AWAITING REVIEW
                     </span>
                   </div>

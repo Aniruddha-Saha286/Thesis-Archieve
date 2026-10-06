@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fixture: a list with exactly ONE record, where every element also appears exactly once and the
+  server uses a different namespace prefix. XML parsers return a single child as an object and
+  several as an array; the harvester must cope with both.
+  ASSUMED shape (hand written, standard oai_dc). It also has no advisor, no department,
+  only upload timestamps as dates, and a contributor that is the university itself.
+-->
+<oai:OAI-PMH xmlns:oai="http://www.openarchives.org/OAI/2.0/">
+  <oai:responseDate>2026-10-05T21:07:00Z</oai:responseDate>
+  <oai:request verb="ListRecords" metadataPrefix="oai_dc">http://repository.example.edu.bd/oai/request</oai:request>
+  <oai:ListRecords>
+    <oai:record>
+      <oai:header>
+        <oai:identifier>oai:repository.example.edu.bd:123456789/0042</oai:identifier>
+        <oai:datestamp>2021-06-01T00:00:00Z</oai:datestamp>
+        <oai:setSpec>col_123456789_7</oai:setSpec>
+      </oai:header>
+      <oai:metadata>
+        <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dcx="http://purl.org/dc/elements/1.1/">
+          <dcx:title>Arsenic removal from groundwater using low-cost iron oxide filters</dcx:title>
+          <dcx:creator>Hossain, Mahmuda</dcx:creator>
+          <dcx:contributor>Example University of Engineering</dcx:contributor>
+          <dcx:description>Arsenic in shallow tube wells remains one of the most widespread public health problems in the delta. This work builds and tests a household filter made from locally available iron oxide coated sand, and reports removal rates over twelve months of daily use in forty homes.</dcx:description>
+          <dcx:date>2019-03-04T10:15:00Z</dcx:date>
+          <dcx:type>Masters Thesis</dcx:type>
+          <dcx:identifier>http://repository.example.edu.bd/handle/123456789/0042</dcx:identifier>
+        </oai_dc:dc>
+      </oai:metadata>
+    </oai:record>
+  </oai:ListRecords>
+</oai:OAI-PMH>

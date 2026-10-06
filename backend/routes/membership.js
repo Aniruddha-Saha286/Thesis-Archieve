@@ -299,7 +299,7 @@ router.post('/orders', async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const merchantNumber = process.env.BKASH_MERCHANT_NUMBER || '01777000000';
-    const merchantName = process.env.BKASH_MERCHANT_NAME || 'Project Panther / The Thesis Archive';
+    const merchantName = process.env.BKASH_MERCHANT_NAME || 'The Thesis Archive';
     const merchantQr = process.env.BKASH_MERCHANT_QR || '';
 
     // If merchant account is not configured, disclose honestly
@@ -651,6 +651,7 @@ router.get('/payments/history', async (req, res) => {
 
     return res.json(formatted);
   } catch (err) {
+    console.error('[routes/membership.js] Failed to retrieve payment history:', err);
     return res.status(500).json({ message: 'Failed to retrieve payment history.' });
   }
 });
@@ -712,6 +713,7 @@ router.post('/payments/:id/correct', async (req, res) => {
       submission,
     });
   } catch (err) {
+    console.error('[routes/membership.js] Failed to update payment submission:', err);
     return res.status(500).json({ message: 'Failed to update payment submission.' });
   }
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
 import { X, Shield, CheckSquare, Square, AlertCircle, Trash2, CheckCircle2 } from 'lucide-react';
 
@@ -10,7 +11,7 @@ const PERMISSION_DEFINITIONS = [
   { key: 'payments.view', label: 'View bKash Payment Queue', desc: 'Allows reading submitted transaction claims.' },
   { key: 'payments.review', label: 'Approve / Reject bKash Payment Claims', desc: 'Allows reconciling payments against merchant statements.' },
   { key: 'publications.moderate', label: 'Moderate Submitted Publications', desc: 'Allows approving or rejecting student thesis submissions.' },
-  { key: 'reports.moderate', label: 'Resolve Depository Issue Reports', desc: 'Allows managing metadata and dead-link reports.' },
+  { key: 'reports.moderate', label: 'Handle reports and feedback', desc: 'May close reported problems and reply to messages from users.' },
 ];
 
 const DEFAULT_BUNDLE = [
@@ -23,6 +24,7 @@ const DEFAULT_BUNDLE = [
 ];
 
 export default function EditorManagementModal({ isOpen, onClose, editor, onSuccess }) {
+  useEscapeToClose(onClose, isOpen);
   const [email, setEmail] = useState('');
   const [selectedPerms, setSelectedPerms] = useState(DEFAULT_BUNDLE);
   const [loading, setLoading] = useState(false);
@@ -129,7 +131,7 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
               <h3 className="text-sm font-bold text-[#1C1B18] dark:text-neutral-100">
                 {isEditing ? `Edit Permissions: ${editor.name}` : (editor?.name ? `Appoint Editor: ${editor.name}` : 'Appoint New Editor')}
               </h3>
-              <p className="text-[10px] text-[#737067] dark:text-neutral-400">
+              <p className="text-[11px] text-[#737067] dark:text-neutral-400">
                 Granular Capability Delegation • Team & Access Management
               </p>
             </div>
@@ -168,7 +170,7 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
                   placeholder="e.g. colleague@institution.edu"
                   className="w-full bg-[#FAF9F5] dark:bg-neutral-800 border border-[#D5D1C7] dark:border-neutral-700 px-3 py-2 text-[#1C1B18] dark:text-neutral-100 rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400"
                 />
-                <p className="text-[10px] text-[#737067] dark:text-neutral-400 mt-1">
+                <p className="text-[11px] text-[#737067] dark:text-neutral-400 mt-1">
                   Note: Pre-provisioning supported. If this user hasn&apos;t signed in with Google yet, their editor account will activate automatically on first login.
                 </p>
               </div>
@@ -181,7 +183,7 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
               <label className="font-bold text-[#1C1B18] dark:text-neutral-200 uppercase text-[11px]">
                 Assigned Moderation Capabilities ({selectedPerms.length})
               </label>
-              <div className="flex gap-2 text-[10px]">
+              <div className="flex gap-2 text-[11px]">
                 <button
                   type="button"
                   onClick={handleSelectDefault}
@@ -226,8 +228,8 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
                     </div>
                     <div>
                       <div className="font-bold text-[#1C1B18] dark:text-neutral-100 text-xs">{perm.label}</div>
-                      <div className="text-[10px] text-[#737067] dark:text-neutral-400 leading-relaxed">{perm.desc}</div>
-                      <code className="text-[9px] text-[#8C887E] dark:text-neutral-500">{perm.key}</code>
+                      <div className="text-[11px] text-[#737067] dark:text-neutral-400 leading-relaxed">{perm.desc}</div>
+                      <code className="text-[11px] text-[#8C887E] dark:text-neutral-500">{perm.key}</code>
                     </div>
                   </div>
                 );
