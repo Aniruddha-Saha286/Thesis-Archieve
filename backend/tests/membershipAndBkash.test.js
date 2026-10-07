@@ -28,11 +28,9 @@ async function runMembershipAndBkashTests() {
     }
   }
 
-  // 1. Asia/Dhaka Calendar Month Calculations with End-of-Month Clamping
   console.log('--- 1. Asia/Dhaka Calendar Month Date Math & Clamping ---');
 
   test('Aug 31 + 6 calendar months clamps to Feb 28 (or Feb 29 in leap year), not Mar 3', () => {
-    // 2025 is not a leap year. Aug 31, 2025 + 6 months must be Feb 28, 2026.
     const aug31 = new Date('2025-08-31T12:00:00.000Z');
     const result = addDhakaCalendarMonths(aug31, 6);
     const parts = getDhakaDateParts(result);
@@ -60,14 +58,12 @@ async function runMembershipAndBkashTests() {
   });
 
   test('6 calendar months is NEVER substituted with a naive 180-day addition', () => {
-    // Naive 180 days from Jan 1, 2025:
     const jan1 = new Date('2025-01-01T06:00:00.000Z');
     const naive180 = new Date(jan1.getTime() + 180 * 24 * 60 * 60 * 1000);
     const calendar6m = addDhakaCalendarMonths(jan1, 6);
     const naiveParts = getDhakaDateParts(naive180);
     const calendarParts = getDhakaDateParts(calendar6m);
 
-    // Jan 1 + 6 calendar months is July 1. Naive 180 days lands on June 30.
     assert.strictEqual(calendarParts.month, 7, '6 calendar months must land in July (month 7)');
     assert.strictEqual(calendarParts.day, 1, 'Day must be 1st of July');
     assert.notStrictEqual(
@@ -84,7 +80,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(diffHours, 7 * 24, 'Must span exactly 168 hours');
   });
 
-  // 2. Free vs Premium Quota Specifications
   console.log('\n--- 2. Free vs Premium Quota Limits ---');
 
   test('Free tier allows max 10 saved papers and blocks 11th', () => {
@@ -95,7 +90,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(limits.maxTopicAlerts, 0);
     assert.strictEqual(limits.canSaveComparisons, false);
 
-    // Simulating quota check:
     const currentSaved = 10;
     const isAllowed = currentSaved < limits.maxSavedPapers;
     assert.strictEqual(isAllowed, false, 'Saving 11th paper must be rejected on Free plan');
@@ -109,13 +103,11 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(limits.maxTopicAlerts, 10);
     assert.strictEqual(limits.canSaveComparisons, true);
 
-    // Simulating quota check:
     const currentSaved = 10;
     const isAllowed = currentSaved < limits.maxSavedPapers;
     assert.strictEqual(isAllowed, true, 'Saving 11th paper must be permitted on Premium plan');
   });
 
-  // 3. 7-Day Premium Trial Lifecycle
   console.log('\n--- 3. 7-Day Trial Eligibility & Single-Use Rules ---');
 
   test('Unverified student status="pending" cannot activate trial', () => {
@@ -130,7 +122,6 @@ async function runMembershipAndBkashTests() {
     const isEligible = mockStudent.status === 'approved' && !existingTrials.some((t) => t.user === mockStudent._id);
     assert.strictEqual(isEligible, true, 'Verified student with no prior trial is eligible');
 
-    // Simulate activation
     const trialGrant = {
       user: mockStudent._id,
       startsAt: new Date(),
@@ -139,7 +130,6 @@ async function runMembershipAndBkashTests() {
     };
     existingTrials.push(trialGrant);
 
-    // Second activation attempt must be rejected
     const secondAttemptEligible = !existingTrials.some((t) => t.user === mockStudent._id);
     assert.strictEqual(secondAttemptEligible, false, 'Second trial activation must be strictly blocked for life');
   });
@@ -153,7 +143,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(isTrialAllowed, false, 'Prior paid subscribers cannot claim a free trial');
   });
 
-  // 4. Manual bKash Payment & Order Snapshot Architecture
   console.log('\n--- 4. Manual bKash Payment & TrxID Normalization ---');
 
   test('Order creation generates immutable snapshot with ৳500 / 50000 paisa for 6 months', () => {
@@ -204,7 +193,6 @@ async function runMembershipAndBkashTests() {
     );
   });
 
-  // 5. Admin Approval & Renewal Extension Rules
   console.log('\n--- 5. Admin Verification & Active Renewal Extension ---');
 
   test('Approval without merchant statement verification is rejected', () => {
@@ -224,39 +212,30 @@ async function runMembershipAndBkashTests() {
   });
 
   test('Active renewal extends existing expiration date by 6 calendar months without losing days', () => {
-    // Suppose a user has an active membership expiring Oct 15, 2025.
-    // The admin approves a renewal payment on Sep 20, 2025 (25 days before expiration).
     const existingExpiry = new Date('2025-10-15T12:00:00.000Z');
     const approvalDate = new Date('2025-09-20T12:00:00.000Z');
 
-    // Rule: Add 6 calendar months to existingExpiry, NOT approvalDate!
     const renewedExpiry = addDhakaCalendarMonths(existingExpiry, 6);
     const renewedParts = getDhakaDateParts(renewedExpiry);
 
-    // Oct 15 + 6 calendar months = Apr 15 of next year (2026):
     assert.strictEqual(renewedParts.year, 2026, 'Year must advance to 2026');
     assert.strictEqual(renewedParts.month, 4, 'Month must be April (4)');
     assert.strictEqual(renewedParts.day, 15, 'Day must remain 15th');
 
-    // If naive approval date was used, expiry would be Mar 20, 2026, losing 26 days!
     const naiveExpiry = addDhakaCalendarMonths(approvalDate, 6);
     assert(renewedExpiry.getTime() > naiveExpiry.getTime(), 'Renewal extension must preserve remaining active days');
   });
 
   test('Expired renewal starts 6 calendar months from approval date', () => {
-    // Suppose user membership expired on Jan 1, 2025.
-    // They repurchase and admin approves on Sep 24, 2026:
     const approvalDate = new Date('2026-09-24T12:00:00.000Z');
     const newExpiry = addDhakaCalendarMonths(approvalDate, 6);
     const parts = getDhakaDateParts(newExpiry);
 
-    // Sep 24 + 6 months = Mar 24 of next year:
     assert.strictEqual(parts.year, 2027);
     assert.strictEqual(parts.month, 3);
     assert.strictEqual(parts.day, 24);
   });
 
-  // 6. Admin Membership Cancellation with Mandatory Reason
   console.log('\n--- 6. Admin Membership Cancellation & Revocation ---');
 
   test('Admin cancellation requires mandatory non-empty reason', () => {
@@ -282,7 +261,6 @@ async function runMembershipAndBkashTests() {
 
     const cancellationReason = 'Account audit: fraudulent ID card credentials discovered';
 
-    // Execute cancellation logic
     for (const p of userPeriods) {
       if (p.status === 'active') {
         p.status = 'cancelled';
@@ -300,14 +278,12 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(userPeriods[0].cancellationReason, cancellationReason);
     assert.strictEqual(userTrials[0].status, 'expired');
 
-    // Simulate effective entitlement calculation after cancellation
     const hasActivePeriod = userPeriods.some((p) => p.status === 'active');
     const hasActiveTrial = userTrials.some((t) => t.status === 'active');
     const effectivePlan = hasActivePeriod ? 'premium' : hasActiveTrial ? 'trial' : 'free';
     assert.strictEqual(effectivePlan, 'free', 'Cancelled student must immediately fall back to Free plan');
   });
 
-  // 7. User Self-Service Subscription Cancellation
   console.log('\n--- 7. User Self-Service Subscription Cancellation & Data Preservation ---');
 
   test('User can self-cancel active paid Premium subscription at any time', () => {
@@ -322,7 +298,6 @@ async function runMembershipAndBkashTests() {
     const userPeriods = [activePeriod];
     const optionalReason = 'Completed thesis defense earlier than expected';
 
-    // Simulate POST /api/membership/cancel
     const now = new Date();
     for (const p of userPeriods) {
       if (p.status === 'active') {
@@ -349,7 +324,6 @@ async function runMembershipAndBkashTests() {
     };
     const now = new Date();
 
-    // Cancellation logic
     trialGrant.status = 'cancelled';
     trialGrant.cancelledAt = now;
     trialGrant.cancellationReason = 'Cancelled by user';
@@ -359,7 +333,6 @@ async function runMembershipAndBkashTests() {
   });
 
   test('User cancellation safely preserves 100% of saved papers, annotations, and collections', () => {
-    // Crucial academic depository guarantee: student data is never pruned on cancellation
     const studentAccount = {
       id: 'user_student_3',
       savedPapers: [
@@ -376,10 +349,8 @@ async function runMembershipAndBkashTests() {
     const initialCollectionCount = studentAccount.collections.length;
     const initialNotes = studentAccount.savedPapers[0].notes;
 
-    // Simulate subscription cancellation
     const cancelledPeriod = { status: 'cancelled', cancelledAt: new Date() };
 
-    // Post-cancellation verification: library remains completely intact
     assert.strictEqual(studentAccount.savedPapers.length, initialSavedCount, 'Saved papers must never be deleted upon cancellation');
     assert.strictEqual(studentAccount.collections.length, initialCollectionCount, 'Collections must remain intact upon cancellation');
     assert.strictEqual(studentAccount.savedPapers[0].notes, initialNotes, 'Research annotations must remain preserved');
@@ -406,7 +377,6 @@ async function runMembershipAndBkashTests() {
     let activePaidPeriods = [{ status: 'cancelled' }];
     let activeTrialGrant = null;
 
-    // Simulation of entitlement evaluator
     const hasActivePaid = activePaidPeriods.some((p) => p.status === 'active');
     const hasActiveTrial = activeTrialGrant && activeTrialGrant.status === 'active';
     const effectivePlan = hasActivePaid ? 'premium' : hasActiveTrial ? 'trial' : 'free';
@@ -414,7 +384,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(effectivePlan, 'free', 'Cancelled subscription must immediately compute effective plan as free');
   });
 
-  // 8. Free Tier Dataset Access & 10 Daily Search Quota Enforcement
   console.log('\n--- 8. Dataset Access Restrictions & 10 Daily Search Quota Enforcement ---');
 
   test('Free tier quota specifies canAccessPaperDatasets: false and dailySearchLimit: 10', () => {
@@ -428,7 +397,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(PLAN_LIMITS.pro_max_12m.canAccessPaperDatasets, true, 'Pro Max tier must have dataset access');
     assert.strictEqual(PLAN_LIMITS.pro_max_12m.dailySearchLimit, null, 'Pro Max tier must have unlimited daily searches');
 
-    // New Trial (v2) has 20 daily searches and 5 dataset lookups/day
     assert.strictEqual(PLAN_LIMITS.trial_v2.canAccessPaperDatasets, true, 'Trial v2 must have dataset access');
     assert.strictEqual(PLAN_LIMITS.trial_v2.dailySearchLimit, 20, 'Trial v2 must be limited to 20 daily searches');
     assert.strictEqual(PLAN_LIMITS.trial_v2.dailyDatasetLookupLimit, 5, 'Trial v2 must have max 5 dataset lookups daily');
@@ -437,7 +405,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(PLAN_LIMITS.trial_v2.maxTopicAlerts, 1, 'Trial v2 allows 1 topic alert');
     assert.strictEqual(PLAN_LIMITS.trial_v2.canExportBulk, false, 'Trial v2 bulk export disabled');
 
-    // Grandfathered Trial (v1) retains unlimited searches
     assert.strictEqual(PLAN_LIMITS.trial_v1.canAccessPaperDatasets, true, 'Grandfathered trial retains dataset access');
     assert.strictEqual(PLAN_LIMITS.trial_v1.dailySearchLimit, null, 'Grandfathered trial retains unlimited daily searches');
     assert.strictEqual(PLAN_LIMITS.trial_v1.maxSavedPapers, 1000, 'Grandfathered trial retains 1000 saved papers');
@@ -466,14 +433,12 @@ async function runMembershipAndBkashTests() {
       dailySearchCount: 0,
     };
 
-    // First 10 searches must succeed
     for (let i = 1; i <= 10; i++) {
       const res = simulateSearch(freeStudent, `query_${i}`);
       assert.strictEqual(res.count, i);
       assert.strictEqual(res.remaining, 10 - i);
     }
 
-    // 11th search must be rejected with 403 / SEARCH_QUOTA_EXCEEDED
     assert.throws(
       () => simulateSearch(freeStudent, 'query_11'),
       (err) => err.statusCode === 403 && err.code === 'SEARCH_QUOTA_EXCEEDED'
@@ -500,10 +465,9 @@ async function runMembershipAndBkashTests() {
 
     const premiumStudent = {
       entitlements: { label: 'Premium Scholarly', quotas: PLAN_LIMITS.premium },
-      dailySearchCount: 10, // Already at 10 searches
+      dailySearchCount: 10,
     };
 
-    // 11th, 12th, 15th searches must succeed without error
     const res11 = simulateSearch(premiumStudent, 'quantum computing');
     assert.strictEqual(res11.success, true);
     assert.strictEqual(res11.remaining, 'unlimited');
@@ -548,7 +512,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(res.datasets[0].id, 'zenodo.123');
   });
 
-  // --- 9. Trial v2 5 Paper Dataset Lookups/Day Quota Enforcement ---
   console.log('\n--- 9. Trial v2 Daily Dataset Lookup Quota ---');
 
   test('Trial v2 user enforces 5 daily dataset lookups and blocks 6th', () => {
@@ -589,7 +552,6 @@ async function runMembershipAndBkashTests() {
       dailyLookupsUsed: 0,
     };
 
-    // First 5 lookups must succeed
     for (let i = 1; i <= 5; i++) {
       const res = lookupPaperDataset(trialUser);
       assert.strictEqual(res.success, true);
@@ -597,14 +559,12 @@ async function runMembershipAndBkashTests() {
       assert.strictEqual(res.datasetQuota.remaining, 5 - i);
     }
 
-    // 6th lookup must be rejected with DAILY_DATASET_LIMIT_REACHED (429)
     assert.throws(
       () => lookupPaperDataset(trialUser),
       (err) => err.statusCode === 429 && err.code === 'DAILY_DATASET_LIMIT_REACHED' && err.datasetQuota.remaining === 0
     );
   });
 
-  // --- 10. Pro Max Annual Plan Catalog & Clamping ---
   console.log('\n--- 10. Pro Max Annual Plan Catalog & Clamping ---');
 
   test('Pro Max Annual snapshot defines ৳850 / 85000 paisa, 12 months, and 15% savings note', () => {
@@ -622,7 +582,6 @@ async function runMembershipAndBkashTests() {
   });
 
   test('Pro Max 12-month calendar calculation correctly advances 1 year and clamps leap year', () => {
-    // Feb 29, 2024 (leap year) + 12 calendar months must clamp to Feb 28, 2025
     const leapDay = new Date('2024-02-29T10:00:00.000Z');
     const plus12m = addDhakaCalendarMonths(leapDay, 12);
     const parts = getDhakaDateParts(plus12m);
@@ -631,11 +590,9 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(parts.day, 28, 'Must clamp Feb 29 to Feb 28 in non-leap year');
   });
 
-  // --- 11. Payment Approval Idempotency Guard ---
   console.log('\n--- 11. Payment Approval Idempotency Guard ---');
 
   test('Admin approval idempotency guard prevents double-extension on replay', () => {
-    // Simulate payment submission and approval
     const payment = {
       _id: 'sub_test_1',
       status: 'approved',
@@ -657,7 +614,6 @@ async function runMembershipAndBkashTests() {
       if (verifiedInStatement !== true) {
         throw new Error('Verification in merchant statement is required');
       }
-      // Idempotency check: if payment already approved, return existing coverage without extending
       if (submission.status === 'approved') {
         return {
           idempotentReplay: true,
@@ -665,7 +621,6 @@ async function runMembershipAndBkashTests() {
           message: 'Payment already approved; returning active coverage.',
         };
       }
-      // First-time approval extends coverage
       return {
         idempotentReplay: false,
         period: {
@@ -681,7 +636,6 @@ async function runMembershipAndBkashTests() {
     assert.strictEqual(replayRes.period.expiresAt.toISOString(), '2025-12-01T00:00:00.000Z', 'Expiry must NOT be extended on replay');
   });
 
-  // --- 12. Topic Alert Batch Scanning & Per-Paper Deduplication ---
   console.log('\n--- 12. Topic Alert Batch Scanning & Per-Paper Deduplication ---');
 
   test('Topic alert runner does not stop at 5 papers and checks per-paper deduplication', () => {
@@ -693,13 +647,10 @@ async function runMembershipAndBkashTests() {
       });
     }
 
-    // Previous notifications already notified papers 1 and 2
     const notifiedPaperIds = new Set(['thesis_batch_1', 'thesis_batch_2']);
 
-    // Per-paper deduplication
     const trulyNew = matchingTheses.filter((t) => !notifiedPaperIds.has(t._id));
 
-    // Verify: all 10 remaining new papers are identified without 5-paper cutoff
     assert.strictEqual(trulyNew.length, 10, 'Must process all 10 newly approved papers');
     assert.strictEqual(trulyNew[0]._id, 'thesis_batch_3');
     assert.strictEqual(trulyNew[9]._id, 'thesis_batch_12');

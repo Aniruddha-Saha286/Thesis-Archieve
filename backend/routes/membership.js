@@ -15,19 +15,14 @@ const { addDhakaDays, addDhakaCalendarMonths, formatDhakaDateTime } = require('.
 const { emitToUser, emitToAdmins } = require('../socket');
 const emailService = require('../services/emailService');
 
-// All membership endpoints require authenticated user
 router.use(authenticateToken);
 
-// GET /api/membership/plans
-// Publicly defined plan definitions from authoritative versioned catalog
 router.get('/plans', (req, res) => {
   return res.json({
     plans: getPublicPlans(),
   });
 });
 
-// GET /api/membership/status
-// Retrieves effective membership status, entitlements, active periods, and cancellation eligibility
 router.get('/status', async (req, res) => {
   try {
     const entitlements = await getEffectiveEntitlements(req.user._id);
@@ -39,7 +34,6 @@ router.get('/status', async (req, res) => {
       expiresAt: { $gt: now },
     }).sort({ startsAt: 1, expiresAt: 1 });
 
-    // Strict currentPeriod definition: startsAt <= now < expiresAt
     const currentPeriodDoc = allActivePeriods.find(p => p.startsAt <= now && p.expiresAt > now) || null;
     const futureRenewalDoc = allActivePeriods.find(p => p.startsAt > now && (!currentPeriodDoc || String(p._id) !== String(currentPeriodDoc._id))) || null;
 
@@ -86,7 +80,7 @@ router.get('/status', async (req, res) => {
       entitlements,
       currentPeriod,
       futureRenewal,
-      activePeriod: currentPeriod, // Backwards-compatible
+      activePeriod: currentPeriod,
       activeTrial: activeTrial ? {
         id: activeTrial._id,
         policyVersion: activeTrial.policyVersion || 'v1',
@@ -110,8 +104,6 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// POST /api/membership/cancel
-// Allows student/user to self-cancel active subscription or trial at any time
 router.post('/cancel', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -122,19 +114,16 @@ router.post('/cancel', async (req, res) => {
       ? reason.trim().slice(0, 500)
       : 'Cancelled by user';
 
-    // 1. Find all active membership periods
     const activePeriods = await MembershipPeriod.find({
       user: user._id,
       status: 'active',
     });
 
-    // 2. Find active trial grant
     const activeTrial = await TrialGrant.findOne({
       user: user._id,
       status: 'active',
     });
 
-    // If user has neither an active paid period nor an active trial, reject request
     if (activePeriods.length === 0 && !activeTrial) {
       return res.status(400).json({
         message: 'No active subscription or trial found to cancel.',
@@ -144,7 +133,6 @@ router.post('/cancel', async (req, res) => {
 
     const now = new Date();
 
-    // Cancel all active periods
     for (const period of activePeriods) {
       period.status = 'cancelled';
       period.cancelledAt = now;
@@ -153,7 +141,6 @@ router.post('/cancel', async (req, res) => {
       await period.save();
     }
 
-    // Cancel active trial
     if (activeTrial) {
       activeTrial.status = 'cancelled';
       activeTrial.cancelledAt = now;
@@ -161,7 +148,6 @@ router.post('/cancel', async (req, res) => {
       await activeTrial.save();
     }
 
-    // Record audit event
     await AuditEvent.create({
       actor: user._id,
       action: 'membership.user_cancelled',
@@ -175,7 +161,6 @@ router.post('/cancel', async (req, res) => {
       ipAddress: req.ip || '',
     });
 
-    // Send user notification with assurance that research data remains intact
     const notif = new Notification({
       user: user._id,
       type: 'editorial_update',
@@ -184,14 +169,12 @@ router.post('/cancel', async (req, res) => {
     });
     await notif.save();
 
-    // Emit live events to user and admin channels
     emitToUser(String(user._id), 'notification:new', notif);
     emitToUser(String(user._id), 'membership:updated', { plan: 'free', expiresAt: null });
     if (emitToAdmins) {
       emitToAdmins('admin:student_updated', { studentId: String(user._id) });
     }
 
-    // Retrieve fresh entitlements reflecting cancellation (falls back to free)
     const entitlements = await getEffectiveEntitlements(user._id);
 
     return res.json({
@@ -206,14 +189,11 @@ router.post('/cancel', async (req, res) => {
   }
 });
 
-// POST /api/membership/trial
-// Starts the 7-day trial for an eligible verified account
 router.post('/trial', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    // Trial rule: must be approved/verified
     if (user.status !== 'approved') {
       return res.status(403).json({
         message: 'Account verification required before activating the 7-day Premium trial.',
@@ -221,7 +201,6 @@ router.post('/trial', async (req, res) => {
       });
     }
 
-    // Trial rule: available once per eligible account for life
     const [existingTrial, existingPaid] = await Promise.all([
       TrialGrant.findOne({ user: user._id }),
       MembershipPeriod.findOne({ user: user._id }),
@@ -249,11 +228,10 @@ router.post('/trial', async (req, res) => {
       startsAt: now,
       expiresAt: expiresAt,
       status: 'active',
-      policyVersion: 'v2', // New trial grants use policy v2
+      policyVersion: 'v2',
     });
     await trial.save();
 
-    // Log audit event
     await AuditEvent.create({
       actor: user._id,
       action: 'membership.trial_started',
@@ -267,7 +245,6 @@ router.post('/trial', async (req, res) => {
       ipAddress: req.ip || '',
     });
 
-    // Notify user
     const notif = new Notification({
       user: user._id,
       type: 'editorial_update',
@@ -291,8 +268,6 @@ router.post('/trial', async (req, res) => {
   }
 });
 
-// POST /api/membership/orders
-// Creates an immutable order snapshot for chosen paid plan (৳500 / 6m or ৳850 / 12m)
 router.post('/orders', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -302,7 +277,6 @@ router.post('/orders', async (req, res) => {
     const merchantName = process.env.BKASH_MERCHANT_NAME || 'The Thesis Archive';
     const merchantQr = process.env.BKASH_MERCHANT_QR || '';
 
-    // If merchant account is not configured, disclose honestly
     if (!merchantNumber || merchantNumber === 'NONE') {
       return res.status(503).json({
         available: false,
@@ -391,8 +365,6 @@ router.post('/orders', async (req, res) => {
   }
 });
 
-// POST /api/membership/payments
-// Submits manual bKash transaction for admin verification
 router.post('/payments', async (req, res) => {
   try {
     const { orderId, trxId, senderNumber, paymentDateTime, receiptUrl } = req.body;
@@ -415,18 +387,15 @@ router.post('/payments', async (req, res) => {
 
     const normalizedTrxId = trxId.trim().toUpperCase();
 
-    // Basic format check for bKash TrxID (alphanumeric, 8-15 characters)
     if (!/^[A-Z0-9]{8,15}$/.test(normalizedTrxId)) {
       return res.status(400).json({
         message: 'Invalid bKash Transaction ID format. TrxID must be 8 to 15 alphanumeric characters (e.g. BKA12345678).',
       });
     }
 
-    // Check if order already has an existing submission
     const existingForOrder = await PaymentSubmission.findOne({ order: order._id });
     if (existingForOrder) {
       if (existingForOrder.status === 'rejected') {
-        // Allow updating rejected submission on correction
         const duplicateOther = await PaymentSubmission.findOne({
           paymentProvider: 'bkash',
           normalizedTrxId,
@@ -521,7 +490,6 @@ router.post('/payments', async (req, res) => {
       }
     }
 
-    // Duplicate detection across database
     const existingSubmission = await PaymentSubmission.findOne({
       paymentProvider: 'bkash',
       normalizedTrxId,
@@ -544,7 +512,7 @@ router.post('/payments', async (req, res) => {
       normalizedTrxId,
       senderNumber: (senderNumber || '').trim(),
       paymentDateTime: isNaN(paymentDate.getTime()) ? new Date() : paymentDate,
-      claimedAmountPaisa: order.pricePaisa, // Derived from immutable server order
+      claimedAmountPaisa: order.pricePaisa,
       receiptUrl: (receiptUrl || '').trim(),
       status: 'submitted',
     });
@@ -625,8 +593,6 @@ router.post('/payments', async (req, res) => {
   }
 });
 
-// GET /api/membership/payments/history
-// User payment submission history
 router.get('/payments/history', async (req, res) => {
   try {
     const history = await PaymentSubmission.find({ user: req.user._id })
@@ -656,8 +622,6 @@ router.get('/payments/history', async (req, res) => {
   }
 });
 
-// POST /api/membership/payments/:id/correct
-// Resubmits corrected transaction ID or receipt for a flagged submission
 router.post('/payments/:id/correct', async (req, res) => {
   try {
     const { trxId, receiptUrl, senderNumber } = req.body;
@@ -680,7 +644,6 @@ router.post('/payments/:id/correct', async (req, res) => {
         return res.status(400).json({ message: 'Invalid Transaction ID format.' });
       }
 
-      // Check duplicate
       const duplicate = await PaymentSubmission.findOne({
         paymentProvider: 'bkash',
         normalizedTrxId,
@@ -696,7 +659,7 @@ router.post('/payments/:id/correct', async (req, res) => {
 
     if (receiptUrl !== undefined) submission.receiptUrl = receiptUrl.trim();
     if (senderNumber !== undefined) submission.senderNumber = senderNumber.trim();
-    submission.status = 'submitted'; // Reset to submitted for review
+    submission.status = 'submitted';
     await submission.save();
 
     await AuditEvent.create({

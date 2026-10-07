@@ -1,9 +1,5 @@
 const { createNormalizedRecord } = require('../scholarlyRecord');
 
-/**
- * Semantic Scholar Graph API Provider Adapter
- * Endpoint: https://api.semanticscholar.org/graph/v1/paper/search
- */
 async function searchSemanticScholar({
   query = '',
   page = 1,
@@ -17,7 +13,6 @@ async function searchSemanticScholar({
   const pageSize = Math.min(limit, 30);
 
   if (process.env.OFFLINE_MODE === 'true') {
-    // If query is specifically checking offline fixtures
     const count = Math.min(pageSize, 2);
     const records = [];
     for (let i = 0; i < count; i++) {
@@ -73,7 +68,6 @@ async function searchSemanticScholar({
     'paperId,title,abstract,authors,year,venue,publicationTypes,publicationDate,externalIds,openAccessPdf,citationCount,isOpenAccess'
   );
 
-  // Year range filter support
   if (filters.yearMin && filters.yearMax) {
     params.append('year', `${filters.yearMin}-${filters.yearMax}`);
   } else if (filters.yearMin) {
@@ -82,7 +76,6 @@ async function searchSemanticScholar({
     params.append('year', `-${filters.yearMax}`);
   }
 
-  // Publication type mapping
   if (filters.publicationType) {
     if (filters.publicationType === 'journal-article') {
       params.append('publicationTypes', 'JournalArticle');
@@ -117,7 +110,6 @@ async function searchSemanticScholar({
         const retryAfterHeader = res.headers.get('retry-after');
         const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 0;
 
-        // At most ONE safe retry if retry-after is very small (<= 2 seconds)
         if (!isRetry && retryAfterSec > 0 && retryAfterSec <= 2) {
           await new Promise((r) => setTimeout(r, retryAfterSec * 1000));
           return executeFetch(true);

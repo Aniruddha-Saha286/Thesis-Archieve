@@ -1,9 +1,5 @@
 const { getEffectiveEntitlements } = require('../services/entitlementService');
 
-/**
- * Middleware to enforce quota limits for workspace actions
- * Supports: 'savedPapers', 'collections', 'topicAlerts', 'comparisons', 'bulkExport'
- */
 function enforceQuota(resourceType) {
   return async (req, res, next) => {
     try {

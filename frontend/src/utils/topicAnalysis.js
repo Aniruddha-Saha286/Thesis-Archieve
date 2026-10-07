@@ -1,14 +1,9 @@
-// Topic Check analysis.
-// Pure functions only (no React, no network) so the logic can be tested on its own.
-// Everything here is plain counting over the search results the server already returns.
-// It never claims a topic is "novel": it reports what was found in the results that were checked.
 
 const STOPWORDS = new Set(
   (
     'a an and are as at be been being but by can could did do does for from had has have how in into is it its ' +
     'of on or our over than that the their them then there these this those through to toward towards under up ' +
     'upon via was we were what when where which while who why will with within without would you your ' +
-    // words that appear in almost every academic title and say nothing about the topic
     'using based use used approach approaches study studies analysis method methods methodology novel new ' +
     'toward case paper research thesis dissertation project system systems model models framework frameworks ' +
     'application applications technique techniques evaluation performance improved improving ' +
@@ -16,10 +11,8 @@ const STOPWORDS = new Set(
   ).split(' ')
 );
 
-// Short tokens that are real research terms and must not be dropped by the length rule
 const SHORT_TERMS = new Set(['ai', 'ml', 'dl', 'ar', 'vr', 'xr', 'ui', 'ux', 'iot', '5g', '6g', 'rl', 'cv', 'qa', 'ir', 'gan', 'gnn', 'cnn', 'rnn', 'llm', 'nlp', 'svm', 'knn', 'ocr', 'asr', 'eeg', 'ecg', 'mri', 'gis', 'sql', 'rag', 'uav']);
 
-// Words ending in "s" that are not plurals
 const NO_STRIP = /(ss|is|us|ics|ous)$/;
 
 export function stem(word) {
@@ -29,14 +22,11 @@ export function stem(word) {
   return w;
 }
 
-// Returns [{ stem, word }] in first-seen order, one entry per stem.
 export function extractKeywords(text) {
   const out = [];
   const seen = new Set();
   const tokens = String(text || '')
     .toLowerCase()
-    // hyphens split too, so "low-resource" and "low resource" count as the same words.
-    // \p{M} keeps Bangla vowel signs attached to their letters.
     .split(/[^\p{L}\p{M}\p{N}+#]+/u)
     .map((t) => t.replace(/^[+#]+/, ''));
 
@@ -70,7 +60,6 @@ export function isThesisRecord(record) {
   return type === 'thesis' || type === 'dissertation' || /thesis|dissertation/.test(degree);
 }
 
-// A record that lives in this archive (deposited by students), not pulled from an outside index
 export function isLocalRecord(record) {
   const providers = [record?.source, ...(Array.isArray(record?.sources) ? record.sources.map((s) => s?.provider) : [])]
     .filter(Boolean)
@@ -106,7 +95,6 @@ export function recordAuthor(record) {
   return fromAuthors.length > 2 ? `${fromAuthors[0]} et al.` : fromAuthors.join(', ');
 }
 
-// How much of the student's topic shows up in one record. 0..1
 export function scoreRecord(topicKeywords, record) {
   if (!topicKeywords.length) return { score: 0, matched: [] };
   const titleStems = stemSet(record?.title);
@@ -183,7 +171,6 @@ function pickVerdict(closeCount, relatedCount) {
 export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets = [], currentYear = new Date().getFullYear(), userUniversity = '' }) {
   const keywords = extractKeywords(topic);
 
-  // Merge both result lists, first occurrence wins
   const byKey = new Map();
   for (const r of [...records, ...thesisRecords]) {
     if (!r || !r.title) continue;
@@ -200,7 +187,6 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
   const close = items.filter((i) => i.level === 'close');
   const related = items.filter((i) => i.level !== 'loose');
 
-  // Activity by year, last 10 years
   const firstYear = currentYear - 9;
   const yearSeries = Array.from({ length: 10 }, (_, i) => ({ year: firstYear + i, count: 0 }));
   let earlier = 0;
@@ -211,7 +197,6 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
   }
   const recentCount = related.filter((i) => i.year && i.year >= currentYear - 2).length;
 
-  // Theses (the part outside indexes cannot show well)
   const theses = related.filter((i) => isThesisRecord(i.record));
   const localTheses = theses.filter((i) => isLocalRecord(i.record));
   const bangladeshTheses = theses.filter((i) => String(recordCountry(i.record)).toUpperCase() === 'BD');
@@ -244,7 +229,6 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
     .sort((a, b) => b.record.citationCount - a.record.citationCount)
     .slice(0, 3);
 
-  // Which of the student's own words are rare in the related work, and which other words keep appearing
   const topicStems = new Set(keywords.map((k) => k.stem));
   const coverage = new Map(keywords.map((k) => [k.stem, 0]));
   const otherTerms = new Map();
@@ -298,7 +282,6 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
   };
 }
 
-// Plain-text version a student can paste into a proposal draft or send to a supervisor
 export function buildBriefText(report, appName = 'The Thesis Archive') {
   if (!report) return '';
   const lines = [];

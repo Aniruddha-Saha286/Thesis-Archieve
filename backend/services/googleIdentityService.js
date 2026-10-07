@@ -4,17 +4,10 @@ const AuditEvent = require('../models/AuditEvent');
 const { getCapabilities } = require('../middleware/rbac');
 const { emitNewStudentRegistered } = require('../socket');
 
-/**
- * Standard email validation regex.
- */
 function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/**
- * Retrieves and strictly validates the configured PRIMARY_ADMIN_GOOGLE_EMAIL.
- * FAILS CLOSED: Returns null if missing, empty, contains '—', or is invalid syntax.
- */
 function getValidatedPrimaryAdminEmail() {
   const envEmail = process.env.PRIMARY_ADMIN_GOOGLE_EMAIL;
   if (!envEmail || typeof envEmail !== 'string') {
@@ -27,9 +20,6 @@ function getValidatedPrimaryAdminEmail() {
   return clean;
 }
 
-/**
- * Lazy-initializes Google OAuth2Client.
- */
 function getGoogleClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId || clientId === '—' || clientId.includes('—')) {
@@ -38,10 +28,6 @@ function getGoogleClient() {
   return new OAuth2Client(clientId);
 }
 
-/**
- * Sanitizes a User document into an authoritative, safe DTO.
- * Guarantees that raw storage references, password hashes, and provider tokens are NEVER exposed.
- */
 function toSanitizedUserDto(user) {
   if (!user) return null;
   return {
@@ -65,10 +51,6 @@ function toSanitizedUserDto(user) {
   };
 }
 
-/**
- * Verifies a Google ID credential against official Google endpoints.
- * Enforces signature, issuer, audience, expiry, verified email, and stable sub claim.
- */
 async function verifyGoogleCredential(credential, options = {}) {
   if (!credential || typeof credential !== 'string') {
     const error = new Error('Google authentication credential (ID token) is required.');
@@ -77,7 +59,6 @@ async function verifyGoogleCredential(credential, options = {}) {
     throw error;
   }
 
-  // Allow custom client injection for deterministic unit testing
   const client = options.googleClient || getGoogleClient();
   const clientId = options.clientId || process.env.GOOGLE_CLIENT_ID;
 
@@ -103,7 +84,6 @@ async function verifyGoogleCredential(credential, options = {}) {
     throw error;
   }
 
-  // Strict issuer validation
   const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
   if (!validIssuers.includes(payload.iss)) {
     const error = new Error('Invalid token issuer.');
@@ -112,7 +92,6 @@ async function verifyGoogleCredential(credential, options = {}) {
     throw error;
   }
 
-  // Strict audience validation
   if (payload.aud !== clientId) {
     const error = new Error('Token audience does not match application client ID.');
     error.status = 401;
@@ -120,7 +99,6 @@ async function verifyGoogleCredential(credential, options = {}) {
     throw error;
   }
 
-  // Strict expiry check
   const nowSec = Math.floor(Date.now() / 1000);
   if (payload.exp && payload.exp < nowSec) {
     const error = new Error('Google authentication token has expired.');
@@ -129,7 +107,6 @@ async function verifyGoogleCredential(credential, options = {}) {
     throw error;
   }
 
-  // Strict email verification check
   if (!payload.email || payload.email_verified !== true) {
     const error = new Error('A verified Google email address is required to sign in.');
     error.status = 403;
@@ -137,7 +114,6 @@ async function verifyGoogleCredential(credential, options = {}) {
     throw error;
   }
 
-  // Strict subject check
   if (!payload.sub || typeof payload.sub !== 'string' || !payload.sub.trim()) {
     const error = new Error('Google authentication token is missing a valid subject identifier.');
     error.status = 401;
@@ -148,15 +124,6 @@ async function verifyGoogleCredential(credential, options = {}) {
   return payload;
 }
 
-/**
- * Resolves or provisions a User from verified Google identity payload.
- * Authoritative role determination:
- * 1. PRIMARY_ADMIN_GOOGLE_EMAIL exact match -> role: 'admin', status: 'approved'
- * 2. Existing editor -> preserves role: 'editor' and persisted permissions
- * 3. Existing student -> preserves status (banned/approved/pending)
- * 4. New account -> role: 'student', status: 'pending'
- * 5. Rejects mismatched Google sub if account already bound
- */
 async function resolveAndSyncGoogleUser(payload, reqContext = {}) {
   const email = payload.email.trim().toLowerCase();
   const userName = (payload.name || payload.given_name || 'University Scholar').trim();
@@ -169,7 +136,6 @@ async function resolveAndSyncGoogleUser(payload, reqContext = {}) {
   let user = await User.findOne({ email });
 
   if (user) {
-    // Identity binding check: if account is already bound to a different Google sub, reject
     if (user.googleId && user.googleId !== userGoogleId) {
       if (reqContext.ip) {
         try {
@@ -196,7 +162,6 @@ async function resolveAndSyncGoogleUser(payload, reqContext = {}) {
     }
 
     if (isPrimaryAdmin) {
-      // Primary admin exact match receives full admin access
       user.role = 'admin';
       user.status = 'approved';
       user.isProfileComplete = true;
@@ -205,20 +170,16 @@ async function resolveAndSyncGoogleUser(payload, reqContext = {}) {
       if (!user.name || user.name === 'University Scholar') user.name = userName;
       await user.save();
     } else if (user.role === 'editor') {
-      // Preserve editor role and permissions! Ordinary login must never reset to student.
       if (!user.googleId) user.googleId = userGoogleId;
       if (userAvatar && !user.avatar) user.avatar = userAvatar;
       if (!user.name || user.name === 'University Scholar') user.name = userName;
       await user.save();
     } else if (user.role === 'admin') {
-      // User was previously marked admin, but current login email is NOT the configured PRIMARY_ADMIN_GOOGLE_EMAIL.
-      // If primaryAdminEmail is missing or different, Google sign-in cannot grant admin privileges.
       const error = new Error('Access restricted: This Google account is not configured as the primary administrator.');
       error.status = 403;
       error.code = 'UNAUTHORIZED_ADMIN_IDENTITY';
       throw error;
     } else {
-      // Existing student: preserve role and status (banned, pending, approved)
       user.role = 'student';
       if (!user.googleId) user.googleId = userGoogleId;
       if (userAvatar && !user.avatar) user.avatar = userAvatar;
@@ -226,7 +187,6 @@ async function resolveAndSyncGoogleUser(payload, reqContext = {}) {
       await user.save();
     }
   } else {
-    // New account provisioning
     if (isPrimaryAdmin) {
       user = new User({
         name: userName,

@@ -1,9 +1,6 @@
-// Local archive text matching: multi-word queries must find theses that contain the words
-// in any order, without changing single-word or exact-phrase behaviour.
 const assert = require('assert');
 const { buildTextSearchClause } = require('../services/providers/local');
 
-// Minimal evaluator for the operators the clause uses ($or, $and, field: RegExp)
 function matches(doc, filter) {
   return Object.entries(filter).every(([key, value]) => {
     if (key === '$or') return value.some((sub) => matches(doc, sub));
@@ -76,11 +73,11 @@ function runLocalTextSearchTests() {
   });
 
   check('Longer queries tolerate a missing word but not most of them', () => {
-    assert.ok(find('bangla sentiment robotics', thesis)); // 2 of 3
-    assert.ok(!find('bangla robotics drones', thesis)); // 1 of 3
-    assert.ok(find('bangla sentiment commerce reviews transformers', thesis)); // 5 of 5
-    assert.ok(find('bangla sentiment commerce robotics drones', thesis)); // 3 of 5
-    assert.ok(!find('bangla sentiment quantum robotics drones', thesis)); // 2 of 5
+    assert.ok(find('bangla sentiment robotics', thesis));
+    assert.ok(!find('bangla robotics drones', thesis));
+    assert.ok(find('bangla sentiment commerce reviews transformers', thesis));
+    assert.ok(find('bangla sentiment commerce robotics drones', thesis));
+    assert.ok(!find('bangla sentiment quantum robotics drones', thesis));
   });
 
   check('Unrelated records are not pulled in', () => {
@@ -102,7 +99,7 @@ function runLocalTextSearchTests() {
   check('Query size is bounded (at most 6 words considered)', () => {
     const clause = buildTextSearchClause('one1 two2 three3 four4 five5 six6 seven7 eight8 nine9 ten10');
     assert.ok(countRegexes(clause) <= 7 + 15 * 4 * 7, 'filter stays small');
-    assert.strictEqual(clause.$or.length, 1 + 15); // phrase + C(6,4)
+    assert.strictEqual(clause.$or.length, 1 + 15);
   });
 
   check('Bangla-script queries are tokenised correctly', () => {

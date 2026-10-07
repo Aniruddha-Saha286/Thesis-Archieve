@@ -27,7 +27,6 @@ async function getMaintenanceStatus() {
       cachedMaintenance.enabled = false;
     }
   } catch (err) {
-    // Fail-safe: if DB is not ready or query fails, default to normal operations
   }
   return { ...cachedMaintenance };
 }

@@ -9,7 +9,6 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [realtimeNotice, setRealtimeNotice] = useState(null);
-  // Goes up by one each time the server pushes a notification, so the bell knows to reload
   const [notificationTick, setNotificationTick] = useState(0);
 
   useEffect(() => {
@@ -34,7 +33,6 @@ export const SocketProvider = ({ children }) => {
       setIsConnected(false);
     });
 
-    // Handle personal real-time status update from the Editorial Board
     s.on('user:status_changed', (payload) => {
       if (!user) return;
       const currentUserId = String(user.id || user._id);
@@ -69,7 +67,6 @@ export const SocketProvider = ({ children }) => {
       }
     });
 
-    // Handle real-time membership grant/revocation
     s.on('membership:updated', (payload) => {
       if (refreshUser) refreshUser();
       setRealtimeNotice({
@@ -80,7 +77,6 @@ export const SocketProvider = ({ children }) => {
       });
     });
 
-    // Handle staff role & capability delegation updates
     s.on('auth:permissions_updated', (payload) => {
       if (refreshUser) refreshUser();
       if (payload.role === 'editor') {
@@ -96,7 +92,6 @@ export const SocketProvider = ({ children }) => {
       }
     });
 
-    // Handle incoming direct notifications
     s.on('notification:new', (notif) => {
       setNotificationTick((n) => n + 1);
       if (notif?.message) {

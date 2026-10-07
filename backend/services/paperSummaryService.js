@@ -1,8 +1,3 @@
-/**
- * Grounded Paper Summary Service
- * Provides grounded, hallucination-resistant research summaries from scholarly abstracts or full-text documents.
- * Feature-flagged by PAPER_SUMMARIZER_ENABLED.
- */
 
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -10,14 +5,10 @@ const PaperSummary = require('../models/PaperSummary');
 const { isValidHttpUrl, isPrivateIpOrHost } = require('../utils/urlValidator');
 const { reserveUsage, releaseReservedCredit } = require('./usageReservationService');
 
-// v3: one sentence per heading, no fixed filler text, honest "not AI" label (older cached summaries are regenerated)
 const PROMPT_VERSION = 'v3';
 const MODEL_VERSION = 'grounded-extractor-v2';
 const memorySummaryCache = new Map();
 
-/**
- * Splits text into individual sentences safely without regex catastrophic backtracking.
- */
 function splitIntoSentences(text) {
   if (!text) return [];
   return text
@@ -27,9 +18,6 @@ function splitIntoSentences(text) {
     .filter((s) => s.length > 10);
 }
 
-/**
- * Extracts 4-6 significant key domain terms from text.
- */
 function extractKeyTerms(text) {
   if (!text) return [];
   const stopwords = new Set([
@@ -40,8 +28,6 @@ function extractKeyTerms(text) {
     'thesis', 'studies', 'also', 'into', 'than', 'such', 'show', 'shows',
   ]);
 
-  // Count words case-insensitively, but remember how the paper itself writes each one,
-  // so names keep their form ("BanglaBERT", "XLM-R") instead of becoming "Banglabert", "Xlm-r".
   const freq = new Map();
   const asWritten = new Map();
   const rawWords = text.replace(/[^A-Za-z0-9\s-]/g, ' ').split(/\s+/);
@@ -51,7 +37,6 @@ function extractKeyTerms(text) {
     if (w.length <= 3 || stopwords.has(w) || /^\d+$/.test(w)) continue;
     freq.set(w, (freq.get(w) || 0) + 1);
     const seen = asWritten.get(w);
-    // Prefer a spelling with capitals inside the word; a capital only at the start is usually just the start of a sentence
     if (!seen || (!/[A-Z]/.test(seen.slice(1)) && /[A-Z]/.test(original.slice(1)))) {
       asWritten.set(w, original);
     }
@@ -67,17 +52,11 @@ function extractKeyTerms(text) {
   return sorted.slice(0, 6);
 }
 
-/**
- * Constructs substantive, domain-aware inferred scope limitations
- * when explicit author limitations are absent or to complement them.
- */
 function generateCautiousInferredScope(abstractText, dataset, methodology, objective, hasAuthorStated, language = 'en') {
   const textLower = (abstractText || '').toLowerCase();
 
-  // Extract a clean benchmark / dataset snippet if available
   let samplePhrase = '';
   if (dataset) {
-    // Stop at a clause break (", " or ; or the sentence end) but not inside a number such as 12,000
     const match = dataset.match(/(?:evaluated on|tested on|benchmark|dataset|corpus|sample of|cohort of)\s+((?:[^,.;]|,(?=\d)|\.(?=\d))+)/i);
     const cleaned = match && match[1] ? match[1].trim().replace(/^(?:of|on|with|for)\s+/i, '') : '';
     if (cleaned && cleaned.split(/\s+/).length >= 2) {
@@ -88,7 +67,6 @@ function generateCautiousInferredScope(abstractText, dataset, methodology, objec
     }
   }
 
-  // Detect domain specifics
   let domainScopeEn = '';
   let domainScopeBn = '';
 
@@ -132,10 +110,6 @@ function generateCautiousInferredScope(abstractText, dataset, methodology, objec
   return `1. Evaluation Scope: ${sampleScopeEn} 2. Methodological Assumptions: ${domainScopeEn}`;
 }
 
-/**
- * Deterministic, grounded extractor that parses scholarly abstract text
- * into verifiable structured components without hallucination.
- */
 function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextSections = []) {
   const sentences = splitIntoSentences(abstractText);
   if (sentences.length === 0) {
@@ -185,7 +159,6 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
   const contribKeywords = ['contribution', 'introduce', 'present a novel', 'we developed', 'key advance', 'first study to'];
   const futureKeywords = ['future work', 'future research', 'further investigation', 'plans to', 'next step'];
 
-  // 1. Check full-text sections for explicit Limitations / Threats to Validity / Discussion sections
   let sectionLimitations = '';
   if (Array.isArray(fullTextSections) && fullTextSections.length > 0) {
     for (const sec of fullTextSections) {
@@ -205,7 +178,6 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     }
   }
 
-  // 2. Identify author-stated limitations in text
   const foundLimitationSentences = [];
   if (sectionLimitations) {
     foundLimitationSentences.push(sectionLimitations);
@@ -224,11 +196,6 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     limitations = foundLimitationSentences.slice(0, 2).join(' ');
   }
 
-  // 3. Sort the remaining sentences under headings.
-  // Rules that keep headings truthful:
-  //   - a limitation or future-work sentence is never reused as a finding or a method
-  //   - a sentence that reports a result (a percentage, a metric, "outperforms"...) is a finding, not a method
-  //   - when no sentence fits a heading, the heading stays empty instead of borrowing a sentence by position
   const isLimSentence = (s) => foundLimitationSentences.includes(s);
   const looksLikeResult = (sLower) =>
     /\d+(?:\.\d+)?\s?%/.test(sLower) ||
@@ -271,7 +238,6 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     }
   }
 
-  // Fallbacks, only where they cannot mislabel a sentence
   if (!objective && sentences[0]) {
     objective = sentences[0];
   }
@@ -294,11 +260,9 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     }
   }
 
-  // The takeaway is one sentence: the opening sentence of the abstract
   const tldrSentences = sentences[0];
   const keyTerms = extractKeyTerms(abstractText);
 
-  // Substantive, domain-aware inferred scope calculation
   const inferredScope = generateCautiousInferredScope(
     abstractText,
     dataset,
@@ -308,14 +272,11 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
     language
   );
 
-  // Missing information detection
   const missing = [];
   if (!dataset) missing.push('Specific benchmark dataset or cohort size not stated in abstract');
   if (!limitations) missing.push('Author-stated limitations not detailed in abstract');
   if (!future) missing.push('Future research directions not explicitly outlined in abstract');
 
-  // Tells the page which headings really came from the paper (true) and which hold only a
-  // "not stated" placeholder (false), so the page never has to guess from the wording.
   const found = {
     objective: Boolean(objective),
     methodology: Boolean(methodology),
@@ -394,16 +355,6 @@ function extractGroundedAbstractSummary(abstractText, language = 'en', fullTextS
   };
 }
 
-/**
- * Generates or retrieves a grounded Quick Summary for a paper.
- *
- * @param {Object} params
- * @param {Object} params.paper - The scholarly record (title, abstract, pdfUrl, doi, etc.)
- * @param {Object} params.user - The authenticated user requesting the summary
- * @param {Object} params.entitlements - Current effective entitlements of the user
- * @param {string} [params.language='en'] - 'en' or 'bn'
- * @param {boolean} [params.forceRefresh=false]
- */
 async function getOrGeneratePaperSummary({
   paper,
   user,
@@ -420,7 +371,6 @@ async function getOrGeneratePaperSummary({
     };
   }
 
-  // Security entitlement check: Free tier and unauthenticated guests must receive no summary benefit
   if (entitlements && (entitlements.plan === 'free' || entitlements.plan === 'guest' || entitlements.quotas?.canUsePaperSummarizer === false || entitlements.quotas?.dailySummaryGenerationLimit === 0)) {
     return {
       enabled: true,
@@ -443,7 +393,6 @@ async function getOrGeneratePaperSummary({
   const paperId = String(paper._id || paper.id || paper.doi || paper.title || '').trim();
   const rawAbstract = typeof paper.abstract === 'string' ? paper.abstract.trim() : '';
 
-  // 1. Determine usable source tier
   const hasSubstantialAbstract =
     rawAbstract.length >= 50 &&
     !rawAbstract.toLowerCase().includes('no abstract available') &&
@@ -452,13 +401,11 @@ async function getOrGeneratePaperSummary({
   let coverage = 'unavailable';
   let sourceText = '';
 
-  // Check if eligible for full-text PDF summary
   const canAccessFullText = Boolean(entitlements?.quotas?.canAccessFullTextSummary);
   const pdfUrl = (paper.pdfUrl && typeof paper.pdfUrl === 'string') ? paper.pdfUrl.trim() : '';
   const isSafePdfUrl = pdfUrl && isValidHttpUrl(pdfUrl) && !isPrivateIpOrHost(new URL(pdfUrl).hostname);
 
   if (canAccessFullText && isSafePdfUrl && paper.fullTextExtracted) {
-    // If server already extracted verified open full text
     coverage = 'full_text';
     sourceText = paper.fullTextExtracted;
   } else if (hasSubstantialAbstract) {
@@ -466,7 +413,6 @@ async function getOrGeneratePaperSummary({
     sourceText = rawAbstract;
   }
 
-  // If neither sufficient abstract nor full text exists: unavailable!
   if (coverage === 'unavailable' || !sourceText) {
     return {
       enabled: true,
@@ -476,13 +422,11 @@ async function getOrGeneratePaperSummary({
     };
   }
 
-  // 2. Compute canonical content hash
   const sourceContentHash = crypto
     .createHash('sha256')
     .update(`${paperId}:${language}:${sourceText}`)
     .digest('hex');
 
-  // 3. Check persistent MongoDB and memory cache
   const cacheKey = `${paperId}:${language}:${sourceContentHash}:${PROMPT_VERSION}`;
   if (!forceRefresh) {
     if (memorySummaryCache.has(cacheKey)) {
@@ -527,7 +471,6 @@ async function getOrGeneratePaperSummary({
     }
   }
 
-  // 4. Check & reserve generation quota
   const summaryLimit = entitlements?.quotas?.dailySummaryGenerationLimit !== undefined
     ? entitlements.quotas.dailySummaryGenerationLimit
     : 1;
@@ -555,7 +498,6 @@ async function getOrGeneratePaperSummary({
     };
   }
 
-  // 5. Generate grounded summary
   let generatedSummary = null;
   try {
     generatedSummary = extractGroundedAbstractSummary(sourceText, language, paper.fullTextSections || []);
@@ -564,7 +506,6 @@ async function getOrGeneratePaperSummary({
       throw new Error('Failed to generate grounded extraction from text');
     }
 
-    // If full-text coverage, attach evidence references
     if (coverage === 'full_text' && paper.fullTextSections) {
       generatedSummary.evidenceReferences = (paper.fullTextSections || []).slice(0, 3).map((sec) => ({
         sectionOrPage: sec.title || 'Section',
@@ -586,7 +527,6 @@ async function getOrGeneratePaperSummary({
 
     memorySummaryCache.set(cacheKey, resultRecord);
 
-    // 6. Persist to MongoDB cache if connected
     if (mongoose.connection.readyState === 1) {
       try {
         await PaperSummary.findOneAndUpdate(
@@ -620,7 +560,6 @@ async function getOrGeneratePaperSummary({
       },
     };
   } catch (err) {
-    // Release reserved credit on generation failure
     await releaseReservedCredit({
       user,
       scope: user ? user._id.toString() : 'guest',

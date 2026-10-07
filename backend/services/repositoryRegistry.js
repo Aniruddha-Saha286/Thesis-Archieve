@@ -1,39 +1,3 @@
-/**
- * Repository Registry for the thesis harvester.
- *
- * Each entry describes one university repository that speaks OAI-PMH (the standard
- * "please copy my catalogue" protocol that DSpace and similar systems offer on purpose).
- * The harvester (services/repositoryHarvester.js) only ever reads this list; it never
- * guesses addresses on its own.
- *
- * Fields:
- *   key              short stable id, stored on every harvested thesis (Thesis.sourceRepository).
- *                    Do NOT rename a key after harvesting: old records would lose their link to it.
- *   name             university name exactly as the site should show it (Thesis.university).
- *   repositoryName   what the repository calls itself (Thesis.sourceRepositoryName, shown next to
- *                    the "view in original repository" link).
- *   countryCode      ISO 3166-1 alpha-2.
- *   oaiBaseUrl       OAI-PMH base URL, without any "?verb=..." part.
- *   metadataPrefix   preferred metadata format. "dim" is DSpace's own format: it labels advisor,
- *                    department, abstract and issue date explicitly, so nothing has to be guessed.
- *   fallbackMetadataPrefix  used automatically when the repository answers
- *                    "cannotDisseminateFormat" for the preferred one. "oai_dc" is mandatory in
- *                    OAI-PMH, so every repository has it.
- *   sets             optional list of OAI setSpecs to limit the harvest (one pass per set).
- *                    Empty = whole repository; non-thesis records are then filtered out by dc.type.
- *   treatAllAsThesis optional. Only set true together with `sets` that contain nothing but theses,
- *                    for repositories that do not fill in dc.type.
- *   requestDelayMs   optional pause between two requests to this repository (default 1000 ms).
- *   enabled          false = the command line tool refuses to harvest it unless --force is given.
- *   notes            what was checked, when, and what is still unknown.
- *
- * HOW TO ADD A REPOSITORY
- *   1. Open "<oaiBaseUrl>?verb=Identify" in a browser. You must get XML with <repositoryName>.
- *   2. Open "<oaiBaseUrl>?verb=ListMetadataFormats" and look for "dim".
- *   3. Add the entry with enabled: false and run
- *        node scripts/harvestRepository.js --repo <key> --max 50 --dry-run --force
- *      Read the printed samples. Only then switch enabled to true.
- */
 
 const REPOSITORIES = [
   {
@@ -81,11 +45,6 @@ const REPOSITORIES = [
     ].join(' '),
   },
 
-  // ---------------------------------------------------------------------------------------------
-  // UNVERIFIED CANDIDATES. None of these could be reached from the build environment, and the
-  // addresses are best guesses based on the usual DSpace layout. They may be wrong, moved, or
-  // offline. Each one must be checked by hand (see "HOW TO ADD A REPOSITORY") before enabling.
-  // ---------------------------------------------------------------------------------------------
   {
     key: 'buet',
     name: 'Bangladesh University of Engineering and Technology',

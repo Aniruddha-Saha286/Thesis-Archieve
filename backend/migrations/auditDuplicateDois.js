@@ -1,9 +1,3 @@
-/**
- * Non-destructive DOI Duplicate Audit Migration Script
- * Scans repository records for duplicate Digital Object Identifiers (DOIs).
- * Does NOT delete or mutate records; generates structured audit telemetry
- * for editorial verification.
- */
 
 const mongoose = require('mongoose');
 const Thesis = require('../models/Thesis');

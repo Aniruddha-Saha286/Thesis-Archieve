@@ -1,9 +1,3 @@
-/**
- * Project Panther - SMTP Email Delivery Diagnostic Tool
- *
- * Usage:
- *   node backend/scripts/testEmail.js [optional_recipient]
- */
 
 const dns = require('dns');
 try {

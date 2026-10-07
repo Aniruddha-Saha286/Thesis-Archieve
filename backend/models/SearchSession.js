@@ -55,7 +55,7 @@ const searchSessionSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-    expires: 1800, // 30 minutes TTL in MongoDB
+    expires: 1800,
   },
 });
 

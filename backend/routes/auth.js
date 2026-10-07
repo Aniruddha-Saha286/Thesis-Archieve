@@ -21,9 +21,6 @@ const generateToken = (user) => {
   );
 };
 
-// POST /api/auth/google
-// Unified Google authentication endpoint for Students, Editors, and Administrators.
-// Cryptographically verifies Google ID token and server-authoritatively determines role.
 router.post('/google', authLimiter, async (req, res) => {
   try {
     const { credential } = req.body;
@@ -35,13 +32,10 @@ router.post('/google', authLimiter, async (req, res) => {
       });
     }
 
-    // 1. Verify token cryptographically against official Google endpoints
     const payload = await verifyGoogleCredential(credential);
 
-    // 2. Authoritatively resolve/provision the user record
     const user = await resolveAndSyncGoogleUser(payload, { ip: req.ip });
 
-    // 3. Issue session token and return sanitized DTO
     const token = generateToken(user);
     return res.json({
       token,
@@ -64,8 +58,6 @@ router.post('/google', authLimiter, async (req, res) => {
   }
 });
 
-// POST /api/auth/complete-profile
-// Student academic registration details (university, program, topic)
 router.post('/complete-profile', authenticateToken, async (req, res) => {
   try {
     const {
@@ -88,12 +80,8 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
     if (degreeProgram && typeof degreeProgram === 'string') user.degreeProgram = degreeProgram.trim();
     if (researchDomain && typeof researchDomain === 'string') user.researchDomain = researchDomain.trim();
     if (thesisGoal && typeof thesisGoal === 'string') user.thesisGoal = thesisGoal.trim();
-    // SECURITY: idCardProof is strictly forbidden here; only the validated upload endpoint may set it.
 
     user.isProfileComplete = true;
-    // Strict Admin Verification Policy:
-    // Students can NEVER auto-verify. Unless an admin explicitly approved with verifiedAt and verifiedBy,
-    // their status MUST be 'pending' awaiting editorial review!
     if (user.role === 'student' && (!user.verifiedAt || !user.verifiedBy)) {
       if (user.status !== 'banned') {
         user.status = 'pending';
@@ -112,9 +100,6 @@ router.post('/complete-profile', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/auth/login
-// Temporary break-glass administrative password login.
-// Gated strictly behind ENABLE_LEGACY_ADMIN_LOGIN=true. Disabled by default.
 router.post('/login', loginLimiter, async (req, res) => {
   try {
     if (process.env.ENABLE_LEGACY_ADMIN_LOGIN !== 'true') {
@@ -133,14 +118,12 @@ router.post('/login', loginLimiter, async (req, res) => {
     const cleanInput = String(email).trim().toLowerCase();
     const rawPassword = typeof password === 'string' ? password : String(password);
 
-    // Look up administrator account strictly by exact normalized email
     const user = await User.findOne({
       email: cleanInput,
       role: 'admin',
     });
 
     if (!user || user.role !== 'admin' || !user.password) {
-      // Constant-time comparison to mitigate timing attacks
       await bcrypt.compare(rawPassword, '$2a$12$e8r0.m0X5qR.G5Yy6Z3h.eZ9k2vQp6wRt8s7u4v1y0z1x2w3v4u5t');
       return res.status(401).json({ message: 'Invalid administrative email or password.' });
     }
@@ -161,7 +144,6 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
-// GET /api/auth/me
 router.get('/me', authenticateToken, async (req, res) => {
   return res.json({
     user: toSanitizedUserDto(req.user),

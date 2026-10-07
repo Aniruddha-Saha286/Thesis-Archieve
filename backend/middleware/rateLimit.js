@@ -2,13 +2,6 @@ const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 
-// Who a request is counted against.
-//
-// A signed-in member is counted by account, everyone else by address. Counting only by address
-// punishes a whole campus: students behind one university or hostel connection share a single
-// address, so a busy lab would hit the limit together and all be blocked.
-// The token is checked with the site's own key before it is trusted, so a made-up token
-// cannot be used to get a fresh allowance.
 function memberOrAddressKey(req) {
   const header = req.headers && req.headers.authorization;
   if (header && header.startsWith('Bearer ') && process.env.JWT_SECRET) {
@@ -16,21 +9,18 @@ function memberOrAddressKey(req) {
       const decoded = jwt.verify(header.slice(7), process.env.JWT_SECRET);
       if (decoded && decoded.id) return `member:${decoded.id}`;
     } catch {
-      // Not a valid token: fall back to the address
     }
   }
   return ipKeyGenerator(req.ip || '');
 }
 
-// Requests per minute for the general limit. 180 by default; API_RATE_LIMIT_PER_MINUTE can raise it.
 function generalLimitPerMinute(env = process.env) {
   const parsed = parseInt(env.API_RATE_LIMIT_PER_MINUTE, 10);
   return Number.isFinite(parsed) && parsed >= 30 ? Math.min(parsed, 100000) : 180;
 }
 
-// Rate limiter for authentication endpoints (Google OAuth & Admin Login)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
@@ -39,7 +29,6 @@ const authLimiter = rateLimit({
   },
 });
 
-// Stricter rate limiter for password-based admin login to protect against brute-force
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 8,
@@ -50,10 +39,9 @@ const loginLimiter = rateLimit({
   },
 });
 
-// General API rate limiter for broad traffic control
 const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: generalLimitPerMinute(), // Generous baseline so research use is not frustrated
+  windowMs: 1 * 60 * 1000,
+  max: generalLimitPerMinute(),
   keyGenerator: memberOrAddressKey,
   standardHeaders: true,
   legacyHeaders: false,
@@ -62,11 +50,10 @@ const apiLimiter = rateLimit({
   },
 });
 
-// Rate limiter for committed paper searches (prevents rapid automated scraping)
 const searchCommitLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   keyGenerator: memberOrAddressKey,
-  max: 35, // 35 search commits per minute per IP
+  max: 35,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -74,7 +61,6 @@ const searchCommitLimiter = rateLimit({
   },
 });
 
-// Rate limiter for external dataset lookups (DataCite / Zenodo)
 const datasetLookupLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   keyGenerator: memberOrAddressKey,
@@ -86,7 +72,6 @@ const datasetLookupLimiter = rateLimit({
   },
 });
 
-// Rate limiter for AI quick summary generation
 const summaryGenerationLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   keyGenerator: memberOrAddressKey,
@@ -98,7 +83,6 @@ const summaryGenerationLimiter = rateLimit({
   },
 });
 
-// Rate limiter for institutional analytics
 const analyticsLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 25,
@@ -109,7 +93,6 @@ const analyticsLimiter = rateLimit({
   },
 });
 
-// Stricter limiter for identity and thesis file uploads
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
@@ -120,7 +103,6 @@ const uploadLimiter = rateLimit({
   },
 });
 
-// Thesis PDF uploads are counted per signed-in member, so one busy campus network is not one user.
 const thesisPdfUploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -132,7 +114,6 @@ const thesisPdfUploadLimiter = rateLimit({
   },
 });
 
-// Stricter limiter for bKash payment orders and claim submissions
 const paymentActionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
@@ -143,7 +124,6 @@ const paymentActionLimiter = rateLimit({
   },
 });
 
-// Reading a paper's PDF downloads up to 15 MB per uncached request, so it is limited tightly
 const fullTextLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   keyGenerator: memberOrAddressKey,
@@ -155,7 +135,6 @@ const fullTextLimiter = rateLimit({
   },
 });
 
-// "Find a free PDF" asks an outside service once per paper
 const openAccessFinderLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   keyGenerator: memberOrAddressKey,
@@ -167,7 +146,6 @@ const openAccessFinderLimiter = rateLimit({
   },
 });
 
-// Limiter for high-privilege administrative actions
 const adminActionLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 60,

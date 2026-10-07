@@ -4,8 +4,6 @@ import axios from 'axios';
 import { AlertCircle, CheckCircle, X, Upload, FileText, Loader2 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
-// The same disciplines the search filters use. A deposited thesis must carry one of these labels,
-// otherwise it does not show up when a student filters by discipline.
 const FALLBACK_DISCIPLINES = [
   'Cybersecurity / Information Security',
   'Data Science / Data Analytics',
@@ -24,11 +22,8 @@ const FALLBACK_DISCIPLINES = [
   'Other Disciplines / Unclassified',
 ];
 
-// Shown to the student; the server enforces its own limit (THESIS_PDF_MAX_MB)
 const MAX_UPLOAD_MB = 20;
 
-// Removes an uploaded file that will not be used (the student removed it, replaced it, or
-// closed the form). A failure is ignored: nothing the student can do about it.
 function discardUpload(storageRef) {
   if (!storageRef) return;
   axios.delete('/api/upload/thesis-pdf', { data: { storageRef } }).catch(() => {});
@@ -54,15 +49,13 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // The thesis PDF: either uploaded here (kept in `uploaded`) or given as a link (formData.pdfUrl)
-  const [uploaded, setUploaded] = useState(null); // { pdfUrl, storageRef, sizeBytes, fileName }
+  const [uploaded, setUploaded] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [disciplines, setDisciplines] = useState(FALLBACK_DISCIPLINES);
   const { showNotice } = useSocket();
 
-  // Closing without submitting: the uploaded file is not needed any more
   const closeForm = () => {
     if (uploaded) {
       discardUpload(uploaded.storageRef);
@@ -82,7 +75,6 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
         if (!cancelled && labels.length > 0) setDisciplines(labels);
       })
       .catch(() => {
-        // Keep the built-in list
       });
     return () => {
       cancelled = true;
@@ -97,10 +89,9 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
 
   const formatSize = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
-  // Uploads the chosen PDF straight away, so a slow or failed upload is known before the form is sent
   const handleFileChosen = async (e) => {
     const file = e.target.files && e.target.files[0];
-    e.target.value = ''; // the same file can be chosen again after an error
+    e.target.value = '';
     if (!file) return;
     setUploadError('');
     if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
@@ -115,7 +106,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
       setUploading(true);
       setUploadPercent(0);
       if (uploaded) {
-        discardUpload(uploaded.storageRef); // a second file replaces the first
+        discardUpload(uploaded.storageRef);
         setUploaded(null);
       }
       const body = new FormData();
@@ -152,11 +143,10 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
       const res = await axios.post('/api/thesis', payload);
       if (typeof onCreated === 'function') onCreated(res.data);
       if (typeof onSuccess === 'function') onSuccess(res.data);
-      // The window closes on success, so say what happened and what comes next
       if (showNotice) {
         showNotice(res.data?.message || 'Thesis submitted. It will appear in search after staff review.', 'info');
       }
-      setUploaded(null); // the file now belongs to the submitted thesis
+      setUploaded(null);
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'The thesis could not be submitted. Please try again.');

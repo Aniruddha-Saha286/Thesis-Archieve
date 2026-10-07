@@ -4,8 +4,6 @@ const bcrypt = require('bcryptjs');
 function runSecurityTests() {
   console.log('Testing: Priority 0 Security Enforcements & Data Protection...');
 
-  // Test 1: File Magic Byte Validation
-  // Validate our deep content verification function
   function testMagicBytes(buffer, claimedMime) {
     if (!buffer || buffer.length < 4) return false;
     const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
@@ -22,23 +20,18 @@ function runSecurityTests() {
     return false;
   }
 
-  // Authentic PDF header: %PDF
   const validPdfBuffer = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x35]);
   assert.strictEqual(testMagicBytes(validPdfBuffer, 'application/pdf'), true, 'Valid PDF buffer must pass');
 
-  // Spoofed file: executable disguised as PDF
-  const spoofedExeBuffer = Buffer.from([0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]); // MZ header
+  const spoofedExeBuffer = Buffer.from([0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]);
   assert.strictEqual(testMagicBytes(spoofedExeBuffer, 'application/pdf'), false, 'Executable disguised as PDF must be rejected');
 
-  // Spoofed text disguised as PNG
   const spoofedText = Buffer.from('console.log("hello malicious world");');
   assert.strictEqual(testMagicBytes(spoofedText, 'image/png'), false, 'Script disguised as PNG must be rejected');
 
-  // Authentic PNG
   const validPngBuffer = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
   assert.strictEqual(testMagicBytes(validPngBuffer, 'image/png'), true, 'Valid PNG buffer must pass');
 
-  // Test 2: Google Token Payload Verification Rules
   function validateGooglePayload(payload, expectedClientId) {
     if (!payload) throw new Error('Empty payload');
     const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
@@ -52,46 +45,40 @@ function runSecurityTests() {
 
   const testAud = 'my-client-id.apps.googleusercontent.com';
 
-  // Expired token rejection
   assert.throws(() => {
     validateGooglePayload({
       iss: 'accounts.google.com',
       aud: testAud,
-      exp: Math.floor(Date.now() / 1000) - 100, // Expired
+      exp: Math.floor(Date.now() / 1000) - 100,
       email: 'student@university.edu',
       email_verified: true,
     }, testAud);
   }, /Token expired/, 'Expired Google token must be rejected');
 
-  // Unverified email rejection
   assert.throws(() => {
     validateGooglePayload({
       iss: 'accounts.google.com',
       aud: testAud,
       exp: Math.floor(Date.now() / 1000) + 3600,
       email: 'student@university.edu',
-      email_verified: false, // Unverified
+      email_verified: false,
     }, testAud);
   }, /Email not verified/, 'Unverified email must be rejected');
 
-  // Audience mismatch rejection
   assert.throws(() => {
     validateGooglePayload({
       iss: 'accounts.google.com',
-      aud: 'different-app.apps.googleusercontent.com', // Mismatched
+      aud: 'different-app.apps.googleusercontent.com',
       exp: Math.floor(Date.now() / 1000) + 3600,
       email: 'student@university.edu',
       email_verified: true,
     }, testAud);
   }, /Audience mismatch/, 'Mismatched audience must be rejected');
 
-  // Test 3: Google Identity cannot acquire Admin Role
   function assignRoleForGoogleAuth(existingUserRole) {
-    // If user is already an admin, Google OAuth cannot be used to sign in
     if (existingUserRole === 'admin') {
       throw new Error('Administrative accounts must authenticate via the Administrative Gate');
     }
-    // New or existing student accounts always have role 'student'
     return 'student';
   }
 
@@ -102,16 +89,12 @@ function runSecurityTests() {
   assert.strictEqual(assignRoleForGoogleAuth('student'), 'student', 'Student stays student');
   assert.strictEqual(assignRoleForGoogleAuth(undefined), 'student', 'New user becomes student');
 
-  // Test 4: Backdoor Removal Verification
-  // Shorthand "admin" and fixed passwords must not validate against random hashes
   const realAdminHash = bcrypt.hashSync('RealSuperSecurePass123!', 10);
   assert.strictEqual(bcrypt.compareSync('admin1234', realAdminHash), false, 'Old fixed password admin1234 must fail');
   assert.strictEqual(bcrypt.compareSync('admin', realAdminHash), false, 'Shorthand password admin must fail');
   assert.strictEqual(bcrypt.compareSync('RealSuperSecurePass123!', realAdminHash), true, 'Real password must pass');
 
-  // Test 5: Submission Moderation Status
   function determineSubmissionStatus(userRole) {
-    // Regular student submissions MUST default to pending
     return userRole === 'admin' ? 'approved' : 'pending';
   }
 

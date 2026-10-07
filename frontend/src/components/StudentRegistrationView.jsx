@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { LogOut, AlertCircle, ShieldCheck, Upload, CheckCircle, FileText, X, Sun, Moon } from 'lucide-react';
+import { LogOut, AlertCircle, ShieldCheck, Sun, Moon } from 'lucide-react';
 import axios from 'axios';
 
 export default function StudentRegistrationView() {
@@ -17,73 +17,11 @@ export default function StudentRegistrationView() {
     thesisGoal: '',
   });
 
-  const [hasUploadedDocument, setHasUploadedDocument] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError('File size exceeds the 10 MB maximum limit.');
-      return;
-    }
-
-    // Local instant preview
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
-    setUploading(true);
-    setError('');
-
-    const uploadData = new FormData();
-    uploadData.append('idCard', file);
-
-    try {
-      const res = await axios.post('/api/upload/id-card', uploadData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      if (res.data?.hasVerificationDocument) {
-        setHasUploadedDocument(true);
-        setUploadSuccess(true);
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      // FAILS CLOSED: Never treat local blob: as completed server upload
-      setHasUploadedDocument(false);
-      setUploadSuccess(false);
-      setError(
-        err.response?.data?.message ||
-        'Identity document upload failed. Only JPEG, PNG, WebP, and PDF documents are accepted.'
-      );
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleRemoveFile = async () => {
-    try {
-      setUploading(true);
-      await axios.delete('/api/upload/id-card');
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-      setPreviewUrl('');
-      setHasUploadedDocument(false);
-      setUploadSuccess(false);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to remove document from server. Please retry.');
-    } finally {
-      setUploading(false);
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -104,7 +42,6 @@ export default function StudentRegistrationView() {
   return (
     <div className="min-h-screen bg-[#FAF9F5] dark:bg-neutral-950 text-[#1C1B18] dark:text-neutral-100 flex flex-col justify-between p-6 transition-colors">
       
-      {/* Top Header */}
       <header className="max-w-6xl mx-auto w-full flex items-center justify-between py-4 border-b border-[#E2DFD8] dark:border-neutral-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-sm bg-[#1C1B18] dark:bg-neutral-100 text-[#FAF9F5] dark:text-neutral-950 flex items-center justify-center font-serif-title text-xl font-normal">
@@ -140,7 +77,6 @@ export default function StudentRegistrationView() {
         </div>
       </header>
 
-      {/* Main Registration Form */}
       <main className="max-w-xl mx-auto w-full my-auto py-10">
         <div className="bg-white dark:bg-neutral-900 border border-[#E2DFD8] dark:border-neutral-800 p-8 rounded-sm shadow-sm space-y-5">
           
@@ -152,7 +88,7 @@ export default function StudentRegistrationView() {
               Tell us where you study
             </h2>
             <p className="text-xs text-[#737067] dark:text-neutral-400 mt-0.5">
-              The team uses these details and your ID card to confirm you are a student. It is done once.
+              The team uses these academic details to review your registration. It is done once.
             </p>
           </div>
 
@@ -253,82 +189,23 @@ export default function StudentRegistrationView() {
               ></textarea>
             </div>
 
-            {/* Student ID Card Document Upload */}
-            <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-neutral-200 mb-1">
-                Upload Student ID Card / Proof (JPEG, PNG, WebP, or PDF — Max 10MB)
-              </label>
-
-              {hasUploadedDocument ? (
-                <div className="bg-[#FAF9F5] dark:bg-neutral-800 border border-[#D5D1C7] dark:border-neutral-700 p-3 rounded-sm flex items-center justify-between">
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    {previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt="ID Preview"
-                        className="w-12 h-12 object-cover rounded-sm border border-[#D5D1C7] dark:border-neutral-700"
-                      />
-                    ) : (
-                      <FileText className="w-6 h-6 text-[#2C6B3F] dark:text-emerald-400" />
-                    )}
-                    <div className="truncate">
-                      <div className="flex items-center gap-1 text-[#2C6B3F] dark:text-emerald-400 font-bold text-[11px]">
-                        <CheckCircle className="w-3.5 h-3.5" /> ID Uploaded Securely
-                      </div>
-                      <div className="text-[11px] text-[#737067] dark:text-neutral-400">
-                        Verified asset stored privately for depository moderation.
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRemoveFile}
-                    disabled={uploading}
-                    className="text-[#737067] dark:text-neutral-400 hover:text-red-700 dark:hover:text-red-400 p-1 cursor-pointer disabled:opacity-50"
-                    title="Remove file"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <label className="border-2 border-dashed border-[#D5D1C7] dark:border-neutral-700 hover:border-[#1C1B18] dark:hover:border-neutral-400 bg-[#FAF9F5] dark:bg-neutral-800/40 rounded-sm p-4 text-center block cursor-pointer transition">
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                  <div className="flex flex-col items-center justify-center space-y-1">
-                    <Upload className={`w-5 h-5 ${uploading ? 'animate-bounce text-amber-600 dark:text-amber-400' : 'text-[#737067] dark:text-neutral-400'}`} />
-                    <span className="font-medium text-[#1C1B18] dark:text-neutral-200">
-                      {uploading ? 'Uploading to private storage...' : 'Click or drag student ID card to upload'}
-                    </span>
-                    <span className="text-[11px] text-[#737067] dark:text-neutral-400">
-                      JPEG, PNG, WebP, or PDF (Maximum 10 MB)
-                    </span>
-                  </div>
-                </label>
-              )}
-            </div>
-
-            {/* Privacy & Evaluation Note */}
+            {/* Registration Review Note */}
             <div className="p-3 bg-[#FAF9F5] dark:bg-neutral-800/60 border border-[#E2DFD8] dark:border-neutral-700/80 rounded-sm text-[11px] font-mono-meta text-[#605D55] dark:text-neutral-400 space-y-1">
               <span className="font-semibold text-[#1C1B18] dark:text-neutral-200 block uppercase tracking-wider text-[11px]">
-                Identity Verification Notice
+                Registration Review
               </span>
               <p className="leading-relaxed">
-                Your submitted credentials and identification documents are inspected strictly by authorized depository staff through short-lived access. Identification assets are never made publicly available.
+                Your academic details are reviewed by authorized staff before access is approved.
               </p>
             </div>
 
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={loading || uploading}
+                disabled={loading}
                 className="w-full bg-[#1C1B18] hover:bg-[#2C2A24] dark:bg-amber-500 dark:hover:bg-amber-400 text-[#FAF9F5] dark:text-neutral-950 py-2.5 rounded-sm transition font-semibold cursor-pointer disabled:opacity-50 text-xs"
               >
-                {loading ? 'Submitting Application...' : 'Submit Academic Verification Request'}
+                {loading ? 'Submitting Application...' : 'Submit Academic Registration'}
               </button>
             </div>
 

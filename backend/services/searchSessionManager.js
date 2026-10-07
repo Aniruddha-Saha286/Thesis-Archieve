@@ -166,8 +166,6 @@ const PROVIDER_CAPABILITIES = {
     supportsMinCitations: false,
     supportsAwardingInstitution: false,
   },
-  // CORE and DBLP are not asked to filter by year, type or PDF themselves; their adapters
-  // apply those filters to the records that come back, so the filters do work for them.
   core: {
     supportsQuery: true,
     supportsYear: true,
@@ -210,26 +208,20 @@ function instMatchesTarget(candidateId, candidateName, targetInstId, targetInstN
   const tId = targetInstId ? String(targetInstId).split('/').pop().toLowerCase().trim() : '';
   const tName = (targetInstName || '').toLowerCase().trim();
 
-  // If both target inputs are empty, no filter
   if (!tId && !tName) return false;
-  // If both candidate inputs are empty, candidate cannot match
   if (!cId && !cName) return false;
 
-  // Conflicting canonical OpenAlex IDs MUST reject immediately!
   if (cId && tId && cId.startsWith('i') && tId.startsWith('i') && cId !== tId) {
     return false;
   }
 
-  // 1. Direct ID match
   if (tId && cId && tId === cId) return true;
 
-  // 2. Direct name match
   if (tName && cName) {
     if (cName === tName) return true;
     if (tName.length >= 4 && (cName.includes(tName) || tName.includes(cName))) return true;
   }
 
-  // 3. Curated institution resolution (match against name or aliases)
   if (tId && CURATED_BY_ID.has(tId)) {
     const cur = CURATED_BY_ID.get(tId);
     const curName = cur.name.toLowerCase();
@@ -242,7 +234,6 @@ function instMatchesTarget(candidateId, candidateName, targetInstId, targetInstN
     }
   }
 
-  // 4. If targetInstId was passed as a name
   if (tId && !tId.startsWith('i') && cName && cName.length >= 4 && (cName.includes(tId) || tId.includes(cName))) return true;
 
   return false;
@@ -259,8 +250,6 @@ function cleanPublisherForMatching(str) {
     .trim();
 }
 
-// Publishers that sources name in two ways. "IEEE" must also find records whose publisher is
-// written out in full (as OpenAlex does), and the other way round.
 const PUBLISHER_ALIASES = [
   ['ieee', 'institute of electrical and electronics engineers'],
   ['acm', 'association for computing machinery'],
@@ -273,7 +262,6 @@ const PUBLISHER_ALIASES = [
   ['cup', 'cambridge university'],
 ];
 
-// Adds the other spelling to a cleaned publisher name, so either form matches either form
 function withPublisherAliases(clean) {
   if (!clean) return clean;
   let out = clean;
@@ -297,7 +285,6 @@ function matchesPublisherFilter(record, filterPublisher) {
   if (!targetClean || !candClean) return false;
 
   if (candClean === targetClean) return true;
-  // A short name such as "ACM" must match as a whole word, or it would also match "Macmillan"
   if (targetClean.length <= 4 && !targetClean.includes(' ')) {
     return ` ${candClean} `.includes(` ${targetClean} `);
   }
@@ -311,7 +298,6 @@ function matchesPublisherFilter(record, filterPublisher) {
   return false;
 }
 
-// Bounded in-memory search session cache (30-minute TTL, linked to sessionStore)
 const sessions = sessionStore.inMemorySessions;
 const SESSION_TTL_MS = sessionStore.SESSION_TTL_MS;
 const MAX_SESSIONS = 250;
@@ -394,7 +380,6 @@ function sortRecords(records, sort, query, pageNum) {
     });
   } else if (sort === 'newest') {
     records.sort((a, b) => {
-      // Pin priority belongs exclusively to Page 1
       if (pageNum === 1 && a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       const yrA = a.publishedYear || 0;
       const yrB = b.publishedYear || 0;
@@ -412,9 +397,6 @@ function sortRecords(records, sort, query, pageNum) {
   }
 }
 
-/**
- * Validates institutional, country, author, and coauthor isolation rules
- */
 function matchesInstitutionalAndAuthorFilters(record, filters) {
   const instId = filters.institutionId ? String(filters.institutionId).trim().split('/').pop().toLowerCase() : null;
   const instName = filters.institutionName ? String(filters.institutionName).trim().toLowerCase() : null;
@@ -430,7 +412,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     }
   }
 
-  // 1. Author Filter Constraint
   if (authorId) {
     const matchingAuthorships = (record.authorships || []).filter((a) => {
       const aId = a.author?.id ? String(a.author.id).split('/').pop().toLowerCase() : '';
@@ -438,10 +419,9 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     });
 
     if (matchingAuthorships.length === 0) {
-      return false; // Author not present on paper
+      return false;
     }
 
-    // Coauthor isolation: If BOTH author and institution are specified, the author must be affiliated with that institution!
     if (instId || instName) {
       const authorAtInst = matchingAuthorships.some((a) =>
         (a.institutions || []).some((inst) =>
@@ -453,7 +433,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
       }
     }
 
-    // If country is specified alongside author: author's institution must match the country
     if (targetCountries.length > 0) {
       const authorInCountry = matchingAuthorships.some((a) =>
         (a.institutions || []).some((inst) => {
@@ -467,7 +446,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     }
   }
 
-  // 2. Institution Filter Constraint (when author not specified or already passed)
   if (instId || instName) {
     if (instMode === 'awarding') {
       const awardId = record.awardingInstitution?.id ? String(record.awardingInstitution.id).split('/').pop().toLowerCase() : '';
@@ -498,7 +476,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
         }
       }
 
-      // Coauthor isolation & institution country conjunction:
       if (targetCountries.length > 0) {
         if (matchingInsts.length > 0) {
           const hasCountryMatch = matchingInsts.some((inst) => {
@@ -517,7 +494,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
       }
     }
   } else if (targetCountries.length > 0 && !authorId) {
-    // Country filter alone
     let hasCountry = false;
     for (const a of record.authorships || []) {
       for (const inst of a.institutions || []) {
@@ -546,7 +522,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     }
   }
 
-  // 4. Minimum Citation Count Constraint
   if (filters.minCitations && !isNaN(parseInt(filters.minCitations))) {
     const minC = parseInt(filters.minCitations, 10);
     if (minC > 0) {
@@ -559,7 +534,6 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
     }
   }
 
-  // 5. Subject Category Constraint
   const targetSubId = filters.subjectId
     ? String(filters.subjectId).trim().toLowerCase()
     : (filters.category && filters.category !== 'All Disciplines' ? mapToCanonicalSubject(filters.category)?.id : null);
@@ -610,7 +584,6 @@ function isProviderEligible(pKey, filters = {}, query = '') {
     }
   }
 
-  // Publication type constraints
   const pubType = normalizePublicationType(filters.publicationType);
   if (pKey === 'arxiv') {
     if (pubType === 'thesis') return false;
@@ -622,7 +595,6 @@ function isProviderEligible(pKey, filters = {}, query = '') {
     }
   }
 
-  // Structured academic filter constraints
   const hasInst = Boolean(filters.institutionId || filters.institutionName);
   const hasCountry = Boolean(filters.countryCodes && filters.countryCodes.length > 0);
   const hasAuthorId = Boolean(filters.authorId);
@@ -632,14 +604,10 @@ function isProviderEligible(pKey, filters = {}, query = '') {
   const hasMinCitations = Boolean(filters.minCitations && parseInt(filters.minCitations, 10) > 0);
   const isAwarding = filters.institutionMode === 'awarding';
 
-  // In awarding institution mode, only Local Archive holds verified degree-awarding metadata
   if (isAwarding && hasInst && !caps.supportsAwardingInstitution) {
     return false;
   }
 
-  // When a search query is provided (e.g. "golam rabiul"), aggregators (Crossref, Europe PMC, etc.)
-  // should NOT be blocked upfront. They return relevant candidate records whose affiliations
-  // and metadata are then accurately validated in the buffer dedup post-filter.
   const hasQuery = Boolean(query && String(query).trim());
 
   if (hasInst && !caps.supportsInstitution && !hasQuery) return false;
@@ -650,7 +618,6 @@ function isProviderEligible(pKey, filters = {}, query = '') {
   return true;
 }
 
-// Where each provider starts reading for a brand-new search: the first page or offset 0.
 function buildInitialProviderStates() {
   return {
     local: { offset: 0, hasMore: true, status: 'fulfilled', count: 0 },
@@ -667,10 +634,6 @@ function buildInitialProviderStates() {
   };
 }
 
-// A search session is saved in MongoDB and can be picked up again up to 30 minutes later.
-// A session saved before a provider was added to this file has no entry for that provider,
-// and reading "providerStates.<new provider>.hasMore" would then crash that visitor's next
-// page. So any missing entry is filled in with the provider's starting position.
 function ensureProviderStates(session) {
   if (!session.providerStates || typeof session.providerStates !== 'object') {
     session.providerStates = {};
@@ -724,9 +687,6 @@ function acquireSessionLock(session) {
   return currentLock.then(() => release);
 }
 
-/**
- * Core locked session search executor
- */
 async function executeSearchSessionLocked(session, {
   query = '',
   page = 1,
@@ -737,7 +697,6 @@ async function executeSearchSessionLocked(session, {
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(50, Math.max(5, parseInt(limit) || 20));
 
-  // Sessions saved before CORE and DBLP were added have no entry for them yet.
   ensureProviderStates(session);
 
   let startIndex = 0;
@@ -750,22 +709,15 @@ async function executeSearchSessionLocked(session, {
   }
   const targetEndIndex = startIndex + limitNum;
 
-  // Buffer Refill Loop: fetch until we have enough records to cover targetEndIndex, or all eligible providers are exhausted
   let refillAttempts = 0;
   const MAX_REFILL_ATTEMPTS = 5;
 
-  // When a discipline filter is active but no user query was typed, build a
-  // keyword-based query for providers that lack native subject/field filtering.
-  // This replaces their generic "research" fallback with discipline-specific terms,
-  // dramatically improving the yield of the post-filter.
   let subjectAugmentedQuery = query;
   if (!query || !query.trim()) {
     const sub = filters.subjectId ? getSubjectById(filters.subjectId) : null;
     if (sub && sub.keywords && sub.keywords.length > 0) {
-      // Use the first two keywords for breadth without over-narrowing
       subjectAugmentedQuery = sub.keywords.slice(0, 2).join(' ');
     } else if (filters.category && filters.category !== 'All Disciplines') {
-      // Fallback: use the raw category label as a search term
       subjectAugmentedQuery = filters.category;
     }
   }
@@ -774,7 +726,6 @@ async function executeSearchSessionLocked(session, {
     refillAttempts++;
     const fetchPromises = [];
 
-    // Local MongoDB
     if (isProviderEligible('local', filters, query) && session.providerStates.local.hasMore) {
       const curOffset = session.providerStates.local.offset || 0;
       const localLimit = Math.max(limitNum, 20);
@@ -785,7 +736,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // OpenAlex
     if (isProviderEligible('openalex', filters, query) && session.providerStates.openalex.hasMore) {
       const curPage = session.providerStates.openalex.page || 1;
       const batchSize = Math.max(limitNum, 20);
@@ -796,7 +746,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // arXiv
     if (isProviderEligible('arxiv', filters, subjectAugmentedQuery) && session.providerStates.arxiv.hasMore) {
       const curOffset = session.providerStates.arxiv.offset || 0;
       const batchSize = Math.max(limitNum, 20);
@@ -807,7 +756,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // Crossref
     if (isProviderEligible('crossref', filters, subjectAugmentedQuery) && session.providerStates.crossref.hasMore) {
       const curOffset = session.providerStates.crossref.offset || 0;
       const batchSize = Math.max(limitNum, 20);
@@ -818,7 +766,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // Europe PMC
     if (isProviderEligible('europepmc', filters, subjectAugmentedQuery) && session.providerStates.europepmc.hasMore) {
       const curPage = session.providerStates.europepmc.page || 1;
       const batchSize = Math.max(limitNum, 20);
@@ -829,7 +776,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // HAL Open Science
     if (isProviderEligible('hal', filters, subjectAugmentedQuery) && session.providerStates.hal.hasMore) {
       const curOffset = session.providerStates.hal.offset || 0;
       const batchSize = Math.max(limitNum, 20);
@@ -840,7 +786,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // DOAJ
     if (isProviderEligible('doaj', filters, subjectAugmentedQuery) && session.providerStates.doaj.hasMore) {
       const curPage = session.providerStates.doaj.page || 1;
       const batchSize = Math.max(limitNum, 20);
@@ -851,7 +796,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // Semantic Scholar
     if (isProviderEligible('semanticscholar', filters, subjectAugmentedQuery) && session.providerStates.semanticscholar.hasMore) {
       const curOffset = session.providerStates.semanticscholar.offset || 0;
       const batchSize = Math.max(limitNum, 20);
@@ -862,7 +806,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // OpenAIRE
     if (isProviderEligible('openaire', filters, subjectAugmentedQuery) && session.providerStates.openaire.hasMore) {
       const curPage = session.providerStates.openaire.page || 1;
       const batchSize = Math.max(limitNum, 20);
@@ -873,7 +816,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // CORE
     if (isProviderEligible('core', filters, subjectAugmentedQuery) && session.providerStates.core.hasMore) {
       const curOffset = session.providerStates.core.offset || 0;
       const batchSize = Math.max(limitNum, 20);
@@ -884,7 +826,6 @@ async function executeSearchSessionLocked(session, {
       );
     }
 
-    // DBLP
     if (isProviderEligible('dblp', filters, subjectAugmentedQuery) && session.providerStates.dblp.hasMore) {
       const curOffset = session.providerStates.dblp.offset || 0;
       const batchSize = Math.max(limitNum, 20);
@@ -914,7 +855,6 @@ async function executeSearchSessionLocked(session, {
 
       if (isErr) {
         provState.failureCount = (provState.failureCount || 0) + 1;
-        // Allow retry on transient failure up to 2 attempts before marking exhausted
         provState.hasMore = provState.failureCount < 2;
         provState.status = 'degraded';
       } else {
@@ -928,17 +868,14 @@ async function executeSearchSessionLocked(session, {
 
       let acceptedFromProvider = 0;
 
-      // Deduplicate and fuse newly arrived records into session buffer
       if (Array.isArray(res.records)) {
         for (const record of res.records) {
           if (!record || !record.title) continue;
 
-          // Institutional, country, and author constraints validation
           if (!matchesInstitutionalAndAuthorFilters(record, filters)) {
             continue;
           }
 
-          // Minimum citations constraint validation
           if (filters.minCitations && !isNaN(parseInt(filters.minCitations))) {
             const minC = parseInt(filters.minCitations);
             if (minC > 0 && (record.citationCount === null || record.citationCount === undefined || record.citationCount < minC)) {
@@ -946,7 +883,6 @@ async function executeSearchSessionLocked(session, {
             }
           }
 
-          // Subject category constraint validation
           const loopTargetSubId = filters.subjectId
             ? String(filters.subjectId).trim().toLowerCase()
             : (filters.category && filters.category !== 'All Disciplines' ? mapToCanonicalSubject(filters.category)?.id : null);
@@ -966,7 +902,6 @@ async function executeSearchSessionLocked(session, {
             }
           }
 
-          // Strict PDF constraint validation: buffer only records with authentic PDF access
           if (filters.hasPdf) {
             const hasValidPdf = Boolean(
               record.isDirectPdf ||
@@ -982,14 +917,12 @@ async function executeSearchSessionLocked(session, {
             }
           }
 
-          // Open access constraint validation
           if (filters.isOpenAccess) {
             if (record.isOpenAccess === false) {
               continue;
             }
           }
 
-          // Publication type constraint validation
           if (filters.publicationType && filters.publicationType !== 'all') {
             const normType = normalizePublicationType(filters.publicationType);
             const recType = normalizePublicationType(record.publicationType);
@@ -998,12 +931,10 @@ async function executeSearchSessionLocked(session, {
             }
           }
 
-          // Publisher constraint validation
           if (filters.publisher && !matchesPublisherFilter(record, filters.publisher)) {
             continue;
           }
 
-          // Broad Field constraint validation
           if (filters.fieldId) {
             const targetFieldId = String(filters.fieldId).trim().split('/').pop();
             const hasField = (record.subjects || []).some((s) => {
@@ -1024,7 +955,6 @@ async function executeSearchSessionLocked(session, {
           const firstSurname = getFirstAuthorSurname(record.authors);
           const titleAuthorKey = cleanTitle.length >= 15 ? `${cleanTitle}_${firstSurname}` : null;
 
-          // Find if there is an existing record in session
           let existing = null;
           if (doiKey && session.recordsByDoi.has(doiKey)) {
             existing = session.recordsByDoi.get(doiKey);
@@ -1035,24 +965,20 @@ async function executeSearchSessionLocked(session, {
             }
           } else if (titleAuthorKey && session.recordsByTitleAuthor.has(titleAuthorKey)) {
             const cand = session.recordsByTitleAuthor.get(titleAuthorKey);
-            // Strict DOI integrity: Do NOT merge conflicting DOIs merely because normalized titles and surnames match
             if (!(cand && cand.doi && record.doi && cand.doi.toLowerCase().trim() !== record.doi.toLowerCase().trim())) {
               existing = cand;
             }
           }
 
           if (existing) {
-            // Complementary merge into existing buffer record without shifting position
             const merged = mergeTwoRecords(existing, record);
             Object.assign(existing, merged);
             acceptedFromProvider++;
 
-            // Index newly discovered identifiers
             if (doiKey) session.recordsByDoi.set(doiKey, existing);
             if (recordId) session.recordsById.set(String(recordId), existing);
             if (titleAuthorKey) session.recordsByTitleAuthor.set(titleAuthorKey, existing);
           } else {
-            // Brand new record
             session.buffer.push(record);
             newlyAddedCount++;
             acceptedFromProvider++;
@@ -1076,10 +1002,8 @@ async function executeSearchSessionLocked(session, {
       };
     }
 
-    // Sort only unfrozen buffer records (records on already served pages are never moved)
     sortUnfrozenBuffer(session, sort, query, pageNum);
 
-    // Check if any eligible provider still has items remaining
     const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters, subjectAugmentedQuery));
     const anyEligibleHasMore = eligibleProviders.some(([_, p]) => p.hasMore);
 
@@ -1089,15 +1013,12 @@ async function executeSearchSessionLocked(session, {
     }
   }
 
-  // Calculate hasMore strictly from eligible providers and buffered records
   const eligibleProviders = Object.entries(session.providerStates).filter(([key]) => isProviderEligible(key, filters, subjectAugmentedQuery));
   const anyEligibleHasMore = !session.allProvidersExhausted && eligibleProviders.some(([_, p]) => p.hasMore);
   const hasMoreForClient = session.buffer.length > targetEndIndex || anyEligibleHasMore;
 
-  // Stable slice for the requested page
   const pageRecords = session.buffer.slice(startIndex, targetEndIndex);
 
-  // Record actual served boundary for continuous pagination without record loss
   if (!session.pageBoundaries) session.pageBoundaries = new Map();
   session.pageBoundaries.set(pageNum, {
     start: startIndex,
@@ -1105,10 +1026,8 @@ async function executeSearchSessionLocked(session, {
     end: startIndex + pageRecords.length,
   });
 
-  // Freeze served boundary: records up to served boundary must never be re-ordered
   session.frozenIndex = Math.max(session.frozenIndex || 0, startIndex + pageRecords.length);
 
-  // Ensure honest provider telemetry status for all known federated providers
   for (const [pKey, pName] of Object.entries(PROVIDER_NAMES)) {
     if (!session.providerStatus[pName]) {
       const eligible = isProviderEligible(pKey, filters, subjectAugmentedQuery);
@@ -1124,7 +1043,6 @@ async function executeSearchSessionLocked(session, {
     }
   }
 
-  // Assess federated execution health: total technical failure vs partial results
   const queriedProviders = Object.entries(session.providerStatus).filter(
     ([_, st]) => st.status !== 'skipped_unsupported_filter' && st.status !== 'idle'
   );
@@ -1159,9 +1077,6 @@ async function executeSearchSessionLocked(session, {
   };
 }
 
-/**
- * Synchronous session validation from local memory cache
- */
 function validateAndGetSessionSync(sessionId, scope, query, filters, sort) {
   cleanupExpiredSessions();
   if (!sessionId || typeof sessionId !== 'string') {
@@ -1186,9 +1101,6 @@ function validateAndGetSessionSync(sessionId, scope, query, filters, sort) {
   return { valid: true, session };
 }
 
-/**
- * Asynchronous session validation supporting both in-memory cache and L2 MongoDB persistence
- */
 async function validateAndGetSession(sessionId, scope, query, filters, sort) {
   cleanupExpiredSessions();
   if (!sessionId || typeof sessionId !== 'string') {
@@ -1217,9 +1129,6 @@ async function validateAndGetSession(sessionId, scope, query, filters, sort) {
   return { valid: true, session };
 }
 
-/**
- * Executes a session-buffered federated search
- */
 async function executeSearchSession(params) {
   cleanupExpiredSessions();
 
@@ -1237,7 +1146,6 @@ async function executeSearchSession(params) {
     if (validated.valid) {
       session = validated.session;
     } else {
-      // First request initializing this session ID
       const sessionHash = computeSessionHash(query, filters, sort);
       session = createNewSession(explicitSessionId, scope, query, filters, sort, sessionHash);
       await sessionStore.saveSession(session);

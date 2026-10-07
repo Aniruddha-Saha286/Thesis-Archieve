@@ -13,7 +13,6 @@ export default function PendingView() {
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const { isConnected } = useSocket();
 
-  // A short reference taken from this student's own account id (it used to be one fixed fake number)
   const applicationRef = String(user?.id || user?._id || '').slice(-8).toUpperCase();
 
   const isBanned = user?.status === 'banned';
@@ -28,7 +27,6 @@ export default function PendingView() {
   return (
     <div className="min-h-screen bg-[#FAF9F5] dark:bg-neutral-950 text-[#1C1B18] dark:text-neutral-100 flex flex-col justify-between p-6 transition-colors">
       
-      {/* Header */}
       <header className="max-w-6xl mx-auto w-full flex items-center justify-between py-4 border-b border-[#E2DFD8] dark:border-neutral-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-sm bg-[#1C1B18] dark:bg-neutral-100 text-[#FAF9F5] dark:text-neutral-950 flex items-center justify-center font-serif-title text-xl font-normal">
@@ -61,12 +59,10 @@ export default function PendingView() {
         </div>
       </header>
 
-      {/* Main Notice */}
       <main className="max-w-xl mx-auto w-full my-auto py-12">
         <div className="bg-white dark:bg-neutral-900 border border-[#E2DFD8] dark:border-neutral-800 p-8 rounded-sm shadow-sm space-y-5">
           
           {isBanned ? (
-            /* BANNED / SUSPENDED STATE */
             <>
               <div className="flex items-center gap-3 pb-3 border-b border-red-200 dark:border-red-900/60">
                 <div className="w-8 h-8 rounded-full border border-red-600 dark:border-red-500 bg-red-50 dark:bg-red-950/60 flex items-center justify-center text-red-700 dark:text-red-400 text-xs font-mono-meta font-bold">
@@ -174,7 +170,7 @@ export default function PendingView() {
               )}
 
               <p className="text-[11px] text-[#737067] dark:text-neutral-400 leading-relaxed">
-                The check confirms that accounts belong to real students. Your ID card is used for nothing else.
+                The check confirms that accounts belong to real university scholars. Your details are used for nothing else.
               </p>
 
               <div className="pt-2 border-t border-[#E5E2DA] dark:border-neutral-800 flex items-center justify-between">

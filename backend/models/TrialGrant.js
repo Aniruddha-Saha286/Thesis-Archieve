@@ -5,7 +5,7 @@ const trialGrantSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    unique: true, // One trial per eligible account for life
+    unique: true,
     index: true,
   },
   startsAt: {
@@ -25,7 +25,7 @@ const trialGrantSchema = new mongoose.Schema({
   policyVersion: {
     type: String,
     enum: ['v1', 'v2'],
-    default: 'v2', // New grants default to v2 (reduced trial with 5 dataset lookups/day)
+    default: 'v2',
   },
   dailyDatasetLookups: {
     date: { type: String, default: '' },

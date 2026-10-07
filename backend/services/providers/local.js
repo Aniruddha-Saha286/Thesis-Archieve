@@ -32,12 +32,6 @@ function combinations(items, size) {
   return out;
 }
 
-// Builds the text part of the Mongo filter.
-// Before: the whole query had to appear as one exact phrase, so "bangla sentiment transformers"
-// missed a thesis titled "Sentiment analysis in Bangla using transformers".
-// Now: the exact phrase still matches, and so does a record that contains most of the
-// meaningful words in any order (all of 2, 2 of 3, 3 of 4, 3 of 5, 4 of 6).
-// Single-word queries behave exactly as before. Ranking is done later by the search manager.
 function buildTextSearchClause(query) {
   const phrase = String(query || '').trim();
   if (!phrase) return null;
@@ -76,7 +70,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
       andClauses.push(textClause);
     }
 
-    // Discipline / Subject filter
     if (filters.subjectId) {
       const sub = getSubjectById(filters.subjectId);
       const subOrs = [
@@ -107,7 +100,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
       andClauses.push({ category: filters.category });
     }
 
-    // Institution filter
     if (filters.institutionId || filters.institutionName) {
       const instId = filters.institutionId ? String(filters.institutionId).trim().split('/').pop().toLowerCase() : '';
       const curated = instId ? CURATED_INSTITUTIONS.find((c) => c.id.toLowerCase() === instId) : null;
@@ -139,7 +131,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
       }
     }
 
-    // Country codes filter
     if (filters.countryCodes) {
       let codes = [];
       if (Array.isArray(filters.countryCodes)) {
@@ -158,7 +149,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
       }
     }
 
-    // Author filter
     if (filters.authorId || filters.author) {
       const authTarget = (filters.author || filters.authorId || '').trim();
       if (authTarget) {
@@ -232,7 +222,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
           isDirectPdf: isDirectPdf,
         });
       }
-      // A record copied from a university repository links back to its original page
       const sourceUrl = doc.sourceUrl && String(doc.sourceUrl).trim() ? String(doc.sourceUrl).trim() : null;
       if (sourceUrl) {
         fullTextLocations.push({
@@ -243,7 +232,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         });
       }
 
-      // Preserve rich authorships with institutions
       const authorships = (doc.authorships && doc.authorships.length > 0)
         ? doc.authorships
         : [
@@ -268,7 +256,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
             },
           ];
 
-      // Explicit or verified degree-awarding institution for theses
       let awardingInstitution = null;
       if (doc.awardingInstitution && doc.awardingInstitution.name) {
         awardingInstitution = doc.awardingInstitution;
@@ -283,7 +270,6 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         };
       }
 
-      // Canonical subjects
       let canonicalSubjects = (doc.subjects && doc.subjects.length > 0) ? doc.subjects : [];
       if (canonicalSubjects.length === 0 && doc.category) {
         const mapped = mapToCanonicalSubject(doc.category);

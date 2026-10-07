@@ -1,10 +1,3 @@
-/**
- * Durable Search Session Store Adapter
- * 
- * Provides fast L1 in-memory caching with asynchronous L2 MongoDB persistence
- * and 30-minute automatic TTL expiration.
- * Seamlessly falls back to in-memory storage during unit tests or when MongoDB is disconnected.
- */
 
 const mongoose = require('mongoose');
 let SearchSession;
@@ -15,7 +8,7 @@ try {
 }
 
 const inMemorySessions = new Map();
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_TTL_MS = 30 * 60 * 1000;
 const MAX_IN_MEMORY_SESSIONS = 250;
 
 function cleanupExpiredInMemory() {
@@ -49,7 +42,6 @@ async function getSession(sessionId) {
   if (!sessionId) return null;
   cleanupExpiredInMemory();
 
-  // 1. Check L1 in-memory cache
   if (inMemorySessions.has(sessionId)) {
     const mem = inMemorySessions.get(sessionId);
     if (Date.now() - mem.lastAccessedAt <= SESSION_TTL_MS) {
@@ -58,7 +50,6 @@ async function getSession(sessionId) {
     inMemorySessions.delete(sessionId);
   }
 
-  // 2. Check L2 MongoDB persistence if connected
   if (SearchSession && mongoose.connection && mongoose.connection.readyState === 1) {
     try {
       const doc = await SearchSession.findOne({ sessionId }).lean();
@@ -89,10 +80,8 @@ async function saveSession(session) {
   session.sessionId = sid;
   session.lastAccessedAt = Date.now();
 
-  // Update L1 in-memory immediately
   setInMemorySession(sid, session);
 
-  // Update L2 MongoDB asynchronously if connected
   if (SearchSession && mongoose.connection && mongoose.connection.readyState === 1) {
     try {
       await SearchSession.findOneAndUpdate(

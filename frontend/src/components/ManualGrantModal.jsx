@@ -8,42 +8,38 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
   const [planCode, setPlanCode] = useState('premium_6m');
   const [overlapMode, setOverlapMode] = useState('start_now');
   const [durationPreset, setDurationPreset] = useState('7d');
-  const [grantType, setGrantType] = useState('test'); // 'test' | 'research_grant' | 'custom'
+  const [grantType, setGrantType] = useState('test');
   const [customLabelInput, setCustomLabelInput] = useState('');
   const [startsAtLocal, setStartsAtLocal] = useState('');
   const [expiresAtLocal, setExpiresAtLocal] = useState('');
   const [grantReason, setGrantReason] = useState('');
   const [grantRequestId, setGrantRequestId] = useState('');
-  const [step, setStep] = useState('edit'); // 'edit' | 'review'
+  const [step, setStep] = useState('edit');
   const [loading, setLoading] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
   const [error, setError] = useState('');
   const [currentMembership, setCurrentMembership] = useState(student?.membership || null);
 
-  // Helper: Format a Date to YYYY-MM-DDTHH:mm in Asia/Dhaka timezone
   const toDhakaDatetimeLocal = (date) => {
     const d = new Date(date);
-    // Asia/Dhaka is UTC+6
     const utcTime = d.getTime() + d.getTimezoneOffset() * 60000;
     const dhakaTime = new Date(utcTime + 6 * 3600000);
     const pad = (n) => String(n).padStart(2, '0');
     return `${dhakaTime.getFullYear()}-${pad(dhakaTime.getMonth() + 1)}-${pad(dhakaTime.getDate())}T${pad(dhakaTime.getHours())}:${pad(dhakaTime.getMinutes())}`;
   };
 
-  // Helper: Convert Asia/Dhaka local string to ISO UTC string
   const dhakaLocalToIso = (dhakaStr) => {
     if (!dhakaStr) return null;
     return `${dhakaStr}:00+06:00`;
   };
 
-  // Helper: Clamped calendar month addition to avoid end-of-month rollover errors
   const addClampedMonths = (date, months) => {
     const d = new Date(date);
     const day = d.getDate();
     d.setMonth(d.getMonth() + months);
     if (d.getDate() !== day) {
-      d.setDate(0); // Clamps to the last day of the intended month
+      d.setDate(0);
     }
     return d;
   };
@@ -204,7 +200,6 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
 
       <div className="relative bg-white dark:bg-neutral-900 border border-[#D5D1C7] dark:border-neutral-800 rounded-sm shadow-2xl max-w-xl w-full max-h-[95vh] flex flex-col overflow-hidden z-10 font-mono-meta text-xs text-[#1C1B18] dark:text-neutral-100">
         
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#E2DFD8] dark:border-neutral-800 bg-[#FAF9F5] dark:bg-neutral-950">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -223,7 +218,6 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
           </button>
         </div>
 
-        {/* Content */}
         <div className="tta-light-panel p-4 sm:p-6 overflow-y-auto space-y-4">
           
           {error && (
@@ -233,7 +227,6 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
             </div>
           )}
 
-          {/* Student Info Box */}
           <div className="bg-[#FAF9F5] dark:bg-neutral-800/80 border border-[#E5E2DA] dark:border-neutral-700 p-3 rounded-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-[#8C887E] dark:text-neutral-400">TARGET SCHOLAR:</span>
@@ -267,7 +260,6 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
           {step === 'edit' ? (
             <form onSubmit={handleProceedToReview} className="space-y-4">
               
-              {/* Plan Selection */}
               <div>
                 <label className="block font-bold text-[#1C1B18] mb-1.5 uppercase text-[11px]">
                   Benefit Plan Tier
@@ -301,7 +293,6 @@ export default function ManualGrantModal({ isOpen, onClose, student, onSuccess }
                 </div>
               </div>
 
-              {/* Grant Nature */}
               <div>
                 <label className="block font-bold text-[#1C1B18] mb-1.5 uppercase text-[11px]">
                   Grant Nature & Scholar Presentation

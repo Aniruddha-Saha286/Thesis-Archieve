@@ -1,10 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-// Escape closes the window on top, and only that one.
-//
-// Several windows can be open at once (paper details with Cite above it). Every open window
-// registers here; one shared key listener calls the newest one. So Escape steps back one
-// window at a time, the same as pressing each window's own close button.
 const openWindows = [];
 let listening = false;
 
@@ -18,7 +13,6 @@ function handleKeyDown(event) {
 }
 
 export default function useEscapeToClose(onClose, isOpen = true) {
-  // Always call the latest onClose without re-registering on every render
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 

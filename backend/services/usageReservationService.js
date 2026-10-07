@@ -1,20 +1,12 @@
-/**
- * Usage Reservation Service
- * Atomic, idempotent quota reservation for scholarly discovery searches and dataset lookups.
- * Enforces Asia/Dhaka day boundaries and protects against quota abuse during instant filter refinements.
- */
 
 const crypto = require('crypto');
 const { getDhakaDateString } = require('../utils/dhakaDate');
 const User = require('../models/User');
 
-// In-memory idempotency store for billed actions/contexts: Map<`${scope}:${metric}:${date}`, Set<idempotencyKey>>
 const billedContexts = new Map();
 
-// In-memory guest search usage store: Map<clientIp, { date: string, count: number }>
 const guestSearchStore = new Map();
 
-// Clean up stale date entries once every hour
 setInterval(() => {
   const today = getDhakaDateString(new Date());
   for (const [key] of billedContexts.entries()) {
@@ -33,9 +25,6 @@ function getContextKey(scope, metric, dateStr) {
   return `${scope}:${metric}:${dateStr}`;
 }
 
-/**
- * Checks if a specific search context or action has already been billed for today.
- */
 function isAlreadyBilled(scope, metric, idempotencyKey, dateStr) {
   if (!idempotencyKey) return false;
   const contextKey = getContextKey(scope, metric, dateStr);
@@ -43,9 +32,6 @@ function isAlreadyBilled(scope, metric, idempotencyKey, dateStr) {
   return Boolean(billedSet && billedSet.has(idempotencyKey));
 }
 
-/**
- * Marks a context or action ID as billed for today.
- */
 function markBilled(scope, metric, idempotencyKey, dateStr) {
   if (!idempotencyKey) return;
   const contextKey = getContextKey(scope, metric, dateStr);
@@ -67,24 +53,18 @@ function getQuotaExceededCode(metric) {
   return 'SEARCH_QUOTA_EXCEEDED';
 }
 
-/**
- * Atomically reserves a usage credit (search query, dataset lookup, or paper summary) with idempotency.
- * Refinements under an already-billed context or replayed actionId
- * do NOT decrement credits.
- */
 async function reserveUsage({
   user = null,
   scope = 'guest',
   metric = 'search',
   idempotencyKey = null,
-  limit = null, // null means unlimited
+  limit = null,
   dateStr = null,
 }) {
   const todayDhaka = dateStr || getDhakaDateString(new Date());
   const usageField = getUsageField(metric);
   const quotaExceededCode = getQuotaExceededCode(metric);
 
-  // Check if this action/context has already been billed
   if (idempotencyKey && isAlreadyBilled(scope, metric, idempotencyKey, todayDhaka)) {
     let currentCount = 0;
     if (user) {
@@ -106,7 +86,6 @@ async function reserveUsage({
     };
   }
 
-  // If user is authenticated
   if (user) {
     if (!user[usageField] || user[usageField].date !== todayDhaka) {
       user[usageField] = { date: todayDhaka, count: 0 };
@@ -114,7 +93,6 @@ async function reserveUsage({
 
     const currentCount = user[usageField].count || 0;
 
-    // Check limit
     if (limit !== null && currentCount >= limit) {
       return {
         allowed: false,
@@ -127,7 +105,6 @@ async function reserveUsage({
       };
     }
 
-    // Atomically increment and save
     user[usageField].count = currentCount + 1;
     await user.save();
 
@@ -146,7 +123,6 @@ async function reserveUsage({
     };
   }
 
-  // Unauthenticated guest user
   const guestKey = `${scope}:${metric}`;
   let guestUsage = guestSearchStore.get(guestKey);
   if (!guestUsage || guestUsage.date !== todayDhaka) {
@@ -181,9 +157,6 @@ async function reserveUsage({
   };
 }
 
-/**
- * Releases a reserved credit in case of downstream technical failure.
- */
 async function releaseReservedCredit({
   user = null,
   scope = 'guest',
@@ -214,9 +187,6 @@ async function releaseReservedCredit({
   }
 }
 
-/**
- * Creates a unique search context identifier for tracking inquiry refinements.
- */
 function createSearchContextId() {
   return `sctx_${crypto.randomBytes(8).toString('hex')}`;
 }

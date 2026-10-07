@@ -1,8 +1,3 @@
-/**
- * Shared Subject Catalog for Project Panther / The Thesis Archive
- * Single source of truth for academic disciplines, mappings to OpenAlex concepts,
- * and search filter tokens.
- */
 
 const SUBJECT_CATALOG = [
   {
@@ -13,7 +8,7 @@ const SUBJECT_CATALOG = [
     keywords: ['cybersecurity', 'information security', 'cryptography', 'malware', 'network security', 'penetration testing', 'zero trust'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10400', 'T10734', 'T13983', 'T10237', 'T10951', 'T12221', 'T11130'],
-    openAlexConceptIds: ['C38652104', 'C115903868'], // Computer security, Cryptography
+    openAlexConceptIds: ['C38652104', 'C115903868'],
   },
   {
     id: 'data-science',
@@ -23,7 +18,7 @@ const SUBJECT_CATALOG = [
     keywords: ['data science', 'data analytics', 'big data', 'data mining', 'predictive modeling', 'business intelligence'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10538', 'T10799', 'T11891', 'T12016', 'T13373', 'T14435'],
-    openAlexConceptIds: ['C2522767166', 'C124101348'], // Data science, Data mining
+    openAlexConceptIds: ['C2522767166', 'C124101348'],
   },
   {
     id: 'ai-ml',
@@ -33,7 +28,7 @@ const SUBJECT_CATALOG = [
     keywords: ['artificial intelligence', 'machine learning', 'deep learning', 'neural network', 'reinforcement learning'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T12072', 'T10320', 'T12535', 'T10462', 'T12026', 'T10028'],
-    openAlexConceptIds: ['C154945302', 'C119857082'], // Artificial intelligence, Machine learning
+    openAlexConceptIds: ['C154945302', 'C119857082'],
   },
   {
     id: 'nlp',
@@ -43,7 +38,7 @@ const SUBJECT_CATALOG = [
     keywords: ['natural language processing', 'nlp', 'large language model', 'computational linguistics', 'speech recognition', 'sentiment analysis'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10181', 'T11550', 'T12262', 'T13910'],
-    openAlexConceptIds: ['C204321447'], // Natural language processing
+    openAlexConceptIds: ['C204321447'],
   },
   {
     id: 'computer-vision',
@@ -53,7 +48,7 @@ const SUBJECT_CATALOG = [
     keywords: ['computer vision', 'image processing', 'object detection', 'segmentation', 'facial recognition', 'scene reconstruction'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10036', 'T10052', 'T11605', 'T10057', 'T10331'],
-    openAlexConceptIds: ['C31972630'], // Computer vision
+    openAlexConceptIds: ['C31972630'],
   },
   {
     id: 'software-engineering',
@@ -63,7 +58,7 @@ const SUBJECT_CATALOG = [
     keywords: ['software engineering', 'software architecture', 'refactoring', 'continuous integration', 'program synthesis', 'code quality'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10260', 'T10430', 'T10639', 'T11450'],
-    openAlexConceptIds: ['C52917350'], // Software engineering
+    openAlexConceptIds: ['C52917350'],
   },
   {
     id: 'networks-distributed',
@@ -73,7 +68,7 @@ const SUBJECT_CATALOG = [
     keywords: ['distributed systems', 'computer networks', 'cloud computing', 'edge computing', 'consensus', 'microservices', 'tcp/ip'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10772', 'T10715', 'T10101', 'T10249'],
-    openAlexConceptIds: ['C31258907', 'C120314980'], // Computer network, Distributed computing
+    openAlexConceptIds: ['C31258907', 'C120314980'],
   },
   {
     id: 'databases',
@@ -83,7 +78,7 @@ const SUBJECT_CATALOG = [
     keywords: ['databases', 'database management', 'sql', 'nosql', 'vector database', 'query optimization', 'data warehouse'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10317', 'T11106'],
-    openAlexConceptIds: ['C77088390', 'C199360897'], // Database, Data management
+    openAlexConceptIds: ['C77088390', 'C199360897'],
   },
   {
     id: 'hci',
@@ -93,7 +88,7 @@ const SUBJECT_CATALOG = [
     keywords: ['human-computer interaction', 'hci', 'user experience', 'interaction design', 'accessibility', 'usability'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T10470', 'T11398', 'T11707', 'T10789', 'T10803'],
-    openAlexConceptIds: ['C107457646'], // Human–computer interaction
+    openAlexConceptIds: ['C107457646'],
   },
   {
     id: 'iot-embedded',
@@ -103,7 +98,7 @@ const SUBJECT_CATALOG = [
     keywords: ['internet of things', 'iot', 'embedded systems', 'sensors', 'microcontroller', 'robotics', 'cyber-physical'],
     openAlexFieldId: '17',
     openAlexTopicIds: ['T13038', 'T10273', 'T10904', 'T12941', 'T13420'],
-    openAlexConceptIds: ['C108827148', 'C118552586'], // Internet of things, Embedded system
+    openAlexConceptIds: ['C108827148', 'C118552586'],
   },
   {
     id: 'renewable-energy',
@@ -113,7 +108,7 @@ const SUBJECT_CATALOG = [
     keywords: ['renewable energy', 'solar energy', 'battery storage', 'photovoltaic', 'wind power', 'materials science'],
     openAlexFieldId: '21',
     openAlexTopicIds: ['T11007', 'T14444', 'T10624', 'T10018', 'T10281'],
-    openAlexConceptIds: ['C143120270'], // Renewable energy
+    openAlexConceptIds: ['C143120270'],
   },
   {
     id: 'biomedical',
@@ -123,7 +118,7 @@ const SUBJECT_CATALOG = [
     keywords: ['biomedical', 'clinical science', 'medicine', 'genomics', 'epidemiology', 'healthcare informatics'],
     openAlexFieldId: '27',
     openAlexTopicIds: ['T11287', 'T10887', 'T10417', 'T10015', 'T10041', 'T10129'],
-    openAlexConceptIds: ['C71924100'], // Medicine
+    openAlexConceptIds: ['C71924100'],
   },
   {
     id: 'agriculture',
@@ -133,7 +128,7 @@ const SUBJECT_CATALOG = [
     keywords: ['agriculture', 'soil science', 'crop pathology', 'precision farming', 'agronomy'],
     openAlexFieldId: '11',
     openAlexTopicIds: ['T12310', 'T10004', 'T12792', 'T10616', 'T10439', 'T12294'],
-    openAlexConceptIds: ['C144133560'], // Agriculture
+    openAlexConceptIds: ['C144133560'],
   },
   {
     id: 'development-economics',
@@ -143,7 +138,7 @@ const SUBJECT_CATALOG = [
     keywords: ['development economics', 'economics', 'microfinance', 'trade policy', 'poverty alleviation', 'labor market'],
     openAlexFieldId: '20',
     openAlexTopicIds: ['T10393', 'T13867', 'T12786', 'T12446'],
-    openAlexConceptIds: ['C162324750'], // Economics
+    openAlexConceptIds: ['C162324750'],
   },
   {
     id: 'other',
@@ -157,7 +152,6 @@ const SUBJECT_CATALOG = [
   },
 ];
 
-// Quick index maps
 const SUBJECTS_BY_ID = new Map(SUBJECT_CATALOG.map((s) => [s.id, s]));
 const SUBJECTS_BY_LABEL = new Map(SUBJECT_CATALOG.map((s) => [s.label.toLowerCase(), s]));
 
@@ -170,24 +164,18 @@ function getSubjectById(id) {
   return SUBJECTS_BY_ID.get(id.toLowerCase()) || null;
 }
 
-/**
- * Maps a concept, category name, or raw text to a canonical subject entry.
- */
 function mapToCanonicalSubject(input) {
   if (!input) return null;
   const str = String(input).trim().toLowerCase();
 
-  // 1. Direct ID match
   if (SUBJECTS_BY_ID.has(str)) {
     return SUBJECTS_BY_ID.get(str);
   }
 
-  // 2. Direct label match
   if (SUBJECTS_BY_LABEL.has(str)) {
     return SUBJECTS_BY_LABEL.get(str);
   }
 
-  // 2.5 arXiv and taxonomic category code mappings
   if (str === 'cs.cr' || str.startsWith('cs.cr')) return SUBJECTS_BY_ID.get('cybersecurity');
   if (str === 'cs.ai' || str === 'cs.lg' || str === 'stat.ml' || str.startsWith('cs.ai') || str.startsWith('cs.lg') || str.startsWith('stat.ml')) return SUBJECTS_BY_ID.get('ai-ml');
   if (str === 'cs.cv' || str.startsWith('cs.cv')) return SUBJECTS_BY_ID.get('computer-vision');
@@ -200,12 +188,10 @@ function mapToCanonicalSubject(input) {
   if (str.startsWith('q-bio')) return SUBJECTS_BY_ID.get('biomedical');
   if (str.startsWith('econ') || str.startsWith('q-fin')) return SUBJECTS_BY_ID.get('development-economics');
 
-  // 3. Legacy category bridges and disambiguation
   if (str.includes('computer science') && (str.includes('nlp') || str.includes('natural language'))) {
     return SUBJECTS_BY_ID.get('nlp');
   }
 
-  // AI / Machine Learning (Check before generic networks or computer vision)
   if (
     str.includes('artificial intelligence') ||
     str.includes('machine learning') ||
@@ -217,12 +203,10 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('ai-ml');
   }
 
-  // Computer Vision
   if (str.includes('computer vision') || str.includes('image recognition') || str.includes('object detection') || str.includes('pattern recognition')) {
     return SUBJECTS_BY_ID.get('computer-vision');
   }
 
-  // Cybersecurity (Require cyber, crypto, or explicit cyber/infosec terms; never food/social/job security)
   if (
     str.includes('cyber') ||
     str.includes('crypt') ||
@@ -233,7 +217,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('cybersecurity');
   }
 
-  // Data Science
   if (
     str.includes('data science') ||
     str.includes('data analytic') ||
@@ -246,7 +229,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('data-science');
   }
 
-  // Software Engineering (Includes software development)
   if (
     str.includes('software engineering') ||
     str.includes('devops') ||
@@ -258,7 +240,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('software-engineering');
   }
 
-  // Networks & Distributed Systems (Exclude neural, biological, or metabolic networks)
   const isBiologicalOrNeural = /\b(neural|metabolic|biological|gene regulatory|protein)\s+network\b/.test(str);
   if (
     !isBiologicalOrNeural &&
@@ -272,7 +253,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('networks-distributed');
   }
 
-  // Databases
   if (
     str.includes('database') ||
     str.includes('sql') ||
@@ -283,7 +263,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('databases');
   }
 
-  // HCI
   if (
     str.includes('human-computer') ||
     str.includes('hci') ||
@@ -298,7 +277,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('hci');
   }
 
-  // IoT & Embedded
   if (
     str.includes('iot') ||
     str.includes('internet of things') ||
@@ -311,7 +289,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('iot-embedded');
   }
 
-  // Renewable Energy & Materials
   if (
     str.includes('renewable') ||
     str.includes('solar energy') ||
@@ -327,7 +304,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('renewable-energy');
   }
 
-  // Biomedical & Health
   if (
     str.includes('biomedical') ||
     str.includes('clinical') ||
@@ -344,7 +320,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('biomedical');
   }
 
-  // Agriculture & Environment (Includes food security and agronomy)
   if (
     str.includes('agricult') ||
     str.includes('soil') ||
@@ -357,7 +332,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('agriculture');
   }
 
-  // Development Economics (Require economic context; exclude child, infant, software development)
   const isNonEconomicDev = /\b(child|infant|human cognitive|software|web|drug|product|career)\s+development\b/.test(str);
   if (
     !isNonEconomicDev &&
@@ -369,7 +343,6 @@ function mapToCanonicalSubject(input) {
     return SUBJECTS_BY_ID.get('development-economics');
   }
 
-  // 4. Keyword scan with word boundary check
   for (const subject of SUBJECT_CATALOG) {
     for (const kw of subject.keywords) {
       const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -383,9 +356,6 @@ function mapToCanonicalSubject(input) {
   return SUBJECTS_BY_ID.get('other');
 }
 
-/**
- * Extracts canonical subject entries from OpenAlex concepts or topics
- */
 function extractSubjectsFromOpenAlex(concepts = [], topics = [], targetSubjectId = null) {
   const result = [];
   const seenIds = new Set();
@@ -428,11 +398,10 @@ function extractSubjectsFromOpenAlex(concepts = [], topics = [], targetSubjectId
         provenance: 'openalex_predicted',
         matchedTerm: cand,
       });
-      if (result.length >= 5) break; // Allow up to 5 subjects for complete indexing
+      if (result.length >= 5) break;
     }
   }
 
-  // Prioritize targetSubjectId at index 0 if matched
   if (targetSubjectId && seenIds.has(targetSubjectId)) {
     const idx = result.findIndex((s) => s.id === targetSubjectId);
     if (idx > 0) {
@@ -440,7 +409,6 @@ function extractSubjectsFromOpenAlex(concepts = [], topics = [], targetSubjectId
       result.unshift(matchedSub);
     }
   } else if (targetSubjectId && result.length === 0) {
-    // If no candidate directly mapped but targetSubject was matched at provider level, check keyword match on candidate strings
     const targetObj = getSubjectById(targetSubjectId);
     if (targetObj && candidates.some((c) => targetObj.keywords.some((kw) => c.toLowerCase().includes(kw.toLowerCase())))) {
       result.unshift({

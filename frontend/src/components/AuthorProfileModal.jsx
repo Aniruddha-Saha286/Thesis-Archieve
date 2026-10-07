@@ -65,7 +65,6 @@ export default function AuthorProfileModal({
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-4xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto space-y-5">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer"
@@ -108,7 +107,6 @@ export default function AuthorProfileModal({
                     {author?.name || 'Academic Researcher'}
                   </h2>
 
-                  {/* Name Alternatives */}
                   {author?.nameAlternatives && author.nameAlternatives.length > 0 && (
                     <p className="text-xs text-[#737067] dark:text-[#9C988F] font-mono-meta mt-0.5">
                       Also published as: {author.nameAlternatives.slice(0, 3).join(', ')}
@@ -131,7 +129,6 @@ export default function AuthorProfileModal({
                   )}
                 </div>
 
-                {/* External Links & Search Trigger */}
                 <div className="flex items-center gap-2 flex-wrap">
                   {author?.orcid && (
                     <a

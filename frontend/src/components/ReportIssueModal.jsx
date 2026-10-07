@@ -74,7 +74,6 @@ export default function ReportIssueModal({ thesis, onClose }) {
                 onChange={(e) => setIssueType(e.target.value)}
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-2 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta text-xs"
               >
-                {/* Values must match the server's Report issue types (backend/utils/reportIssueType.js) */}
                 <option value="dead-link">The link or PDF does not open</option>
                 <option value="paywall">The link asks for payment</option>
                 <option value="metadata-inaccuracy">Title, author or other details are wrong</option>

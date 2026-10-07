@@ -12,7 +12,6 @@ export function ThemeProvider({ children }) {
         return stored;
       }
     } catch (e) {
-      // LocalStorage access error
     }
     return 'system';
   });
@@ -23,7 +22,6 @@ export function ThemeProvider({ children }) {
     return isDark ? 'dark' : 'light';
   });
 
-  // Synchronize class on documentElement and handle system preference changes
   useEffect(() => {
     const root = document.documentElement;
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -62,7 +60,6 @@ export function ThemeProvider({ children }) {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, newTheme);
     } catch (e) {
-      // Ignore localStorage errors
     }
   };
 

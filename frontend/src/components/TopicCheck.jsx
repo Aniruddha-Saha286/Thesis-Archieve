@@ -27,8 +27,6 @@ import {
   VERDICTS,
 } from '../utils/topicAnalysis';
 
-// Reports are kept for the browser session so coming back to this tab (or re-opening a
-// recent topic) does not spend another daily search.
 const reportCache = new Map();
 let lastTopicKey = '';
 const HISTORY_KEY = 'thesis_vault_topic_checks';
@@ -38,7 +36,6 @@ const EXAMPLES = [
   'Federated learning for privacy in healthcare IoT',
 ];
 
-// One hue, light to dark: the scale is ordered (less work found -> more work found)
 const SCALE_STEPS = [
   'bg-indigo-100 dark:bg-indigo-950',
   'bg-indigo-200 dark:bg-indigo-900',
@@ -63,7 +60,6 @@ function writeHistory(list) {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 5)));
   } catch (e) {
-    // Storage can be unavailable (private mode); history is only a convenience
   }
 }
 

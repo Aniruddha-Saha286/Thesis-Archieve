@@ -2,8 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { searchAuthors, getAuthorProfile, getAuthorWorks } = require('../services/authorService');
 
-// GET /api/authors/search
-// Free author search candidate lookup; never bills search credits
 router.get('/search', async (req, res) => {
   try {
     const { q, query, limit } = req.query;
@@ -22,8 +20,6 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// GET /api/authors/:id
-// Author profile with bibliometric metrics and publications preview; never bills search credits
 router.get('/:id', async (req, res) => {
   try {
     const authorId = req.params.id;
@@ -43,8 +39,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// GET /api/authors/:id/works
-// Continuation of all indexed author publications; never bills search credits
 router.get('/:id/works', async (req, res) => {
   try {
     const authorId = req.params.id;

@@ -1,11 +1,3 @@
-// Turns the server's Quick Summary into what the page shows.
-//
-// The server sorts the paper's own sentences under headings with keyword rules.
-// A short abstract often has one sentence that answers several headings, and some
-// headings have no sentence at all. This helper makes the page honest about both:
-//   - headings that share one sentence are shown once, with all their names
-//   - headings with nothing found are listed as "not found" instead of showing filler
-// Pure functions only (no React), so they can be tested on their own.
 
 const LABELS = {
   en: {
@@ -44,8 +36,6 @@ const LABELS = {
   },
 };
 
-// Text the server (or an older cached summary) puts in when nothing was found, plus the
-// fixed sentences older versions added to every paper. None of it comes from the paper.
 const PLACEHOLDER_PATTERNS = [
   /^not reported\.?$/i,
   /^none explicitly stated/i,
@@ -91,7 +81,6 @@ function readField(summary, key) {
   return '';
 }
 
-// Uses the server's own found-map when it sent one; otherwise judges by the wording.
 function foundText(summary, key) {
   const text = readField(summary, key);
   if (!text) return '';
@@ -106,7 +95,6 @@ function sameSentence(a, b) {
   return Boolean(a) && Boolean(b) && norm(a) === norm(b);
 }
 
-// "In addition to…: 1. Evaluation Scope: … 2. Methodological Assumptions: …" -> two items
 export function splitChecklist(value) {
   const text = clean(value);
   if (!text) return [];
@@ -146,7 +134,6 @@ export function buildSummaryView(summary, language = 'en') {
     };
   }
 
-  // Older server versions prefixed the Bangla takeaway with a "[summary]" tag
   const takeaway = clean(summary.oneSentenceTakeaway || summary.tldr).replace(/^\[[^\]]{1,20}\]\s*/, '');
 
   const takeawayAlsoCovers = [];
@@ -188,7 +175,6 @@ export function buildSummaryView(summary, language = 'en') {
     labels,
     takeaway,
     takeawayAlsoCovers,
-    // Shown only when it says something the takeaway does not already say
     overview: overview && !isPlaceholderText(overview) && !sameSentence(overview, takeaway) && !overview.startsWith(takeaway) ? overview : '',
     sections,
     notFound,
@@ -200,7 +186,6 @@ export function buildSummaryView(summary, language = 'en') {
   };
 }
 
-// Plain text for the "Copy" button. Same content as the page, nothing extra.
 export function buildSummaryCopyText(title, summary, language = 'en') {
   const view = buildSummaryView(summary, language);
   const { labels } = view;
@@ -231,10 +216,6 @@ export function buildSummaryCopyText(title, summary, language = 'en') {
   return lines.join('\n\n');
 }
 
-// ---------------------------------------------------------------------------
-// Full paper: what the server found by reading the paper's free PDF.
-// The text is the authors' own, copied from the PDF. This only arranges it for the page.
-// ---------------------------------------------------------------------------
 
 const FULL_TEXT_LABELS = {
   en: {
@@ -301,10 +282,8 @@ export function buildFullTextView(data, language = 'en') {
   const blocks = [];
   for (const name of FULL_TEXT_ORDER) {
     const item = key[name];
-    // Keep line breaks inside the text: authors often list limitations one per paragraph
     const text = item && typeof item.text === 'string' ? item.text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() : '';
     if (!text) continue;
-    // Two headings can point at the very same passage (e.g. "Data and code availability"): show it once
     const same = blocks.find((b) => b.text === text);
     if (same) {
       same.headings.push(labels[name]);
@@ -347,7 +326,6 @@ export function buildFullTextView(data, language = 'en') {
   };
 }
 
-// Plain text of the full-paper part, added to what the Copy button gives
 export function buildFullTextCopyText(data, language = 'en') {
   const view = buildFullTextView(data, language);
   if (!view.available || (view.blocks.length === 0 && view.links.length === 0)) return '';

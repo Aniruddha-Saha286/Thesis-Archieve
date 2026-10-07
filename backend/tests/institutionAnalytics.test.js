@@ -32,7 +32,6 @@ async function runInstitutionAnalyticsTests() {
     }
   }
 
-  // 1. Feature Flag Guard
   await test('Feature flag disabled: returns enabled: false when INSTITUTION_ANALYTICS_ENABLED is false', async () => {
     const orig = process.env.INSTITUTION_ANALYTICS_ENABLED;
     process.env.INSTITUTION_ANALYTICS_ENABLED = 'false';
@@ -46,7 +45,6 @@ async function runInstitutionAnalyticsTests() {
     process.env.INSTITUTION_ANALYTICS_ENABLED = orig;
   });
 
-  // 2. Canonical ID Validation
   await test('ID validation: normalizes canonical OpenAlex IDs and rejects invalid formats', () => {
     assert.strictEqual(normalizeInstitutionId('https://openalex.org/I136199984'), 'I136199984');
     assert.strictEqual(normalizeInstitutionId('i136199984'), 'I136199984');
@@ -56,7 +54,6 @@ async function runInstitutionAnalyticsTests() {
     assert.strictEqual(normalizeInstitutionId('12345'), null);
   });
 
-  // 3. Year Range Validation
   await test('Year range validation: rejects fromYear > toYear with 400 INVALID_YEAR_RANGE', async () => {
     process.env.INSTITUTION_ANALYTICS_ENABLED = 'true';
 
@@ -71,7 +68,6 @@ async function runInstitutionAnalyticsTests() {
     assert.strictEqual(res.statusCode, 400);
   });
 
-  // 4. Exact Arithmetic in Field Aggregations (Top 6 + Other <= 7 slices)
   await test('Top fields aggregation: restricts to max 7 slices (top 6 + Other) with exact mathematical sum', () => {
     const sampleGroups = DETERMINISTIC_ANALYTICS_FIXTURES.I136199984.fields;
     const { slices, totalClassifiedWorks, otherCount } = aggregateTopFields(sampleGroups);
@@ -79,22 +75,18 @@ async function runInstitutionAnalyticsTests() {
     assert.ok(slices.length <= 7, `Slices count ${slices.length} must not exceed 7`);
     assert.strictEqual(slices.length, 7, 'Harvard sample has 10 fields, must produce 6 top + 1 Other = 7 slices');
 
-    // Total of individual slices must equal totalClassifiedWorks
     const sumOfSlices = slices.reduce((sum, s) => sum + s.count, 0);
     assert.strictEqual(sumOfSlices, totalClassifiedWorks, 'Sum of slices must exactly match total classified works');
 
-    // Check last slice is 'Other Disciplines'
     const lastSlice = slices[slices.length - 1];
     assert.strictEqual(lastSlice.isOther, true);
     assert.strictEqual(lastSlice.fieldId, 'other');
     assert.strictEqual(lastSlice.count, otherCount);
 
-    // Sum of percentages must equal 100% (within roundoff +/- 0.5%)
     const sumPercentages = slices.reduce((sum, s) => sum + s.percentage, 0);
     assert.ok(Math.abs(sumPercentages - 100) < 0.6, `Sum of percentages ${sumPercentages} must be approx 100%`);
   });
 
-  // 5. Year Trends Aggregation
   await test('Year trend aggregation: filters to requested range and sorts ascending', () => {
     const rawYears = [
       { key: '2023', count: 1450 },
@@ -111,12 +103,11 @@ async function runInstitutionAnalyticsTests() {
     assert.strictEqual(result[2].count, 1450);
   });
 
-  // 6. Complete Landscape Schema & Strict Affiliation Scope Label
   await test('Landscape schema: returns strict affiliation scope note, metadata, and deterministic fixture data', async () => {
     process.env.INSTITUTION_ANALYTICS_ENABLED = 'true';
 
     const res = await getInstitutionResearchLandscape({
-      institutionId: 'I157121650', // BUET
+      institutionId: 'I157121650',
       fromYear: 2020,
       toYear: 2025,
       forceRefresh: true,
@@ -133,13 +124,11 @@ async function runInstitutionAnalyticsTests() {
     assert.ok(res.fieldDistribution.slices.length <= 7);
     assert.strictEqual(res.fieldDistribution.maxSlices, 7);
 
-    // Colorblind safe palette usage
     res.fieldDistribution.slices.forEach((s) => {
       assert.ok(COLOR_BLIND_PALETTE.includes(s.color), `Slice color ${s.color} must belong to color-blind palette`);
     });
   });
 
-  // 7. Caching deduplication
   await test('Analytics cache: returns cached result on subsequent query with cacheAgeSeconds', async () => {
     process.env.INSTITUTION_ANALYTICS_ENABLED = 'true';
     const { analyticsCache } = require('../services/institutionAnalyticsService');
@@ -161,7 +150,6 @@ async function runInstitutionAnalyticsTests() {
     assert.ok(typeof second.cacheAgeSeconds === 'number');
   });
 
-  // 8. Offline identity suggestion integrity (Phase 1D requirement)
   await test('Offline identity suggestions: bibliometrics must be null and marked offline identity', () => {
     CURATED_INSTITUTIONS.forEach((inst) => {
       assert.strictEqual(inst.worksCount, null, `${inst.name} offline worksCount must be null`);

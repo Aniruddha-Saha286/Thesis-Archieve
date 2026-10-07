@@ -1,9 +1,3 @@
-/**
- * Database Migration 001: RBAC Schema, Sparse Google ID Index & Grant Request Index
- *
- * Usage:
- *   node backend/migrations/001_add_rbac_and_indexes.js [--dry-run]
- */
 
 const dns = require('dns');
 try {
@@ -36,7 +30,6 @@ async function runMigration() {
   }
 
   try {
-    // 1. Check User collection for duplicate googleIds
     console.log('[MIGRATION 001] Inspecting User googleId values for duplicates...');
     const duplicateGoogleIds = await User.aggregate([
       { $match: { googleId: { $ne: null, $exists: true, $ne: '' } } },
@@ -51,7 +44,6 @@ async function runMigration() {
       console.log('[MIGRATION 001] No duplicate googleId values found. Clean to proceed.');
     }
 
-    // 2. Check for missing permissions array on existing users
     const usersNeedingPermissions = await User.countDocuments({
       permissions: { $exists: false },
     });

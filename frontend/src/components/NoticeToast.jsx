@@ -2,14 +2,6 @@ import React, { useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
-/**
- * Shows the app-wide notice (success, info or error) as a small floating message.
- *
- * It is mounted once, next to <App />, so every screen gets it: the student pages, the admin
- * console, the pending page and the login page. Before this, the notice was drawn only at the
- * top of the student page, so admin actions gave no visible result and students who had scrolled
- * down never saw messages. It is drawn above all windows and closes itself after a few seconds.
- */
 export default function NoticeToast() {
   const { realtimeNotice, clearRealtimeNotice } = useSocket();
 

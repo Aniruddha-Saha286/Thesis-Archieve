@@ -1,7 +1,3 @@
-/**
- * Centralized, Versioned Academic Membership Plan Catalog
- * Single authoritative source of truth for pricing, durations, quotas, and display metadata.
- */
 
 const PLAN_CATALOG = {
   free: {
@@ -19,11 +15,11 @@ const PLAN_CATALOG = {
       maxTopicAlerts: 0,
       canExportBulk: false,
       canSaveComparisons: false,
-      canAccessPaperDatasets: false, // Paper-specific dataset discovery locked
-      canUsePaperSummarizer: false,  // Paper summary locked for free plan
-      dailySearchLimit: 10,          // 10 committed searches per Asia/Dhaka day
+      canAccessPaperDatasets: false,
+      canUsePaperSummarizer: false,
+      dailySearchLimit: 10,
       dailyDatasetLookupLimit: 0,
-      dailySummaryGenerationLimit: 0, // 0 paper summaries for free plan
+      dailySummaryGenerationLimit: 0,
       canAccessFullTextSummary: false,
     },
     features: [
@@ -52,14 +48,14 @@ const PLAN_CATALOG = {
       maxSavedPapers: 50,
       maxCollections: 3,
       maxTopicAlerts: 1,
-      canExportBulk: false,           // Individual citations allowed; bulk export disabled
+      canExportBulk: false,
       canSaveComparisons: true,
       maxComparisons: 1,
-      canAccessPaperDatasets: true,   // Paper-specific dataset discovery enabled
+      canAccessPaperDatasets: true,
       canUsePaperSummarizer: true,
-      dailySearchLimit: 20,           // 20 committed paper searches per Asia/Dhaka day
-      dailyDatasetLookupLimit: 5,     // Up to 5 paper dataset lookups per day
-      dailySummaryGenerationLimit: 3, // Up to 3 grounded summaries per day
+      dailySearchLimit: 20,
+      dailyDatasetLookupLimit: 5,
+      dailySummaryGenerationLimit: 3,
       canAccessFullTextSummary: true,
     },
     features: [
@@ -76,7 +72,6 @@ const PLAN_CATALOG = {
     isPaid: false,
   },
 
-  // Legacy Trial policy (v1) for grandfathering active trials created prior to policy v2
   trial_v1: {
     code: 'trial_v1',
     name: 'Legacy 7-Day Trial (Grandfathered)',
@@ -94,8 +89,8 @@ const PLAN_CATALOG = {
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
       canUsePaperSummarizer: true,
-      dailySearchLimit: null,        // Unlimited
-      dailyDatasetLookupLimit: null, // Unlimited
+      dailySearchLimit: null,
+      dailyDatasetLookupLimit: null,
       dailySummaryGenerationLimit: 5,
       canAccessFullTextSummary: true,
     },
@@ -126,9 +121,9 @@ const PLAN_CATALOG = {
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
       canUsePaperSummarizer: true,
-      dailySearchLimit: null,        // Unlimited
-      dailyDatasetLookupLimit: null, // Unlimited
-      dailySummaryGenerationLimit: null, // Unlimited daily summaries for Premium
+      dailySearchLimit: null,
+      dailyDatasetLookupLimit: null,
+      dailySummaryGenerationLimit: null,
       canAccessFullTextSummary: true,
     },
     features: [
@@ -165,9 +160,9 @@ const PLAN_CATALOG = {
       canSaveComparisons: true,
       canAccessPaperDatasets: true,
       canUsePaperSummarizer: true,
-      dailySearchLimit: null,        // Unlimited
-      dailyDatasetLookupLimit: null, // Unlimited
-      dailySummaryGenerationLimit: null, // Unlimited daily summaries for Pro Max
+      dailySearchLimit: null,
+      dailyDatasetLookupLimit: null,
+      dailySummaryGenerationLimit: null,
       canAccessFullTextSummary: true,
     },
     features: [
@@ -214,9 +209,6 @@ const PLAN_CATALOG = {
   },
 };
 
-/**
- * Normalizes any legacy or alias plan code to its canonical version.
- */
 function resolvePlanCode(code) {
   if (!code) return 'free';
   const c = String(code).trim().toLowerCase();
@@ -228,17 +220,11 @@ function resolvePlanCode(code) {
   return 'free';
 }
 
-/**
- * Retrieves a plan definition by code or alias.
- */
 function getPlan(code) {
   const canonical = resolvePlanCode(code);
   return PLAN_CATALOG[canonical] || PLAN_CATALOG.free;
 }
 
-/**
- * Returns the public display metadata for all standard selectable plans.
- */
 function getPublicPlans() {
   return [
     {

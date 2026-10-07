@@ -1,28 +1,21 @@
-/**
- * Institution Research Landscape Analytics Service
- * Queries authoritative OpenAlex aggregation endpoints by author-affiliation semantics.
- * Feature-flagged by INSTITUTION_ANALYTICS_ENABLED.
- */
 
 const analyticsCache = new Map();
 const inFlightRequests = new Map();
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours TTL
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
-// Color-blind safe palette for the top 6 fields + Other
 const COLOR_BLIND_PALETTE = [
-  '#1E3A8A', // 1. Deep Blue
-  '#0D9488', // 2. Teal
-  '#D97706', // 3. Amber
-  '#7C3AED', // 4. Purple
-  '#E11D48', // 5. Rose
-  '#059669', // 6. Emerald
-  '#78716C', // 7. Stone/Gray (Other)
+  '#1E3A8A',
+  '#0D9488',
+  '#D97706',
+  '#7C3AED',
+  '#E11D48',
+  '#059669',
+  '#78716C',
 ];
 
 const SCOPE_AFFILIATION_LABEL =
   'OpenAlex-indexed works with at least one author affiliated with this institution.';
 
-// Deterministic recorded fixtures for offline testing
 const DETERMINISTIC_ANALYTICS_FIXTURES = {
   I136199984: {
     institution: {
@@ -123,7 +116,6 @@ async function fetchWithRetry(url, options = {}, maxRetries = 2) {
 
   while (attempt <= maxRetries) {
     try {
-      // Create a fresh AbortSignal per attempt so retry does not reuse an already-aborted signal
       const signal = AbortSignal.timeout(timeoutMs);
       const res = await fetch(url, { ...fetchOptions, signal });
       if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
@@ -148,10 +140,6 @@ async function fetchWithRetry(url, options = {}, maxRetries = 2) {
   }
 }
 
-/**
- * Normalizes an OpenAlex institution ID from either a URL or raw identifier.
- * Example: 'https://openalex.org/I136199984' -> 'I136199984'
- */
 function normalizeInstitutionId(id) {
   if (!id || typeof id !== 'string') return null;
   const trimmed = id.trim();
@@ -159,10 +147,6 @@ function normalizeInstitutionId(id) {
   return match ? match[0].toUpperCase() : null;
 }
 
-/**
- * Aggregates raw topic field groups into exactly Top 6 fields + "Other Disciplines".
- * Guarantees arithmetic consistency: Top 6 + Other sums exactly to total classified works.
- */
 function aggregateTopFields(fieldGroups = []) {
   if (!Array.isArray(fieldGroups) || fieldGroups.length === 0) {
     return {
@@ -172,7 +156,6 @@ function aggregateTopFields(fieldGroups = []) {
     };
   }
 
-  // Filter valid groups and sort descending by count
   const sorted = fieldGroups
     .filter((g) => g && typeof g.count === 'number' && g.count > 0)
     .sort((a, b) => b.count - a.count);
@@ -211,7 +194,7 @@ function aggregateTopFields(fieldGroups = []) {
       name: 'Other Disciplines',
       count: otherCount,
       percentage: otherPercentage,
-      color: COLOR_BLIND_PALETTE[6], // Dedicated 'Other' color
+      color: COLOR_BLIND_PALETTE[6],
       isOther: true,
       subFieldCount: remainder.length,
     });
@@ -224,9 +207,6 @@ function aggregateTopFields(fieldGroups = []) {
   };
 }
 
-/**
- * Aggregates publication year trend groups into a chronological series.
- */
 function aggregateYearTrends(yearGroups = [], fromYear = null, toYear = null) {
   if (!Array.isArray(yearGroups)) return [];
 
@@ -249,15 +229,6 @@ function aggregateYearTrends(yearGroups = [], fromYear = null, toYear = null) {
   });
 }
 
-/**
- * Retrieves authoritative OpenAlex research landscape analytics for an institution.
- *
- * @param {Object} options
- * @param {string} options.institutionId - Canonical OpenAlex ID (e.g., 'I136199984')
- * @param {number} [options.fromYear]
- * @param {number} [options.toYear]
- * @param {boolean} [options.forceRefresh=false]
- */
 async function getInstitutionResearchLandscape({
   institutionId,
   fromYear = null,
@@ -298,7 +269,6 @@ async function getInstitutionResearchLandscape({
 
   const cacheKey = `${cleanId}:${parsedFromYear || 'all'}:${parsedToYear || 'all'}`;
 
-  // Check cache
   if (!forceRefresh && analyticsCache.has(cacheKey)) {
     const cached = analyticsCache.get(cacheKey);
     if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -310,16 +280,13 @@ async function getInstitutionResearchLandscape({
     }
   }
 
-  // Deduplicate concurrent requests
   if (inFlightRequests.has(cacheKey)) {
     return inFlightRequests.get(cacheKey);
   }
 
   const requestPromise = (async () => {
-    // Yield to microtask queue so inFlightRequests.set completes before synchronous fixture paths resolve
     await Promise.resolve();
     try {
-      // Offline fixture test path: check if fixture exists
       const fixture = DETERMINISTIC_ANALYTICS_FIXTURES[cleanId];
       let institutionMeta = null;
       let rawFieldGroups = [];
@@ -327,7 +294,6 @@ async function getInstitutionResearchLandscape({
       let rangeTotalWorks = null;
       let publicationTrendsError = null;
 
-      // If in test or offline mode and fixture exists, use deterministic recorded data
       if ((process.env.NODE_ENV === 'test' || process.env.OFFLINE_MODE === 'true') && fixture) {
         institutionMeta = fixture.institution;
         rawFieldGroups = fixture.fields;
@@ -348,7 +314,6 @@ async function getInstitutionResearchLandscape({
             'User-Agent': 'ThesisArchive/1.0 (https://projectpanther.org; mailto:panther.thesis.vault@gmail.com)',
           };
 
-          // Parallelize OpenAlex requests to avoid sequential latency and timeouts
           const [instRes, fieldsRes, yearsRes] = await Promise.all([
             fetchWithRetry(`https://api.openalex.org/institutions/${cleanId}`, {
               timeoutMs: 8000,
@@ -438,7 +403,6 @@ async function getInstitutionResearchLandscape({
             publicationTrendsError = `Publication trends currently unavailable (HTTP ${yearsRes.status}).`;
           }
         } catch (fetchErr) {
-          // If network failed and in test/offline mode with fixture available, use fixture as fallback
           if (fixture && (process.env.NODE_ENV === 'test' || process.env.OFFLINE_MODE === 'true')) {
             institutionMeta = fixture.institution;
             rawFieldGroups = fixture.fields;

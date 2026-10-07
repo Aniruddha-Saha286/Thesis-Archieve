@@ -135,7 +135,6 @@ const paperSummarySchema = new mongoose.Schema(
           quote: { type: String, default: '' },
         },
       ],
-      // Which headings were really found in the paper's text (false = placeholder only)
       found: {
         objective: { type: Boolean, default: false },
         methodology: { type: Boolean, default: false },
@@ -168,7 +167,6 @@ const paperSummarySchema = new mongoose.Schema(
   }
 );
 
-// Compound index to guarantee cache deduplication
 paperSummarySchema.index(
   { paperId: 1, language: 1, sourceContentHash: 1, promptVersion: 1 },
   { unique: true }

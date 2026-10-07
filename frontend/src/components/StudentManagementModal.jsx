@@ -9,13 +9,12 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
   useEscapeToClose(onClose, isOpen);
   const { showNotice } = useSocket();
   const [students, setStudents] = useState([]);
-  const [filterTab, setFilterTab] = useState('all'); // 'all', 'approved', 'pending', 'banned'
+  const [filterTab, setFilterTab] = useState('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [inspectingStudent, setInspectingStudent] = useState(null);
 
-  // In-app modals
   const [confirmModal, setConfirmModal] = useState(null);
   const [promptModal, setPromptModal] = useState(null);
   const [promptInput, setPromptInput] = useState('');
@@ -114,7 +113,6 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
 
   if (!isOpen) return null;
 
-  // Filter students by tab and search
   const filteredStudents = students.filter((s) => {
     const matchesTab =
       filterTab === 'all' ||
@@ -142,7 +140,6 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
     <div className="fixed inset-0 z-50 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white dark:bg-neutral-900 border border-[#D5D1C7] dark:border-neutral-800 rounded-sm w-full max-w-4xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col text-[#1C1B18] dark:text-neutral-100">
         
-        {/* Top Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-neutral-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-sm bg-amber-600 dark:bg-amber-500 text-white dark:text-neutral-950 flex items-center justify-center">
@@ -205,7 +202,6 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
             </button>
           </div>
 
-          {/* Search Box */}
           <div className="relative w-64">
             <input
               type="text"
@@ -219,7 +215,6 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
 
         </div>
 
-        {/* Student Roster Table */}
         <div className="overflow-y-auto flex-1 border border-[#E2DFD8] dark:border-neutral-800 rounded-sm">
           {loading ? (
             <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-neutral-400">

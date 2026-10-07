@@ -1,10 +1,3 @@
-// Repository harvester: parsing OAI-PMH pages, mapping records to theses, the save rules,
-// and the polite fetch loop. Everything runs offline: the network is a stub, the clock is
-// injected, and the database is a small in-memory stand-in. No MongoDB connection is opened.
-//
-// The XML fixtures in tests/fixtures/oai/ mirror real answers from BRAC University's DSpace
-// (https://dspace.bracu.ac.bd/server/oai/request). Each fixture says at the top which parts
-// were confirmed on the live server and which were written by hand in the same style.
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -37,13 +30,7 @@ const BRACU = getRepository('bracu');
 const CONTACT = 'harvest-test@example.org';
 const FIXED_NOW = new Date('2026-10-06T00:00:00Z');
 
-// ---------------------------------------------------------------------------------------
-// Test doubles
-// ---------------------------------------------------------------------------------------
 
-// Stand-in for the Mongoose model. It supports exactly the three calls the harvester makes
-// (findOne().lean(), create, updateOne with $set) and counts writes so a test can prove
-// that nothing was written.
 function createFakeThesisModel(seed = []) {
   const docs = seed.map((doc) => structuredClone(doc));
   const writes = { create: 0, update: 0 };
@@ -90,8 +77,6 @@ function xmlResponse(body, status = 200, headers = {}) {
   };
 }
 
-// A fetch stub that replays a list of answers in order and remembers every call.
-// An entry may be a response, an Error (thrown), or a function (url, init) => response.
 function createFetchStub(sequence) {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -104,13 +89,11 @@ function createFetchStub(sequence) {
   return { fetchImpl, calls };
 }
 
-// Records the waits the harvester asks for, without waiting.
 function createSleepRecorder() {
   const waits = [];
   return { waits, sleep: async (ms) => { waits.push(ms); } };
 }
 
-// Builds a dim page of simple, valid thesis records for the paging tests.
 function generatedPage(ids, nextToken) {
   const records = ids.map((id) => `
     <record>
@@ -142,7 +125,6 @@ function mapFixtureRecord(file, index, repository = BRACU) {
   return mapRecordToThesis(record, repository, { currentYear: 2026 });
 }
 
-// Runs the command line entry point with console output captured instead of printed.
 async function runCli(main, argv) {
   const lines = [];
   const original = { log: console.log, error: console.error };
@@ -157,9 +139,6 @@ async function runCli(main, argv) {
   }
 }
 
-// ---------------------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------------------
 
 async function runRepositoryHarvesterTests() {
   console.log('Testing: Repository Harvester (OAI-PMH parsing, mapping, save rules, polite paging)...');
@@ -170,7 +149,6 @@ async function runRepositoryHarvesterTests() {
     console.log(`  ✓ [PASS] ${name}`);
   };
 
-  // ----- Parsing ------------------------------------------------------------------------
 
   await check('Parses a real-shape DSpace "dim" page: several records, several fields each', () => {
     const parsed = parseOaiResponse(fixture('bracu-dim-page1.xml'));
@@ -265,7 +243,6 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(parseOaiResponse('<html><body><h1>Maintenance</h1></body></html>').error.code, 'notOaiPmh');
   });
 
-  // ----- Mapping ------------------------------------------------------------------------
 
   await check('Maps the real-shape thesis (dim) to a complete Thesis object', () => {
     const { thesis, skipReason } = mapFixtureRecord('bracu-dim-page1.xml', 0);
@@ -328,7 +305,6 @@ async function runRepositoryHarvesterTests() {
     for (const type of ['Article', 'Research Report', 'Journal', 'Newspaper article', 'Book chapter', null]) {
       assert.strictEqual(withType(type).skipReason, SKIP_REASONS.NOT_THESIS, `"${type}" must be skipped`);
     }
-    // A repository that is limited to thesis-only sets and leaves dc.type empty can opt in explicitly.
     const optIn = mapRecordToThesis({ ...record, fields: { ...record.fields, 'dc.type': [] } }, { ...BRACU, treatAllAsThesis: true });
     assert.ok(optIn.thesis);
   });
@@ -413,7 +389,6 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(degreeOf({ 'dc.description': [], 'dc.type': ['Doctoral thesis'] }).publicationType, 'dissertation');
     assert.strictEqual(degreeOf({ 'dc.description': [], 'dc.type': ['Dissertation'] }).publicationType, 'dissertation');
 
-    // A bachelor thesis ABOUT doctoral education must not become a doctoral dissertation.
     const about = degreeOf({
       'dc.description': [],
       'dc.description.degree': ['Bachelor of Social Science in Economics'],
@@ -480,17 +455,13 @@ async function runRepositoryHarvesterTests() {
     for (const [file, index] of [['bracu-dim-page1.xml', 0], ['bracu-dim-page1.xml', 4], ['bracu-dim-page2.xml', 0], ['bracu-oai_dc.xml', 0]]) {
       const { thesis } = mapFixtureRecord(file, index);
       const doc = new Thesis({ ...thesis, harvestChecksum: computeHarvestChecksum(thesis), harvestedAt: FIXED_NOW });
-      // validate() only checks the document against the schema; it does not need a database.
       await assert.doesNotReject(() => doc.validate(), `validation failed for ${file}#${index}`);
       assert.strictEqual(doc.origin, 'harvest');
       assert.strictEqual(doc.status, 'approved');
       assert.strictEqual(doc.submittedBy, null);
       assert.strictEqual(doc.pdfUrl, '');
-      // If Mongoose changed a value while casting, the record would look "edited by hand" on the
-      // next harvest and never update again.
       assert.strictEqual(computeHarvestChecksum(doc.toObject()), doc.harvestChecksum, 'fingerprint must survive model casting');
     }
-    // Deposited theses are unaffected by the new fields.
     const deposit = new Thesis({ title: 'T', abstract: 'A', university: 'U', department: 'D', author: 'X' });
     assert.strictEqual(deposit.origin, 'deposit');
     assert.strictEqual(deposit.externalId, undefined, 'no externalId at all, so the sparse unique index ignores deposits');
@@ -500,7 +471,6 @@ async function runRepositoryHarvesterTests() {
     assert.ok(externalIdIndex && externalIdIndex[1].unique && externalIdIndex[1].sparse, 'externalId needs a unique sparse index');
   });
 
-  // ----- Save rules ---------------------------------------------------------------------
 
   const realThesis = () => mapFixtureRecord('bracu-dim-page1.xml', 0).thesis;
 
@@ -532,7 +502,6 @@ async function runRepositoryHarvesterTests() {
   await check('Upsert updates a record that changed at the source, and nothing but its content', async () => {
     const model = createFakeThesisModel();
     await upsertHarvested(model, realThesis(), { now: FIXED_NOW });
-    // Things that happen on this site after the harvest and are not content edits:
     Object.assign(model.docs[0], { upvotes: 7, isPinned: true, catalogId: 'THESIS-2026-ABCD1234', approvedBy: 'admin-1' });
 
     const changed = { ...realThesis(), abstract: `${realThesis().abstract} Corrected by the library.`, advisor: 'Tahmid Bin Karim, Nusrat Alam', sourceUpdatedAt: new Date('2026-09-01T00:00:00Z') };
@@ -592,7 +561,7 @@ async function runRepositoryHarvesterTests() {
       externalId: 'oai:dspace.bracu.ac.bd:10361/22810',
     };
     const legacy = { ...deposit, _id: 'deposit-2', externalId: 'oai:dspace.bracu.ac.bd:10361/23003' };
-    delete legacy.origin; // older records have no origin field at all; they are deposits too
+    delete legacy.origin;
     const model = createFakeThesisModel([deposit, legacy]);
 
     assert.deepStrictEqual(await upsertHarvested(model, realThesis(), { now: FIXED_NOW }), { action: 'skipped', reason: SKIP_REASONS.NOT_HARVEST_ORIGIN });
@@ -640,13 +609,11 @@ async function runRepositoryHarvesterTests() {
 
     assert.deepStrictEqual(await markHarvestedDeleted(model, 'oai:dspace.bracu.ac.bd:10361/never-seen', { now: FIXED_NOW }), { action: 'skipped', reason: SKIP_REASONS.DELETED_AT_SOURCE });
 
-    // Rejected by an admin first, deleted at the source later: it stays an admin rejection.
     Object.assign(model.docs[0], { status: 'rejected', rejectedBy: 'admin-1', rejectionReason: 'Out of scope' });
     assert.deepStrictEqual(await markHarvestedDeleted(model, externalId, { now: FIXED_NOW }), { action: 'skipped', reason: SKIP_REASONS.ADMIN_REJECTED });
     assert.strictEqual(model.docs[0].rejectionReason, 'Out of scope');
   });
 
-  // ----- The harvest loop ---------------------------------------------------------------
 
   await check('Pages with the resumption token and pauses one second between requests', async () => {
     const { fetchImpl, calls } = createFetchStub([xmlResponse(fixture('bracu-dim-page1.xml')), xmlResponse(fixture('bracu-dim-page2.xml'))]);
@@ -686,7 +653,6 @@ async function runRepositoryHarvesterTests() {
     ]);
     assert.deepStrictEqual(progress.filter((event) => event.event === 'page').map((event) => [event.page, event.fetched]), [[1, 5], [2, 6]]);
 
-    // Running the same harvest again changes nothing and creates no duplicates.
     const second = createFetchStub([xmlResponse(fixture('bracu-dim-page1.xml')), xmlResponse(fixture('bracu-dim-page2.xml'))]);
     const again = await harvestRepository({ repository: BRACU, from: '2025-09-01', fetchImpl: second.fetchImpl, ThesisModel: model, sleep, contactEmail: CONTACT });
     assert.strictEqual(again.inserted, 0);
@@ -705,7 +671,6 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(calls[0].init.method, 'GET');
     assert.ok(calls[0].init.signal, 'every request carries a timeout signal');
 
-    // The contact address comes from HARVEST_CONTACT_EMAIL, and without one nothing is sent.
     const saved = { email: process.env.HARVEST_CONTACT_EMAIL, site: process.env.HARVEST_SITE_URL };
     try {
       process.env.HARVEST_CONTACT_EMAIL = 'librarian-contact@example.org';
@@ -779,7 +744,6 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(summary.lastResumptionToken, 'tok-2', 'the page that failed is the one to ask for again');
     assert.strictEqual(summary.inserted, 3, 'what was read before the failure is kept');
 
-    // A repository asking for a very long wait ends the run at once instead of hanging for hours.
     const veryBusy = createFetchStub([xmlResponse('busy', 503, { 'Retry-After': '86400' })]);
     const second = createSleepRecorder();
     const stopped = await harvestRepository({ repository: BRACU, fetchImpl: veryBusy.fetchImpl, dryRun: true, sleep: second.sleep, contactEmail: CONTACT });
@@ -787,7 +751,6 @@ async function runRepositoryHarvesterTests() {
     assert.deepStrictEqual(second.waits, []);
     assert.strictEqual(stopped.errors.length, 1);
 
-    // 503 without Retry-After: back off, doubling each time.
     const noHint = createFetchStub([xmlResponse('busy', 503), xmlResponse('busy', 503), xmlResponse(fixture('bracu-dim-page2.xml'))]);
     const third = createSleepRecorder();
     const recovered = await harvestRepository({ repository: BRACU, fetchImpl: noHint.fetchImpl, dryRun: true, sleep: third.sleep, contactEmail: CONTACT });
@@ -804,7 +767,6 @@ async function runRepositoryHarvesterTests() {
     assert.deepStrictEqual(recovered.errors, []);
     assert.strictEqual(recovered.fetched, 1);
 
-    // A server that never answers: the request is aborted after timeoutMs, retried, then reported.
     let hangingCalls = 0;
     const hangingFetch = (url, init) => new Promise((resolve, reject) => {
       hangingCalls += 1;
@@ -830,7 +792,6 @@ async function runRepositoryHarvesterTests() {
   });
 
   await check('Stops at maxRecords and returns a token that is safe to resume from', async () => {
-    // Limit reached in the middle of page 2: resume must re-read page 2, not skip its tail.
     const midPage = createFetchStub(threeGeneratedPages());
     const model = createFakeThesisModel();
     const { sleep } = createSleepRecorder();
@@ -842,7 +803,6 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(summary.complete, false);
     assert.strictEqual(summary.lastResumptionToken, 'tok-2');
 
-    // Limit reached exactly at the end of page 1: the next page is the place to continue.
     const pageEnd = createFetchStub(threeGeneratedPages());
     const exact = await harvestRepository({ repository: BRACU, fetchImpl: pageEnd.fetchImpl, dryRun: true, sleep, contactEmail: CONTACT, maxRecords: 3 });
     assert.strictEqual(exact.fetched, 3);
@@ -850,21 +810,18 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(exact.lastResumptionToken, 'tok-2');
     assert.strictEqual(exact.complete, false);
 
-    // Limit inside the first page: nothing to resume from, simply run again.
     const firstPage = createFetchStub(threeGeneratedPages());
     const small = await harvestRepository({ repository: BRACU, fetchImpl: firstPage.fetchImpl, dryRun: true, sleep, contactEmail: CONTACT, maxRecords: 2 });
     assert.strictEqual(small.fetched, 2);
     assert.strictEqual(small.lastResumptionToken, null);
     assert.strictEqual(small.complete, false);
 
-    // maxRecords also counts skipped records, so a limit is a limit on work done at the source.
     const mixed = createFetchStub([xmlResponse(fixture('bracu-dim-page1.xml')), xmlResponse(fixture('bracu-dim-page2.xml'))]);
     const counted = await harvestRepository({ repository: BRACU, fetchImpl: mixed.fetchImpl, dryRun: true, sleep, contactEmail: CONTACT, maxRecords: 3 });
     assert.strictEqual(counted.fetched, 3);
     assert.strictEqual(counted.inserted, 1);
     assert.deepStrictEqual(counted.skipped, { 'not-thesis': 1, 'deleted-at-source': 1 });
 
-    // Resuming: the saved token is sent on the first request, and the run finishes the list.
     const resumed = createFetchStub([xmlResponse(generatedPage([4, 5, 6], 'tok-3')), xmlResponse(generatedPage([7, 8, 9], null))]);
     const rest = await harvestRepository({ repository: BRACU, from: '2025-01-01', fetchImpl: resumed.fetchImpl, ThesisModel: model, sleep, contactEmail: CONTACT, resumptionToken: 'tok-2' });
     assert.strictEqual(resumed.calls[0].url, 'https://dspace.bracu.ac.bd/server/oai/request?verb=ListRecords&resumptionToken=tok-2');
@@ -930,7 +887,6 @@ async function runRepositoryHarvesterTests() {
     assert.strictEqual(withModel.samples.length, 2);
     assert.strictEqual(withModel.samples[0].externalId, 'oai:dspace.bracu.ac.bd:10361/22810');
 
-    // The command line dry run passes no model at all, so it cannot write even by mistake.
     const noModel = await harvestRepository({ repository: BRACU, fetchImpl: createFetchStub(pages()).fetchImpl, dryRun: true, sleep, contactEmail: CONTACT });
     assert.strictEqual(noModel.inserted, 3);
     assert.strictEqual(noModel.samples.length, 3);
@@ -962,7 +918,6 @@ async function runRepositoryHarvesterTests() {
     assert.deepStrictEqual(summary.skipped, { 'not-thesis': 1, 'no-abstract': 1 });
   });
 
-  // ----- Registry and command line ------------------------------------------------------
 
   await check('Registry: BRAC University is enabled on its confirmed endpoint; unverified entries are disabled', () => {
     const repositories = listRepositories();
@@ -1005,8 +960,6 @@ async function runRepositoryHarvesterTests() {
 
     const saved = { email: process.env.HARVEST_CONTACT_EMAIL, mongo: process.env.MONGODB_URI };
     try {
-      // With no contact address configured the tool stops before any request or database call,
-      // which lets this test walk through the gates without touching the network.
       delete process.env.HARVEST_CONTACT_EMAIL;
       delete process.env.MONGODB_URI;
 

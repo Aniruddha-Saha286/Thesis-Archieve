@@ -3,8 +3,6 @@ const router = express.Router();
 const { getInstitutionResearchLandscape } = require('../services/institutionAnalyticsService');
 const { analyticsLimiter } = require('../middleware/rateLimit');
 
-// GET /api/analytics/institutions/:id
-// Authoritative OpenAlex Research Landscape analytics
 router.get('/institutions/:id', analyticsLimiter, async (req, res) => {
   try {
     const { id } = req.params;

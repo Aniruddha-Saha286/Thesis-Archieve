@@ -22,27 +22,22 @@ const COMMON_COUNTRIES = [
 ];
 
 export default function DiscoveryFiltersPanel({
-  // Subjects
   subjects = [],
   selectedSubjectId = '',
   onSelectSubject,
-  // Institution
-  selectedInstitution = null, // { id, name, countryCode, type, ror }
+  selectedInstitution = null,
   onSelectInstitution,
   onViewInstitutionLandscape,
-  institutionMode = 'affiliation', // 'affiliation' | 'awarding'
+  institutionMode = 'affiliation',
   onChangeInstitutionMode,
   academicOnly = true,
   onChangeAcademicOnly,
-  // Country Multi-select
-  selectedCountries = [], // ['BD', 'US']
+  selectedCountries = [],
   onToggleCountry,
   onClearCountries,
-  // Citations
   minCitations = '',
   onChangeMinCitations,
-  // Author
-  selectedAuthor = null, // { id, name, orcid }
+  selectedAuthor = null,
   onClearAuthor,
   className = '',
 }) {
@@ -59,7 +54,6 @@ export default function DiscoveryFiltersPanel({
   const effectiveCountries = selectedCountries || [];
   const effectiveMinCitations = localMinCitations;
 
-  // Institution typeahead state
   const [instInput, setInstInput] = useState('');
   const [instSuggestions, setInstSuggestions] = useState([]);
   const [loadingInst, setLoadingInst] = useState(false);
@@ -67,10 +61,8 @@ export default function DiscoveryFiltersPanel({
   const instDropdownRef = useRef(null);
   const instTimerRef = useRef(null);
 
-  // Custom country input state
   const [customCountryInput, setCustomCountryInput] = useState('');
 
-  // Close institution dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (instDropdownRef.current && !instDropdownRef.current.contains(e.target)) {
@@ -176,7 +168,6 @@ export default function DiscoveryFiltersPanel({
 
   return (
     <div className={`space-y-5 text-xs ${className}`}>
-      {/* Active Author Filter Pill (if author search was activated) */}
       {selectedAuthor && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 p-2.5 rounded-sm flex items-center justify-between gap-2">
           <div className="space-y-0.5">
@@ -203,7 +194,6 @@ export default function DiscoveryFiltersPanel({
         </div>
       )}
 
-      {/* University / Institution Discovery */}
       <FilterSection
         title="University"
         icon={Building2}
@@ -269,7 +259,6 @@ export default function DiscoveryFiltersPanel({
               </div>
             </div>
 
-            {/* Suggestions dropdown */}
             {showInstDropdown && (
               <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm shadow-lg z-40 max-h-56 overflow-y-auto divide-y divide-[#F2EFE8] dark:divide-[#2C2A26]">
                 {instSuggestions.length === 0 ? (
@@ -355,7 +344,6 @@ export default function DiscoveryFiltersPanel({
         </div>
       </FilterSection>
 
-      {/* Country Multi-Select Filter */}
       <FilterSection
         title="Country"
         icon={Globe}
@@ -364,7 +352,6 @@ export default function DiscoveryFiltersPanel({
         defaultOpen={false}
       >
 
-        {/* Selected Country Chips */}
         {effectiveCountries.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {effectiveCountries.map((code) => (
@@ -385,7 +372,6 @@ export default function DiscoveryFiltersPanel({
           </div>
         )}
 
-        {/* Common Country Quick-Picks */}
         <div className="flex items-center gap-1 flex-wrap">
           {COMMON_COUNTRIES.map((c) => {
             const isSelected = effectiveCountries.includes(c.code);
@@ -407,7 +393,6 @@ export default function DiscoveryFiltersPanel({
           })}
         </div>
 
-        {/* Custom ISO Code Input */}
         <form onSubmit={handleAddCustomCountry} className="flex items-center gap-1.5 pt-1">
           <input
             type="text"
@@ -430,7 +415,6 @@ export default function DiscoveryFiltersPanel({
         </p>
       </FilterSection>
 
-      {/* Citation Impact */}
       <FilterSection
         title="Citation Impact"
         icon={Quote}
@@ -439,7 +423,6 @@ export default function DiscoveryFiltersPanel({
         defaultOpen={false}
       >
 
-        {/* Minimum citations presets */}
         <div className="space-y-1">
           <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9A968D] block">
             Minimum Citations (OpenAlex):

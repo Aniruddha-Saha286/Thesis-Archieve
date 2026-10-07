@@ -8,8 +8,6 @@ const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const { requirePermission, PERMISSIONS } = require('../middleware/rbac');
 const { adminActionLimiter } = require('../middleware/rateLimit');
-// Kept as one object (not pulled apart into separate names) so the tests can watch what is
-// pushed to browsers without starting a real socket server.
 const realtime = require('../socket');
 const emailService = require('../services/emailService');
 const {
@@ -24,25 +22,14 @@ const {
   parseFeedbackListQuery,
 } = require('../utils/feedbackFields');
 
-// Every endpoint in this file needs a signed-in account. Banned accounts are stopped here.
-// There is deliberately no "approved only" check on the user endpoints: students who are still
-// waiting for approval (status "pending") or were turned down ("rejected") are the people
-// most likely to need help, so they must be able to write to the team.
 router.use(authenticateToken);
 
-// How many of a user's own messages are returned at once.
 const MY_FEEDBACK_LIMIT = 50;
 
-// Safety cap on how many admin accounts get a stored notification for one message.
 const MAX_ADMIN_RECIPIENTS = 10;
 
-// 5 messages per 10 minutes for each account.
-// - Counted per user id, not per IP address, so students sharing a campus network do not use up
-//   each other's allowance, and one person cannot get more by switching networks.
-// - Only messages that were accepted are counted. A message refused for being too short, or a
-//   server problem, does not use up the allowance.
 const feedbackSubmitLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
+  windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
@@ -53,13 +40,10 @@ const feedbackSubmitLimiter = rateLimit({
   },
 });
 
-// A malformed id must give "not found", not a server error from the database driver.
 function isValidId(id) {
   return typeof id === 'string' && mongoose.Types.ObjectId.isValid(id);
 }
 
-// Starts an email without waiting for it. Whatever goes wrong is only logged, so email
-// trouble can never fail or slow down the request that triggered it.
 function sendEmailInBackground(label, start) {
   try {
     Promise.resolve(start()).catch((err) => console.error(label, err && err.message));
@@ -68,10 +52,6 @@ function sendEmailInBackground(label, start) {
   }
 }
 
-// Tells staff that a new message arrived, the same way a new report does:
-// a stored notification for the admin account(s), pushed live to them, plus a live push to
-// every signed-in admin. Editors who hold the reports permission also handle feedback, so
-// they get the same live push. A failure here is logged only; the message itself is already saved.
 async function notifyStaffOfNewFeedback(feedback) {
   try {
     const label = FEEDBACK_CATEGORY_LABELS[feedback.category] || FEEDBACK_CATEGORY_LABELS.other;
@@ -91,7 +71,6 @@ async function notifyStaffOfNewFeedback(feedback) {
     }
     realtime.emitToAdmins('notification:new', notifPayload);
 
-    // Editors with the reports permission. Admins are left out here because they were just told above.
     const io = realtime.getIO();
     if (io) {
       io.to(`perm:${PERMISSIONS.REPORTS_MODERATE}`).except('role:admin').emit('notification:new', notifPayload);
@@ -101,8 +80,6 @@ async function notifyStaffOfNewFeedback(feedback) {
   }
 }
 
-// Tells the user that the team replied: a stored notification, pushed live if they are online.
-// A failure here is logged only; the reply itself is already saved.
 async function notifyUserOfReply(feedback) {
   try {
     const notif = new Notification({
@@ -119,12 +96,7 @@ async function notifyUserOfReply(feedback) {
   }
 }
 
-// ==========================================
-// 1. User Endpoints (any signed-in account)
-// ==========================================
 
-// POST /api/feedback
-// Send a message to the team.
 router.post('/', feedbackSubmitLimiter, async (req, res) => {
   try {
     const body = req.body || {};
@@ -168,8 +140,6 @@ router.post('/', feedbackSubmitLimiter, async (req, res) => {
   }
 });
 
-// GET /api/feedback/mine
-// The signed-in user's own messages and any replies, newest first.
 router.get('/mine', async (req, res) => {
   try {
     const feedback = await Feedback.find({ user: req.user._id })
@@ -182,14 +152,7 @@ router.get('/mine', async (req, res) => {
   }
 });
 
-// ==========================================
-// 2. Staff Endpoints (admins, and editors who handle reports)
-// ==========================================
-// These are declared before PUT /:id/seen so that a path starting with /admin is always
-// treated as a staff request and checked for the staff permission.
 
-// GET /api/feedback/admin?status=&category=&page=&limit=
-// The team's queue. status=open means new + in_progress.
 router.get('/admin', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (req, res) => {
   try {
     const { statuses, category, page, limit } = parseFeedbackListQuery(req.query);
@@ -198,8 +161,6 @@ router.get('/admin', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (req
     if (statuses) filter.status = statuses.length === 1 ? statuses[0] : { $in: statuses };
     if (category) filter.category = category;
 
-    // The per-status totals follow the category filter but not the status filter, so the
-    // numbers on the status tabs stay the same while staff switch between tabs.
     const countBase = category ? { category } : {};
 
     const [feedback, total, ...statusTotals] = await Promise.all([
@@ -232,9 +193,6 @@ router.get('/admin', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (req
   }
 });
 
-// PUT /api/feedback/admin/:id
-// Change the status, write a reply, or both. A reply marks the message "answered" unless a
-// status is sent with it, and the user is told in the app and by email.
 router.put('/admin/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), adminActionLimiter, async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
@@ -242,7 +200,6 @@ router.put('/admin/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), adminA
     }
 
     const body = req.body || {};
-    // An empty status, or a reply box left empty, means "leave that part as it is".
     const hasStatus = body.status !== undefined && body.status !== null && body.status !== '';
     const hasReply =
       body.reply !== undefined && body.reply !== null && !(typeof body.reply === 'string' && !body.reply.trim());
@@ -270,7 +227,6 @@ router.put('/admin/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), adminA
       feedback.repliedBy = req.user._id;
       feedback.repliedByName = req.user.name || '';
       feedback.repliedAt = new Date();
-      // A new or edited reply is unread again for the user.
       feedback.userSeenReply = false;
       feedback.status = hasStatus ? body.status : 'answered';
     } else {
@@ -303,20 +259,13 @@ router.put('/admin/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), adminA
   }
 });
 
-// ==========================================
-// 3. User Endpoint: mark a reply as read
-// ==========================================
 
-// PUT /api/feedback/:id/seen
-// Marks the reply on one of the caller's own messages as read.
 router.put('/:id/seen', async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
       return res.status(404).json({ message: 'Feedback not found.' });
     }
 
-    // Matching on the owner as well as the id means somebody else's message is simply "not found".
-    // timestamps: false keeps "last updated" meaning the last real change, not the last time it was read.
     const feedback = await Feedback.findOneAndUpdate(
       { _id: req.params.id, user: req.user._id },
       { userSeenReply: true },
@@ -332,5 +281,4 @@ router.put('/:id/seen', async (req, res) => {
 });
 
 module.exports = router;
-// Exposed so tests can clear the per-user counter between cases.
 module.exports.feedbackSubmitLimiter = feedbackSubmitLimiter;

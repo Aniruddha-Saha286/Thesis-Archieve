@@ -12,7 +12,6 @@ const { emitStudentProfileUpdated, emitToAdmins, emitToUser } = require('../sock
 const emailService = require('../services/emailService');
 const thesisFileStorage = require('../services/thesisFileStorage');
 
-// Configure Cloudinary strictly from environment variables
 const hasCloudinary = Boolean(
   process.env.CLOUDINARY_CLOUD_NAME &&
   process.env.CLOUDINARY_API_KEY &&
@@ -27,17 +26,12 @@ if (hasCloudinary) {
   });
 }
 
-// Inspect file magic bytes for deep content validation
 function validateMagicBytes(buffer, claimedMime) {
   if (!buffer || buffer.length < 4) return false;
 
-  // JPEG: FF D8
   const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8;
-  // PNG: 89 50 4E 47
   const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
-  // PDF: %PDF (25 50 44 46)
   const isPdf = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46;
-  // WebP: RIFF (bytes 0-3: 52 49 46 46) ... WEBP (bytes 8-11: 57 45 42 50)
   const isWebp =
     buffer.length >= 12 &&
     buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
@@ -56,9 +50,8 @@ const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'applica
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Strict MIME whitelist: reject unsupported image subtypes even if starting with image/
     if (ALLOWED_MIMES.has(file.mimetype)) {
       cb(null, true);
     } else {
@@ -67,8 +60,6 @@ const upload = multer({
   },
 });
 
-// POST /api/upload/id-card
-// Secure student ID document upload with magic byte verification and private storage
 router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'), async (req, res) => {
   try {
     if (!req.file) {
@@ -81,7 +72,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
       });
     }
 
-    // Deep content verification: check file magic bytes
     const isValidContent = validateMagicBytes(req.file.buffer, req.file.mimetype);
     if (!isValidContent) {
       return res.status(400).json({
@@ -89,7 +79,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
       });
     }
 
-    // Private Object Storage Handling - NO base64/data-URI database fallback
     if (!hasCloudinary) {
       return res.status(503).json({
         code: 'STORAGE_UNAVAILABLE',
@@ -114,7 +103,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
       });
 
       const result = await uploadPromise;
-      // Store private object key / reference, NOT public permanent URL
       documentRef = result.public_id;
     } catch (cloudErr) {
       console.error('Private storage upload failed:', cloudErr.message);
@@ -124,7 +112,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
       });
     }
 
-    // Update student's record with the private object reference
     const updatedStudent = await User.findByIdAndUpdate(
       req.user._id,
       { idCardProof: documentRef },
@@ -134,7 +121,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
     if (updatedStudent) {
       emitStudentProfileUpdated(updatedStudent);
 
-      // In-app Notification for Admin
       try {
         const adminUser = await User.findOne({ role: 'admin' });
         const notifPayload = {
@@ -173,7 +159,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
       }).catch((err) => console.error('[EmailService] User verification receipt error:', err.message));
     }
 
-    // Audit event for document upload
     await AuditEvent.create({
       actor: req.user._id,
       action: 'DOCUMENT_UPLOADED',
@@ -193,8 +178,6 @@ router.post('/id-card', authenticateToken, uploadLimiter, upload.single('idCard'
   }
 });
 
-// DELETE /api/upload/id-card
-// Data deletion policy: permanently purge uploaded ID documents and create audit record
 router.delete('/id-card', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -213,7 +196,6 @@ router.delete('/id-card', authenticateToken, async (req, res) => {
     user.idCardProof = '';
     await user.save();
 
-    // Audit the deletion
     await AuditEvent.create({
       actor: req.user._id,
       action: 'DOCUMENT_DELETED',
@@ -230,10 +212,6 @@ router.delete('/id-card', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/upload/thesis-pdf
-// A student attaches the PDF of the thesis they are depositing. The file goes to storage and
-// the address comes back; the deposit form then sends that address with the thesis details.
-// Nothing is written to the database here.
 const THESIS_PDF_MAX_MB = thesisFileStorage.getMaxUploadMb();
 const thesisPdfUpload = multer({
   storage,
@@ -315,10 +293,6 @@ router.post('/thesis-pdf', authenticateToken, thesisPdfUploadLimiter, receiveThe
   }
 });
 
-// DELETE /api/upload/thesis-pdf   { storageRef }
-// The deposit form calls this when the student removes the file, picks another one, or closes
-// the form without submitting, so that files nobody will use do not stay in storage.
-// Only the member who uploaded the file may remove it, and only while no thesis record uses it.
 router.delete('/thesis-pdf', authenticateToken, async (req, res) => {
   try {
     const ref = req.body && typeof req.body.storageRef === 'string' ? req.body.storageRef.trim() : '';

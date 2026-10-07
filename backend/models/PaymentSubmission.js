@@ -76,13 +76,11 @@ const paymentSubmissionSchema = new mongoose.Schema({
   },
 });
 
-// Enforce database-level uniqueness across provider + normalized transaction ID
 paymentSubmissionSchema.index(
   { paymentProvider: 1, normalizedTrxId: 1 },
   { unique: true }
 );
 
-// Enforce single payment submission per order
 paymentSubmissionSchema.index(
   { order: 1 },
   { unique: true }

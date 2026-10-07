@@ -1,5 +1,3 @@
-// Helpers added for the release: thesis PDF storage rules, full-text messages,
-// gzip for large JSON answers, and thesis level wording in citations.
 const assert = require('assert');
 const http = require('http');
 const zlib = require('zlib');
@@ -157,7 +155,6 @@ async function runReleaseBackendTests() {
   if (fullText.isPdfReaderAvailable()) {
     await check('Full paper: a small file that unpacks into a huge one is stopped, and the site keeps answering', async () => {
       fullText.resetFullTextStateForTests();
-      // One page whose text instructions are 150 MB when unpacked, in a file of about half a megabyte
       const line = Buffer.from('BT /F1 12 Tf 10 10 Td (limitations of this study are many and varied indeed) Tj ET\n');
       const raw = Buffer.alloc(Math.floor((150 * 1048576) / line.length) * line.length);
       for (let at = 0; at < raw.length; at += line.length) line.copy(raw, at);
@@ -223,7 +220,6 @@ async function runReleaseBackendTests() {
     assert.strictEqual(acceptsGzip({ headers: {} }), false);
   });
 
-  // A tiny real server, so the middleware is tested through Express exactly as the site uses it
   const app = express();
   app.use(jsonCompression());
   const big = { records: Array.from({ length: 60 }, (_, i) => ({ id: i, title: `Bangla sentiment analysis with transformers ${i}`, abstract: 'We study sentiment in Bangla product reviews. '.repeat(6) })) };
@@ -275,10 +271,8 @@ async function runReleaseBackendTests() {
     process.env.JWT_SECRET = 'unit-test-secret';
     try {
       const token = jwt.sign({ id: 'user-1' }, 'unit-test-secret');
-      // Two students on the same campus address are counted apart
       assert.strictEqual(memberOrAddressKey({ headers: { authorization: `Bearer ${token}` }, ip: '103.4.5.6' }), 'member:user-1');
       assert.strictEqual(memberOrAddressKey({ headers: { authorization: `Bearer ${jwt.sign({ id: 'user-2' }, 'unit-test-secret')}` }, ip: '103.4.5.6' }), 'member:user-2');
-      // A made-up or wrongly signed token earns no allowance of its own
       assert.strictEqual(memberOrAddressKey({ headers: { authorization: 'Bearer made.up.token' }, ip: '103.4.5.6' }), '103.4.5.6');
       assert.strictEqual(memberOrAddressKey({ headers: { authorization: `Bearer ${jwt.sign({ id: 'user-1' }, 'another-secret')}` }, ip: '103.4.5.6' }), '103.4.5.6');
       assert.strictEqual(memberOrAddressKey({ headers: {}, ip: '103.4.5.6' }), '103.4.5.6');
@@ -305,7 +299,6 @@ async function runReleaseBackendTests() {
     assert.strictEqual(matchesPublisherFilter(rec('Elsevier BV'), 'ACM'), false);
     assert.strictEqual(matchesPublisherFilter(rec('Macmillan'), 'ACM'), false, '"acm" inside another word is not a match');
     assert.strictEqual(matchesPublisherFilter(rec(''), 'IEEE'), false);
-    // Earlier behaviour is unchanged
     assert.strictEqual(matchesPublisherFilter(rec('Elsevier BV'), 'Elsevier'), true);
     assert.strictEqual(matchesPublisherFilter(rec('Anything'), ''), true);
   });

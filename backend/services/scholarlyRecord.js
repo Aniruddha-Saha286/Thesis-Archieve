@@ -1,34 +1,25 @@
-/**
- * Normalized Scholarly Record Model
- * Enforces provenance, accuracy, and honesty across all academic providers.
- * Missing metadata is represented as null/unknown; NEVER invented.
- */
 
 const { mapToCanonicalSubject } = require('./subjectCatalog');
 const { resolveCountryCode } = require('./countryResolver');
 
-// Helper to clean and normalize titles
 function normalizeTitle(rawTitle) {
   if (!rawTitle || typeof rawTitle !== 'string') return 'Untitled Scholarly Publication';
   return rawTitle
-    .replace(/<[^>]*>/g, '') // Strip HTML tags
+    .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// Helper to normalize DOI strings
 function normalizeDoi(rawDoi) {
   if (!rawDoi || typeof rawDoi !== 'string') return null;
   const match = rawDoi.match(/10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+/);
   return match ? match[0].toLowerCase() : null;
 }
 
-// Factory to create a standardized NormalizedScholarlyRecord
 function createNormalizedRecord(data) {
   const normDoi = normalizeDoi(data.doi);
   const cleanTitle = normalizeTitle(data.title);
 
-  // Author formatting
   let authors = [];
   if (Array.isArray(data.authors)) {
     authors = data.authors.map((a) => {
@@ -51,7 +42,6 @@ function createNormalizedRecord(data) {
     }
   }
 
-  // Publication year extraction
   let publishedYear = null;
   if (data.publishedYear && !isNaN(parseInt(data.publishedYear))) {
     publishedYear = parseInt(data.publishedYear);
@@ -60,10 +50,8 @@ function createNormalizedRecord(data) {
     if (!isNaN(yr)) publishedYear = yr;
   }
 
-  // Determine publication type strictly from verified evidence (never from title alone)
   let publicationType = data.publicationType || 'unknown';
   if (['thesis', 'dissertation'].includes(publicationType)) {
-    // Preserved
   } else if (data.degreeType && /\b(thesis|dissertation|ph\.?d|master'?s thesis|doctoral)\b/i.test(data.degreeType)) {
     publicationType = 'thesis';
   } else if (publicationType === 'preprint' || data.source === 'arXiv') {
@@ -76,10 +64,8 @@ function createNormalizedRecord(data) {
     publicationType = 'book';
   }
 
-  // Full-text locations array
   const fullTextLocations = Array.isArray(data.fullTextLocations) ? [...data.fullTextLocations] : [];
 
-  // If a direct pdfUrl is provided, ensure it's in fullTextLocations
   if (data.pdfUrl && typeof data.pdfUrl === 'string' && data.pdfUrl.trim()) {
     const directUrl = data.pdfUrl.trim();
     if (!fullTextLocations.some((loc) => loc.url === directUrl)) {
@@ -92,11 +78,9 @@ function createNormalizedRecord(data) {
     }
   }
 
-  // Identify direct PDF url from fullTextLocations
   const directPdfLocation = fullTextLocations.find((loc) => loc.isDirectPdf && loc.type === 'pdf');
   const directPdfUrl = directPdfLocation ? directPdfLocation.url : (data.isDirectPdf && data.pdfUrl ? data.pdfUrl : null);
 
-  // Determine primary full-text HTML / repository landing page
   const fullTextPageLocation = fullTextLocations.find((loc) => loc.type === 'html' || loc.type === 'landing');
   const fullTextUrl = fullTextPageLocation ? fullTextPageLocation.url : (data.fullTextUrl || null);
 
@@ -105,7 +89,6 @@ function createNormalizedRecord(data) {
 
   const degreeType = data.degreeType ? String(data.degreeType).trim() : null;
 
-  // Normalize authorships with structured author and institution links
   let authorships = [];
   if (Array.isArray(data.authorships) && data.authorships.length > 0) {
     authorships = data.authorships.map((auth) => ({
@@ -143,7 +126,6 @@ function createNormalizedRecord(data) {
     }));
   }
 
-  // Normalize awardingInstitution (strictly for thesis/dissertation)
   let awardingInstitution = null;
   if (data.awardingInstitution && (data.awardingInstitution.name || data.awardingInstitution.id)) {
     awardingInstitution = {
@@ -165,7 +147,6 @@ function createNormalizedRecord(data) {
     };
   }
 
-  // Normalize subjects
   let subjects = [];
   if (Array.isArray(data.subjects) && data.subjects.length > 0) {
     subjects = data.subjects.map((s) => ({
@@ -191,8 +172,6 @@ function createNormalizedRecord(data) {
     }
   }
 
-  // If still unclassified (e.g. arXiv, Crossref, Europe PMC, HAL, DOAJ without explicit taxonomy),
-  // infer discipline from title or abstract via canonical subject catalog
   if (subjects.length === 0 || subjects.every((s) => s.id === 'other')) {
     const titleMatch = data.title ? mapToCanonicalSubject(data.title) : null;
     if (titleMatch && titleMatch.id !== 'other') {
@@ -217,7 +196,6 @@ function createNormalizedRecord(data) {
     }
   }
 
-  // Normalize citationMetrics
   let citationMetrics = null;
   const cCount = typeof data.citationCount === 'number'
     ? data.citationCount
@@ -254,10 +232,8 @@ function createNormalizedRecord(data) {
     abstract: data.abstract ? String(data.abstract).replace(/<[^>]*>/g, '').trim() : null,
     publicationType: publicationType,
     degreeType: degreeType,
-    // Thesis-only context (kept for locally deposited theses; null for outside sources)
     advisor: data.advisor ? String(data.advisor).trim() : null,
     department: data.department ? String(data.department).trim() : null,
-    // Records copied from a university repository: where they came from and the link back to the original
     origin: data.origin === 'harvest' ? 'harvest' : (data.origin || null),
     sourceRepositoryName: data.sourceRepositoryName ? String(data.sourceRepositoryName).trim() : null,
     sourceUrl: data.sourceUrl ? String(data.sourceUrl).trim() : null,
@@ -269,9 +245,9 @@ function createNormalizedRecord(data) {
     publisher: data.publisher ? String(data.publisher).trim() : null,
     isOpenAccess: typeof data.isOpenAccess === 'boolean' ? data.isOpenAccess : Boolean(directPdfUrl || data.openAccess),
     license: data.license ? String(data.license).trim() : null,
-    pdfUrl: directPdfUrl, // Direct PDF link if verified authentic, else null
+    pdfUrl: directPdfUrl,
     isDirectPdf: Boolean(directPdfUrl),
-    fullTextUrl: fullTextUrl, // Repository landing / HTML page
+    fullTextUrl: fullTextUrl,
     doiUrl: normDoi ? `https://doi.org/${normDoi}` : null,
     fullTextLocations: fullTextLocations,
     isRetracted: Boolean(data.isRetracted),

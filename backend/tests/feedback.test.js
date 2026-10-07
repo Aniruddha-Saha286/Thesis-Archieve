@@ -1,11 +1,3 @@
-// "Send feedback to the team" feature: the pure helpers, the Feedback model, the two emails
-// and every route in routes/feedback.js.
-//
-// Nothing here needs MongoDB or the network:
-// - the router is driven directly with a hand-made request and response (no server is started),
-// - the few database calls the routes make are replaced by a small in-memory stand-in,
-// - emails run in the service's own offline mode, or are replaced by a recorder,
-// - live pushes are recorded instead of being sent through a socket server.
 const assert = require('assert');
 const { EventEmitter } = require('events');
 const querystring = require('querystring');
@@ -38,7 +30,6 @@ const realtime = require('../socket');
 const { PERMISSIONS } = require('../constants/permissions');
 const feedbackRouter = require('../routes/feedback');
 
-// Invisible characters are built from their numbers so this file contains only visible text.
 const CH = {
   nul: String.fromCharCode(0x00),
   bell: String.fromCharCode(0x07),
@@ -74,11 +65,7 @@ async function runFeedbackTests() {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Test scaffolding
-  // ---------------------------------------------------------------------
 
-  // Everything replaced during the run is put back at the end, pass or fail.
   const undo = [];
   function replace(target, key, value) {
     const had = Object.prototype.hasOwnProperty.call(target, key);
@@ -99,7 +86,6 @@ async function runFeedbackTests() {
     });
   }
 
-  // Offline email mode and a throwaway signing secret, so no real mail or real secret is involved.
   setEnv('NODE_ENV', 'test');
   setEnv('OFFLINE_MODE', 'true');
   setEnv('JWT_SECRET', 'feedback-test-only-secret');
@@ -131,11 +117,10 @@ async function runFeedbackTests() {
   const peopleById = new Map(Object.values(people).map((p) => [String(p._id), p]));
   const tokenFor = (who) => jwt.sign({ id: String(who._id) }, process.env.JWT_SECRET, { expiresIn: '5m' });
 
-  // --- In-memory stand-in for the database ---
   const db = {
     feedback: [],
     notifications: [],
-    failFeedbackWrites: null, // set to an Error to make the next Feedback save/read fail
+    failFeedbackWrites: null,
     failNotificationWrites: null,
     lastSeenUpdate: null,
     clock: Date.UTC(2026, 0, 1),
@@ -155,7 +140,6 @@ async function runFeedbackTests() {
     });
   }
 
-  // Behaves like a Mongoose query: chain sort/skip/limit/select, then await it.
   function fakeQuery(run) {
     const state = { sort: null, skip: 0, limit: null };
     const query = {
@@ -231,9 +215,7 @@ async function runFeedbackTests() {
     db.notifications.push(this);
     return this;
   });
-  // Sign-in lookup used by the project's own authentication middleware.
   replace(User, 'findById', (id) => fakeQuery(() => peopleById.get(String(id)) || null));
-  // "Which accounts are admins" lookup used when a new message arrives.
   replace(User, 'find', (filter) =>
     fakeQuery((state) => {
       const rows = Object.values(people).filter((p) => matches(p, filter));
@@ -241,7 +223,6 @@ async function runFeedbackTests() {
     })
   );
 
-  // --- Recorders for live pushes and emails ---
   const pushes = { toUser: [], toAdmins: [], rooms: [] };
   const fakeIo = {
     to(room) {
@@ -286,7 +267,6 @@ async function runFeedbackTests() {
     emails.toUser.length = 0;
   }
 
-  // Runs a block with console.error silenced and collected, for cases that are meant to log an error.
   async function collectingErrors(fn) {
     const original = console.error;
     const logged = [];
@@ -299,7 +279,6 @@ async function runFeedbackTests() {
     return logged;
   }
 
-  // --- A hand-made response, with just the parts Express handlers and the rate limiter use ---
   class FakeResponse extends EventEmitter {
     constructor() {
       super();
@@ -321,7 +300,6 @@ async function runFeedbackTests() {
       return this.headers[String(name).toLowerCase()];
     }
     json(payload) {
-      // Through JSON and back, so tests see exactly what a browser would receive.
       this.body = payload === undefined ? undefined : JSON.parse(JSON.stringify(payload));
       this.finish();
       return this;
@@ -344,8 +322,6 @@ async function runFeedbackTests() {
     }
   }
 
-  // Sends one request through the real router: authentication, permission checks, rate limits
-  // and the handler all run exactly as they do behind Express.
   function call(method, url, { as = null, token, body, ip = '10.20.30.40' } = {}) {
     return new Promise((resolve, reject) => {
       const queryText = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
@@ -366,7 +342,6 @@ async function runFeedbackTests() {
         socket: {},
       };
       const res = new FakeResponse();
-      // Let work that happens right after the response (rate-limit bookkeeping, background email) settle.
       res.once('finish', () => setImmediate(() => setImmediate(() => resolve(res))));
 
       feedbackRouter.handle(req, res, (err) => {
@@ -378,7 +353,6 @@ async function runFeedbackTests() {
     });
   }
 
-  // Puts a message straight into the stand-in database.
   function seed(owner, fields = {}) {
     const doc = new Feedback({
       user: owner._id,
@@ -396,9 +370,6 @@ async function runFeedbackTests() {
   const plain = (message) => typeof message === 'string' && message.length > 0 && message.length < 200;
 
   try {
-    // =========================================================================
-    // 1. Pure helpers
-    // =========================================================================
     console.log('--- 1. Helper rules (utils/feedbackFields.js) ---');
 
     await test('Categories and statuses are exactly the agreed lists, each with a readable label', () => {
@@ -461,7 +432,6 @@ async function runFeedbackTests() {
       const result = cleanFeedbackMessage(dirty);
       assert.strictEqual(result.ok, true);
       assert.strictEqual(result.value, 'Hello there!');
-      // A message made only of invisible characters is an empty message.
       assert.strictEqual(cleanFeedbackMessage(`${CH.nul}${CH.rightToLeftOverride}${CH.byteOrderMark}  `).ok, false);
     });
 
@@ -480,7 +450,6 @@ async function runFeedbackTests() {
       }
       assert.match(cleanFeedbackMessage('').error, /write your message/i);
       assert.match(cleanFeedbackMessage('abcd').error, /at least 5 characters/);
-      // Spaces around a short word do not count towards the minimum.
       assert.strictEqual(cleanFeedbackMessage('   abcd      ').ok, false);
       assert.strictEqual(cleanFeedbackMessage('abcde').ok, true);
       assert.strictEqual(cleanFeedbackMessage('  abcde  ').value, 'abcde');
@@ -496,10 +465,8 @@ async function runFeedbackTests() {
       assert.match(over.error, /too long/i);
       assert.match(over.error, /2000/);
 
-      // Surrounding spaces are trimmed before the length is checked.
       assert.strictEqual(cleanFeedbackMessage(`   ${'a'.repeat(2000)}   `).ok, true);
 
-      // A huge paste is refused quickly and nothing of it is echoed back.
       const started = Date.now();
       const huge = cleanFeedbackMessage('x'.repeat(3 * 1024 * 1024));
       assert.strictEqual(huge.ok, false);
@@ -595,9 +562,6 @@ async function runFeedbackTests() {
       assert.ok(parseFeedbackListQuery({ page: '99999999999999999999' }).page <= 100000);
     });
 
-    // =========================================================================
-    // 2. Models
-    // =========================================================================
     console.log('--- 2. Feedback model and notification types ---');
 
     await test('Model: a minimal message is valid and gets the agreed defaults', () => {
@@ -668,16 +632,12 @@ async function runFeedbackTests() {
         const notif = new Notification({ user: newId(), type, title: 'T', message: 'M', data: { feedbackId: 'x' } });
         assert.strictEqual(notif.validateSync(), undefined, `Notification refused ${type}`);
       }
-      // Types that existed before this feature must keep working.
       for (const type of ['report_created', 'payment_claim', 'topic_alert', 'general']) {
         assert.strictEqual(new Notification({ user: newId(), type, title: 'T', message: 'M' }).validateSync(), undefined);
       }
       assert.ok(new Notification({ user: newId(), type: 'feedback_whatever', title: 'T', message: 'M' }).validateSync()?.errors?.type);
     });
 
-    // =========================================================================
-    // 3. Emails (the service's own offline mode: captured, never sent)
-    // =========================================================================
     console.log('--- 3. Emails ---');
 
     await test('Email to admin: right recipient and subject, user text escaped, paragraphs kept', async () => {
@@ -736,11 +696,9 @@ async function runFeedbackTests() {
 
     await test('Emails never throw: missing input, no address, bad address, odd values', async () => {
       emailService.clearSentEmails();
-      // No arguments at all must still resolve.
       assert.strictEqual((await realNotifyAdminNewFeedback()).success, true);
       assert.strictEqual((await realNotifyAdminNewFeedback({ message: null, userName: 12345, category: {} })).success, true);
 
-      // A typed name with line breaks must not be able to add lines to the subject.
       await realNotifyAdminNewFeedback({ userName: 'Eve\r\nBcc: someone@else.com', message: 'Hello there' });
       const last = emailService.getSentEmails().pop();
       assert.ok(!/[\r\n]/.test(last.subject));
@@ -756,9 +714,6 @@ async function runFeedbackTests() {
       emailService.clearSentEmails();
     });
 
-    // =========================================================================
-    // 4. Signing in
-    // =========================================================================
     console.log('--- 4. Who may use the endpoints ---');
 
     await test('The router loads as an Express router and declares exactly the five endpoints', () => {
@@ -768,7 +723,6 @@ async function runFeedbackTests() {
         .filter((layer) => layer.route)
         .map((layer) => `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}`);
       assert.deepStrictEqual(declared, ['POST /', 'GET /mine', 'GET /admin', 'PUT /admin/:id', 'PUT /:id/seen']);
-      // Authentication is the first thing every request meets.
       assert.strictEqual(feedbackRouter.stack[0].route, undefined);
       assert.strictEqual(feedbackRouter.stack[0].name, 'authenticateToken');
     });
@@ -822,9 +776,6 @@ async function runFeedbackTests() {
       assert.strictEqual(db.feedback.length, before);
     });
 
-    // =========================================================================
-    // 5. Sending a message
-    // =========================================================================
     console.log('--- 5. POST / (send a message) ---');
 
     await test('A student still waiting for approval can send a message (201, agreed response shape)', async () => {
@@ -857,7 +808,6 @@ async function runFeedbackTests() {
       assert.ok(stored, 'the message must be saved');
       assert.strictEqual(String(stored.user), String(people.pendingStudent._id));
 
-      // A rejected applicant, an approved student, an editor and an admin can all write too.
       for (const who of [people.rejectedStudent, people.student, people.otherEditor, people.admin]) {
         const other = await call('POST', '/', { as: who, body: { message: 'I also have something to say.' } });
         assert.strictEqual(other.statusCode, 201, `${who.name} should be able to send feedback`);
@@ -941,7 +891,6 @@ async function runFeedbackTests() {
       assert.strictEqual(res.statusCode, 201);
       const feedbackId = res.body.feedback._id;
 
-      // One stored notification per admin account, and nobody else.
       assert.strictEqual(db.notifications.length, 2);
       assert.deepStrictEqual(
         db.notifications.map((n) => String(n.user)).sort(),
@@ -958,7 +907,6 @@ async function runFeedbackTests() {
         assert.deepStrictEqual(notif.data, { feedbackId, category: 'bug' });
       }
 
-      // Each admin is pushed their own stored notification.
       assert.strictEqual(pushes.toUser.length, 2);
       for (const push of pushes.toUser) {
         assert.strictEqual(push.event, 'notification:new');
@@ -967,21 +915,18 @@ async function runFeedbackTests() {
         assert.ok(db.notifications.includes(push.payload));
       }
 
-      // The same announcement goes to the admin room, exactly once.
       assert.strictEqual(pushes.toAdmins.length, 1);
       assert.strictEqual(pushes.toAdmins[0].event, 'notification:new');
       assert.deepStrictEqual(Object.keys(pushes.toAdmins[0].payload).sort(), ['data', 'message', 'title', 'type']);
       assert.strictEqual(pushes.toAdmins[0].payload.type, 'feedback_new');
       assert.deepStrictEqual(pushes.toAdmins[0].payload.data, { feedbackId, category: 'bug' });
 
-      // Editors who handle reports hear about it too; admins are not told twice through this room.
       assert.strictEqual(pushes.rooms.length, 1);
       assert.strictEqual(pushes.rooms[0].room, 'perm:reports.moderate');
       assert.strictEqual(pushes.rooms[0].except, 'role:admin');
       assert.strictEqual(pushes.rooms[0].event, 'notification:new');
       assert.deepStrictEqual(pushes.rooms[0].payload, pushes.toAdmins[0].payload);
 
-      // One email to the admin, carrying what staff need.
       assert.strictEqual(emails.toAdmin.length, 1);
       assert.strictEqual(emails.toUser.length, 0);
       const mail = emails.toAdmin[0];
@@ -997,7 +942,6 @@ async function runFeedbackTests() {
     await test('Email or notification trouble never fails or delays the saved message', async () => {
       const sendOk = { message: 'This message must survive side-effect trouble.' };
 
-      // Email function throws straight away.
       resetRecorders();
       const original = emailService.notifyAdminNewFeedback;
       let logged = await collectingErrors(async () => {
@@ -1009,7 +953,6 @@ async function runFeedbackTests() {
       });
       assert.ok(logged.some((line) => line.includes('[EmailService] Feedback notification error:') && line.includes('smtp exploded')));
 
-      // Email function fails later.
       logged = await collectingErrors(async () => {
         emailService.notifyAdminNewFeedback = async () => {
           throw new Error('smtp timed out');
@@ -1019,13 +962,11 @@ async function runFeedbackTests() {
       });
       assert.ok(logged.some((line) => line.includes('smtp timed out')));
 
-      // Email that never finishes must not hold the response back.
       emailService.notifyAdminNewFeedback = () => new Promise(() => {});
       const slow = await call('POST', '/', { as: people.rejectedStudent, body: sendOk });
       assert.strictEqual(slow.statusCode, 201);
       emailService.notifyAdminNewFeedback = original;
 
-      // Storing the staff notification fails.
       resetRecorders();
       logged = await collectingErrors(async () => {
         db.failNotificationWrites = new Error('notification store is down');
@@ -1040,7 +981,6 @@ async function runFeedbackTests() {
     await test('With no live server running (the normal state in tests) sending still works', async () => {
       resetRecorders();
       const stubbed = { emitToUser: realtime.emitToUser, emitToAdmins: realtime.emitToAdmins, getIO: realtime.getIO };
-      // Put the real functions back for this one case; they do nothing when no socket server exists.
       const originals = undo
         .slice()
         .reverse()
@@ -1107,7 +1047,6 @@ async function runFeedbackTests() {
       peopleById.set(String(quiet._id), quiet);
 
       for (let i = 1; i <= 5; i += 1) {
-        // Different addresses each time: the count follows the account, not the network.
         const res = await call('POST', '/', { as: chatty, body: { message: `Message number ${i} from me.` }, ip: `10.0.0.${i}` });
         assert.strictEqual(res.statusCode, 201, `message ${i} should be accepted`);
       }
@@ -1121,14 +1060,11 @@ async function runFeedbackTests() {
       const seventh = await call('POST', '/', { as: chatty, body: { message: 'Still too many, same account.' } });
       assert.strictEqual(seventh.statusCode, 429);
 
-      // Same address as the chatty user, different account: not limited.
       const other = await call('POST', '/', { as: quiet, body: { message: 'My first message today.' }, ip: '10.0.0.1' });
       assert.strictEqual(other.statusCode, 201);
 
-      // Reading is never limited by this counter.
       assert.strictEqual((await call('GET', '/mine', { as: chatty })).statusCode, 200);
 
-      // Once the counter is cleared (as it is after 10 minutes) the user can write again.
       await feedbackRouter.feedbackSubmitLimiter.resetKey(`feedback:${String(chatty._id)}`);
       const afterWait = await call('POST', '/', { as: chatty, body: { message: 'Back after waiting.' } });
       assert.strictEqual(afterWait.statusCode, 201);
@@ -1151,9 +1087,6 @@ async function runFeedbackTests() {
       assert.strictEqual(sixth.statusCode, 429);
     });
 
-    // =========================================================================
-    // 6. Reading own messages and marking a reply as read
-    // =========================================================================
     console.log('--- 6. GET /mine and PUT /:id/seen ---');
 
     await test('GET /mine returns only the caller\'s own messages, newest first, at most 50', async () => {
@@ -1187,7 +1120,6 @@ async function runFeedbackTests() {
       assert.strictEqual(capped.body.feedback[0].message, 'Reader message 60');
       assert.strictEqual(capped.body.feedback[49].message, 'Reader message 11');
 
-      // A query string cannot widen the search to other people.
       const sneaky = await call('GET', `/mine?user=${String(stranger._id)}&limit=500`, { as: reader });
       assert.strictEqual(sneaky.body.feedback.length, 50);
       assert.ok(sneaky.body.feedback.every((item) => item.user === String(reader._id)));
@@ -1203,17 +1135,14 @@ async function runFeedbackTests() {
       assert.strictEqual(res.body.feedback._id, String(mine._id));
       assert.strictEqual(res.body.feedback.userSeenReply, true);
       assert.strictEqual(mine.userSeenReply, true);
-      // Nothing else is changed by reading a reply.
       assert.strictEqual(mine.status, 'answered');
       assert.strictEqual(mine.adminReply, 'We fixed it.');
 
-      // The update is tied to the owner and only flips the one flag.
       assert.strictEqual(String(db.lastSeenUpdate.filter._id), String(mine._id));
       assert.strictEqual(String(db.lastSeenUpdate.filter.user), String(people.student._id));
       assert.deepStrictEqual(db.lastSeenUpdate.update, { userSeenReply: true });
       assert.strictEqual(db.lastSeenUpdate.options.returnDocument, 'after');
 
-      // The body is ignored: nobody can change other fields through this endpoint.
       const tamper = await call('PUT', `/${String(mine._id)}/seen`, { as: people.student, body: { status: 'closed', adminReply: 'hacked', userSeenReply: false } });
       assert.strictEqual(tamper.statusCode, 200);
       assert.strictEqual(mine.status, 'answered');
@@ -1231,7 +1160,6 @@ async function runFeedbackTests() {
       assert.deepStrictEqual(notMine.body, { message: 'Feedback not found.' });
       assert.strictEqual(theirs.userSeenReply, false, 'someone else\'s message must not be touched');
 
-      // Staff cannot mark another person's reply as read through the user endpoint either.
       const staffTry = await call('PUT', `/${String(theirs._id)}/seen`, { as: people.reportsEditor });
       assert.strictEqual(staffTry.statusCode, 404);
       assert.strictEqual(theirs.userSeenReply, false);
@@ -1248,9 +1176,6 @@ async function runFeedbackTests() {
       assert.strictEqual(db.lastSeenUpdate, null, 'a malformed id must never reach the database');
     });
 
-    // =========================================================================
-    // 7. Staff queue
-    // =========================================================================
     console.log('--- 7. GET /admin (staff queue) ---');
 
     await test('Staff endpoints: students and editors without the reports permission get 403', async () => {
@@ -1276,7 +1201,6 @@ async function runFeedbackTests() {
       assert.strictEqual(editorUpdate.statusCode, 403);
       assert.strictEqual(editorUpdate.body.code, 'INSUFFICIENT_PERMISSIONS');
 
-      // "/admin/seen" is a staff path, so a student cannot reach anything through it.
       const oddPath = await call('PUT', '/admin/seen', { as: people.student });
       assert.strictEqual(oddPath.statusCode, 403);
 
@@ -1322,7 +1246,6 @@ async function runFeedbackTests() {
       assert.strictEqual(res.body.feedback[19].message, 'Queue item 46');
       assert.deepStrictEqual(res.body.pagination, { page: 1, limit: 20, total: 65, pages: 4 });
       assert.deepStrictEqual(res.body.counts, { new: 30, in_progress: 10, answered: 15, closed: 10 });
-      // Staff see who wrote each message.
       assert.ok(res.body.feedback.every((item) => item.userEmail && item.userName && item.user));
 
       const last = await call('GET', '/admin?page=4', { as: people.admin });
@@ -1380,7 +1303,6 @@ async function runFeedbackTests() {
       assert.deepStrictEqual(none.body.feedback, []);
       assert.deepStrictEqual(none.body.pagination, { page: 1, limit: 20, total: 0, pages: 1 });
 
-      // Unknown or repeated filter values fall back to "everything" instead of failing.
       for (const query of ['status=all', 'status=', 'status=whatever', 'category=praise', 'status=new&status=closed', 'category=bug&category=idea']) {
         const res = await call('GET', `/admin?${query}`, { as: people.admin });
         assert.strictEqual(res.statusCode, 200, query);
@@ -1389,9 +1311,6 @@ async function runFeedbackTests() {
       }
     });
 
-    // =========================================================================
-    // 8. Staff update and reply
-    // =========================================================================
     console.log('--- 8. PUT /admin/:id (status and reply) ---');
 
     await test('PUT /admin/:id: malformed or unknown id gives 404; an empty or invalid request gives 400', async () => {
@@ -1419,7 +1338,6 @@ async function runFeedbackTests() {
         assert.strictEqual(res.statusCode, 400, `accepted status ${JSON.stringify(status)}`);
         assert.strictEqual(res.body.message, 'Status must be new, in_progress, answered or closed.');
       }
-      // A bad status is refused even when a good reply comes with it, and nothing is saved.
       const mixed = await call('PUT', url, { as: people.admin, body: { status: 'finished', reply: 'A fine reply.' }, ip });
       assert.strictEqual(mixed.statusCode, 400);
 
@@ -1455,7 +1373,6 @@ async function runFeedbackTests() {
         assert.strictEqual(res.body.feedback.status, status);
         assert.strictEqual(item.status, status);
       }
-      // An empty reply box sent along with a status means "no reply", not an error.
       const withBlankReply = await call('PUT', url, { as: people.admin, body: { status: 'in_progress', reply: '   ' }, ip });
       assert.strictEqual(withBlankReply.statusCode, 200);
       assert.strictEqual(item.status, 'in_progress');
@@ -1471,7 +1388,6 @@ async function runFeedbackTests() {
 
     await test('Reply only: saves the reply and who wrote it, marks it unread, sets "answered", notifies and emails the user', async () => {
       resetRecorders();
-      // The user had already read an earlier reply; a new reply must show as unread again.
       const item = seed(people.student, {
         category: 'question',
         message: 'How do I export my saved papers?',
@@ -1493,12 +1409,10 @@ async function runFeedbackTests() {
       assert.ok(new Date(feedback.repliedAt).getTime() <= Date.now() + 5);
       assert.strictEqual(feedback.userSeenReply, false);
       assert.strictEqual(feedback.status, 'answered');
-      // The user's own words are never altered by a reply.
       assert.strictEqual(feedback.message, 'How do I export my saved papers?');
       assert.strictEqual(feedback.user, String(people.student._id));
       assert.strictEqual(item.adminReply, feedback.adminReply);
 
-      // Stored notification for that user only.
       assert.strictEqual(db.notifications.length, 1);
       const notif = db.notifications[0];
       assert.strictEqual(String(notif.user), String(people.student._id));
@@ -1510,7 +1424,6 @@ async function runFeedbackTests() {
       assert.deepStrictEqual(notif.data, { feedbackId: String(item._id) });
       assert.strictEqual(notif.read, false);
 
-      // Pushed live to that user only.
       assert.strictEqual(pushes.toUser.length, 1);
       assert.strictEqual(pushes.toUser[0].userId, String(people.student._id));
       assert.strictEqual(pushes.toUser[0].event, 'notification:new');
@@ -1518,7 +1431,6 @@ async function runFeedbackTests() {
       assert.strictEqual(pushes.toAdmins.length, 0);
       assert.strictEqual(pushes.rooms.length, 0);
 
-      // One email to the user, none to the admin.
       assert.strictEqual(emails.toUser.length, 1);
       assert.strictEqual(emails.toAdmin.length, 0);
       assert.deepStrictEqual(emails.toUser[0], {
@@ -1547,19 +1459,16 @@ async function runFeedbackTests() {
       assert.strictEqual(inProgress.body.feedback.status, 'in_progress');
       assert.strictEqual(inProgress.body.feedback.adminReply, 'Looking into it now.');
 
-      // An empty status sent with a reply means "no status chosen", so it becomes answered.
       const blankStatus = await call('PUT', url, { as: people.secondAdmin, body: { reply: 'All done.', status: '' }, ip });
       assert.strictEqual(blankStatus.body.feedback.status, 'answered');
       assert.strictEqual(blankStatus.body.feedback.repliedBy, String(people.secondAdmin._id));
       assert.strictEqual(blankStatus.body.feedback.repliedByName, 'Second Admin');
 
-      // Every reply notifies and emails the user once.
       assert.strictEqual(db.notifications.length, 3);
       assert.strictEqual(emails.toUser.length, 3);
       assert.ok(db.notifications.every((n) => String(n.user) === String(people.otherStudent._id)));
       assert.ok(emails.toUser.every((mail) => mail.userEmail === 'nadia@example.edu'));
 
-      // Staff cannot rewrite the user's message or move it to another account through this endpoint.
       const tamper = await call('PUT', url, {
         as: people.admin,
         body: { status: 'closed', message: 'Rewritten by staff', user: String(people.student._id), userEmail: 'x@y.z', repliedByName: 'Somebody Else' },
@@ -1604,7 +1513,6 @@ async function runFeedbackTests() {
       });
       assert.ok(logged.some((line) => line.includes('smtp timed out')));
 
-      // An email that never finishes must not hold the response back.
       emailService.notifyUserFeedbackReply = () => new Promise(() => {});
       const slow = await call('PUT', url, { as: people.admin, body: { reply: 'Third answer.' }, ip });
       assert.strictEqual(slow.statusCode, 200);
@@ -1634,9 +1542,6 @@ async function runFeedbackTests() {
       assert.strictEqual(emails.toUser.length, 0);
     });
 
-    // =========================================================================
-    // 9. The whole conversation
-    // =========================================================================
     console.log('--- 9. Full round trip ---');
 
     await test('User writes, staff see it and reply, user sees an unread reply and marks it read', async () => {
@@ -1675,14 +1580,12 @@ async function runFeedbackTests() {
       const mineAgain = await call('GET', '/mine', { as: writer });
       assert.strictEqual(mineAgain.body.feedback[0].userSeenReply, true);
 
-      // Unknown paths and methods under the router are simply not handled here.
       assert.deepStrictEqual((await call('DELETE', `/${id}`, { as: writer })).body, { unmatched: true });
       assert.deepStrictEqual((await call('GET', `/${id}`, { as: writer })).body, { unmatched: true });
       assert.deepStrictEqual((await call('DELETE', `/admin/${id}`, { as: people.admin })).body, { unmatched: true });
       assert.strictEqual(db.feedback.length, 1, 'there is no way to delete feedback through the API');
     });
   } finally {
-    // Put every replaced function and environment value back, last change first.
     while (undo.length) undo.pop()();
     emailService.clearSentEmails();
   }

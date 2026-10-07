@@ -1,29 +1,13 @@
 const { createNormalizedRecord } = require('../scholarlyRecord');
 
-/**
- * CORE API v3 Provider Adapter ("search works")
- * Endpoint: https://api.core.ac.uk/v3/search/works
- *
- * CORE collects open-access papers and theses from thousands of university repositories,
- * so it is one of the best outside sources of theses for this site.
- *
- * It works without a key, but the keyless limit is low and is counted per server address,
- * which means every visitor of the site shares it. Set CORE_API_KEY to get a higher limit.
- */
 
 const CORE_SEARCH_URL = 'https://api.core.ac.uk/v3/search/works';
 const REQUEST_TIMEOUT_MS = 6500;
 const MAX_PAGE_SIZE = 30;
 
-// When CORE says "too many requests" and gives no waiting time, stay away this long.
-// The documented keyless limit is counted over 10 seconds, so 10 seconds is enough.
 const DEFAULT_COOLDOWN_SECONDS = 10;
 const MAX_COOLDOWN_SECONDS = 300;
 
-// Shared by every search on this server.
-// rateLimitedUntil: after a 429 we stop calling CORE until this moment, because more
-//   calls would only be refused again and could get the server address blocked.
-// excludeHintRejected: see fetchCorePage() below.
 let rateLimitedUntil = 0;
 let excludeHintRejected = false;
 
@@ -48,9 +32,6 @@ const NAMED_ENTITIES = {
   rdquo: '”',
 };
 
-// Turns "&amp;", "&#8211;" and "&#x27;" back into the real characters.
-// It is done in one pass on purpose: decoding "&amp;" first and "&lt;" afterwards would
-// wrongly turn the text "&amp;lt;" into "<".
 function decodeHtmlEntities(str) {
   if (!str || typeof str !== 'string') return '';
   return str.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, body) => {
@@ -70,10 +51,6 @@ function cleanText(value) {
   return decodeHtmlEntities(value).replace(/\s+/g, ' ').trim();
 }
 
-// CORE has its own query language where ":" picks a field, quotes and brackets group
-// words, and a leading "-" excludes a word. A visitor's text such as
-// "BERT: pre-training (2019)" would then be read as a broken command and fail.
-// Keeping only letters and digits makes every search a plain word search.
 function sanitizeQuery(query) {
   const cleaned = String(query || '')
     .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
@@ -90,17 +67,12 @@ function looksLikePdf(url) {
   return /\.pdf(\?|$|#)/i.test(url) || url.includes('/pdf/');
 }
 
-// Files that CORE itself hosts live under core.ac.uk/download/... and are always the PDF.
 function isCoreHostedPdf(url) {
   return /^https?:\/\/(www\.)?core\.ac\.uk\/download\//i.test(url);
 }
 
 const ORGANISATION_WORDS = /\b(universit|institut|department|organi[sz]ation|college|laborator|cent(er|re)\b|group|consortium|committee|society|association|team|project|ministry|council)/i;
 
-// Repositories usually store names as "Surname, Given". The rest of the site shows
-// "Given Surname", and duplicate detection compares the LAST word of the first author's
-// name, so an unturned name would stop a CORE record from merging with the same paper
-// from another source. Names of organisations ("University of X, Dept of Y") are left alone.
 function normalizeAuthorName(rawName) {
   const name = cleanText(rawName);
   if (!name) return '';
@@ -126,7 +98,6 @@ function extractYear(item) {
   const fromField = parseInt(item.yearPublished, 10);
   if (Number.isInteger(fromField) && fromField >= 1400 && fromField <= maxYear) return fromField;
 
-  // Some works have no yearPublished but do have a full date.
   for (const raw of [item.publishedDate, item.acceptedDate, item.depositedDate]) {
     const match = typeof raw === 'string' ? raw.match(/^(\d{4})-\d{2}-\d{2}/) : null;
     if (match) {
@@ -148,10 +119,6 @@ function extractDoi(item) {
   return null;
 }
 
-// CORE labels each document itself, mostly as "research", "thesis" or "slides".
-// A "research" document is only called a journal article when CORE also names the
-// journal; otherwise we honestly do not know whether it is an article, a report or a
-// working paper, so it stays "unknown" instead of being guessed.
 function mapPublicationType(item, venue) {
   const raw = Array.isArray(item.documentType) ? item.documentType.join(' ') : String(item.documentType || '');
   const type = raw.toLowerCase();
@@ -184,7 +151,6 @@ function mapCoreWork(item, filters) {
   const repositoryName =
     Array.isArray(item.dataProviders) && item.dataProviders[0] ? cleanText(item.dataProviders[0].name) || null : null;
 
-  // --- Where the full text can be read ---
   let directPdfUrl = null;
   const fullTextLocations = [];
   const seenUrls = new Set();
@@ -198,8 +164,6 @@ function mapCoreWork(item, filters) {
   const addCandidate = (url, landingSource) => {
     if (!isHttpUrl(url)) return;
     const clean = url.trim();
-    // Only call it a direct PDF when the address proves it. Some repositories put a
-    // normal web page in downloadUrl, and the site must not promise a PDF it cannot open.
     if (isCoreHostedPdf(clean) || looksLikePdf(clean)) {
       if (!directPdfUrl) directPdfUrl = clean;
       addLocation(clean, 'pdf', isCoreHostedPdf(clean) ? 'CORE Full Text PDF' : landingSource, true);
@@ -217,7 +181,6 @@ function mapCoreWork(item, filters) {
   addCandidate(item.downloadUrl, repositoryName || 'CORE Repository Copy');
   addCandidate(linkOfType('download'), repositoryName || 'CORE Repository Copy');
 
-  // sourceFulltextUrls is normally a list, but a single address has been seen as plain text.
   const sourceUrls = Array.isArray(item.sourceFulltextUrls)
     ? item.sourceFulltextUrls
     : typeof item.sourceFulltextUrls === 'string'
@@ -227,10 +190,6 @@ function mapCoreWork(item, filters) {
 
   if (filters.hasPdf && !directPdfUrl) return null;
 
-  // CORE also lists works for which it only has the description and no copy of the text.
-  // A work counts as open access only when CORE points at a copy that can be read (a
-  // download, a repository file or its own reader). Everything collected so far is such a
-  // copy; the DOI and CORE record pages added below are not.
   const readerUrl = linkOfType('reader');
   const hasReadableCopy = fullTextLocations.length > 0 || Boolean(readerUrl);
 
@@ -241,17 +200,13 @@ function mapCoreWork(item, filters) {
   const coreWorkUrl = linkOfType('display') || (coreId ? `https://core.ac.uk/works/${encodeURIComponent(coreId)}` : null);
   if (coreWorkUrl) addLocation(coreWorkUrl, 'landing', 'CORE Record Page', false);
 
-  // --- Year ---
   const publishedYear = extractYear(item);
-  // CORE is not asked to filter by year (see searchCore), so it is done here. A record
-  // with no year cannot be shown to someone who asked for a year range.
   if (filters.yearMin || filters.yearMax) {
     if (!publishedYear) return null;
     if (filters.yearMin && publishedYear < parseInt(filters.yearMin, 10)) return null;
     if (filters.yearMax && publishedYear > parseInt(filters.yearMax, 10)) return null;
   }
 
-  // --- Venue, type, publisher ---
   const venue =
     Array.isArray(item.journals) && item.journals.length > 0
       ? cleanText((item.journals.find((j) => j && j.title) || {}).title) || null
@@ -261,11 +216,7 @@ function mapCoreWork(item, filters) {
   const wantedType = wantedPublicationType(filters);
   if (wantedType && pubType !== wantedType) return null;
 
-  // CORE often wraps the publisher in stray quotes: "'Elsevier BV'".
   let publisher = cleanText(item.publisher).replace(/^['"]+|['"]+$/g, '').trim() || null;
-  // A thesis is published by the university repository that holds it, so the repository
-  // name is a fair publisher for a thesis. For an article it would be wrong (the journal's
-  // publisher is someone else), so there the field stays empty.
   if (!publisher && pubType === 'thesis' && repositoryName) publisher = repositoryName;
 
   const publishedDateMatch = typeof item.publishedDate === 'string' ? item.publishedDate.match(/^(\d{4})-\d{2}-\d{2}/) : null;
@@ -296,9 +247,6 @@ function mapCoreWork(item, filters) {
     catalogId: coreId ? `CORE:${coreId}` : doi ? `DOI:${doi}` : null,
   });
 
-  // The shared record builder has no language field and drops anything it does not know.
-  // CORE is the only source that tells us the language, so it is added afterwards
-  // (two-letter code such as "en", or null when CORE does not say).
   const languageCode = item.language && typeof item.language === 'object' ? cleanText(item.language.code).toLowerCase() : '';
   record.language = languageCode || null;
 
@@ -311,8 +259,6 @@ function emptyResult(error) {
 
 function buildResult({ items, totalCount, offset, page, filters }) {
   const records = items.map((item) => mapCoreWork(item, filters)).filter(Boolean);
-  // An empty page means the end, whatever the reported total says. Without this check a
-  // wrong total would make the search ask for the same empty page again and again.
   const hasMore = items.length > 0 && offset + items.length < totalCount;
   return {
     records,
@@ -325,8 +271,6 @@ function buildResult({ items, totalCount, offset, page, filters }) {
   };
 }
 
-// The offline fixture lives with the tests. If the tests folder is not deployed, offline
-// mode simply returns nothing, the same as the other providers without offline data.
 function loadOfflineFixture() {
   try {
     return require('../../tests/fixtures/coreApiFixtures').coreSearchWorksResponse;
@@ -335,8 +279,6 @@ function loadOfflineFixture() {
   }
 }
 
-// Reads how long the server asked us to wait. The value can be a number of seconds or
-// a date, and CORE may send it under its own header name.
 function readRetryAfterSeconds(res) {
   const get = (name) => (res.headers && typeof res.headers.get === 'function' ? res.headers.get(name) : null);
   const raw = get('retry-after') || get('x-ratelimit-retry-after');
@@ -357,16 +299,6 @@ function buildUrl({ q, pageSize, offset, withExcludeHint }) {
   return `${CORE_SEARCH_URL}?${params.toString()}`;
 }
 
-// Sends the request to CORE.
-//
-// CORE returns the whole text of every paper in the "fullText" field. A page of theses can
-// be many megabytes, which is slow and easily runs past the time limit, and this site does
-// not use that text. "exclude=fullText" asks CORE to leave it out.
-//
-// That parameter could not be checked against the live service when this was written. So
-// if CORE refuses a request that carries it, the same request is sent once more without
-// it, and if that works the parameter is not sent again until the server restarts. The
-// search keeps working either way.
 async function fetchCorePage({ q, pageSize, offset, headers, signal }) {
   const withHint = !excludeHintRejected;
   let res = await fetch(buildUrl({ q, pageSize, offset, withExcludeHint: withHint }), { signal, headers });
@@ -386,8 +318,6 @@ async function searchCore({
   limit = 20,
   offset: explicitOffset = null,
   filters = {},
-  // Accepted so every provider is called the same way. CORE is always asked for its
-  // default "most relevant first" order; the search manager sorts the merged list itself.
   sort = 'relevance',
 }) {
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -411,10 +341,6 @@ async function searchCore({
     return emptyResult('CORE rate limit reached');
   }
 
-  // Year, publication type and "has PDF" are applied to the returned records in
-  // mapCoreWork() rather than sent to CORE. CORE can filter inside its query language,
-  // but the exact wording could not be checked against the live service, and a wrong
-  // filter would silently return nothing. Filtering here is always correct.
   const q = sanitizeQuery(query);
 
   const headers = {
@@ -427,15 +353,12 @@ async function searchCore({
 
   async function executeFetch(isRetry = false) {
     try {
-      // One time limit for the whole attempt, including the possible second request
-      // inside fetchCorePage, so a slow CORE cannot hold the search up twice as long.
       const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
       const res = await fetchCorePage({ q, pageSize, offset, headers, signal });
 
       if (res.status === 429) {
         const retryAfterSec = readRetryAfterSeconds(res);
 
-        // At most ONE safe retry if the wait is very small (<= 2 seconds)
         if (!isRetry && retryAfterSec > 0 && retryAfterSec <= 2) {
           await new Promise((r) => setTimeout(r, retryAfterSec * 1000));
           return executeFetch(true);

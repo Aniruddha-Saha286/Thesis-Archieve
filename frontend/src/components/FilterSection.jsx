@@ -1,13 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-/**
- * Collapsible group used in the Discover sidebar so related filters sit together
- * and long lists do not push everything else off-screen.
- *
- * - `activeCount` shows a small badge so people can see a collapsed group is filtering.
- * - `onClear` (optional) renders a "Clear" link that works without expanding the group.
- */
 export default function FilterSection({
   title,
   icon: Icon,

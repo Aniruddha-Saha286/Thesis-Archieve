@@ -9,7 +9,6 @@ const getJwtSecret = () => {
   return secret;
 };
 
-// Strict Authentication Middleware
 const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -46,7 +45,6 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Optional Authentication Middleware for Public Endpoints
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -70,7 +68,6 @@ const optionalAuth = async (req, res, next) => {
   next();
 };
 
-// Middleware: Student must be approved by admin (or be an admin)
 const requireApproved = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required.' });
@@ -98,7 +95,6 @@ const requireApproved = (req, res, next) => {
   });
 };
 
-// Middleware: Admin only
 const requireAdmin = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required.' });

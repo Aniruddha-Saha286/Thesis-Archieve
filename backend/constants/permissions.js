@@ -1,7 +1,3 @@
-/**
- * Centralized RBAC Permission Catalog
- * Defines granular capability constants for administrative and moderation access.
- */
 
 const PERMISSIONS = Object.freeze({
   STUDENTS_VIEW: 'students.view',

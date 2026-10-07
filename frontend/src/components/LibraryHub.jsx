@@ -31,7 +31,6 @@ export default function LibraryHub({
 }) {
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 space-y-8 animate-fadeIn">
-      {/* Hub Hero Banner */}
       <div className="bg-white dark:bg-[#151413] border border-[#E2DFD8] dark:border-[#2A2824] rounded-sm p-6 md:p-8 shadow-xs transition-colors">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">

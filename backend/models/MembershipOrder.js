@@ -31,7 +31,7 @@ const membershipOrderSchema = new mongoose.Schema({
   pricePaisa: {
     type: Number,
     required: true,
-    default: 50000, // ৳500 stored in integer minor units (paisa)
+    default: 50000,
   },
   currency: {
     type: String,

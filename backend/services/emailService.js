@@ -2,16 +2,9 @@ const nodemailer = require('nodemailer');
 const { getValidatedPrimaryAdminEmail } = require('./googleIdentityService');
 const { formatDhakaDateTime } = require('../utils/dhakaDate');
 
-/**
- * In-memory buffer for captured emails during testing, offline mode,
- * or when SMTP is unconfigured.
- */
 let sentEmails = [];
 let cachedTransporter = null;
 
-/**
- * Escapes user-supplied content to prevent HTML injection in emails.
- */
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -22,16 +15,10 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-/**
- * Validates basic email syntax.
- */
 function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-/**
- * Determines whether SMTP credentials are fully configured.
- */
 function isSmtpConfigured() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
@@ -45,9 +32,6 @@ function isSmtpConfigured() {
   );
 }
 
-/**
- * Evaluates whether email dispatch should operate in mock/offline mode.
- */
 function isMockMode() {
   return (
     process.env.NODE_ENV === 'test' ||
@@ -56,10 +40,6 @@ function isMockMode() {
   );
 }
 
-/**
- * Resolves the primary administrator email address for receiving administrative alerts.
- * Priority: ADMIN_NOTIFICATION_EMAIL -> PRIMARY_ADMIN_GOOGLE_EMAIL -> fallback.
- */
 function getAdminNotificationEmail() {
   const custom = process.env.ADMIN_NOTIFICATION_EMAIL;
   if (custom && isValidEmail(custom)) {
@@ -72,9 +52,6 @@ function getAdminNotificationEmail() {
   return 'sahaaniruddha2004@gmail.com';
 }
 
-/**
- * Returns or initializes the nodemailer transport instance.
- */
 function getTransporter() {
   if (!isSmtpConfigured() || isMockMode()) {
     return null;
@@ -102,10 +79,6 @@ function getTransporter() {
   return cachedTransporter;
 }
 
-/**
- * Core dispatch function.
- * Guaranteed to be non-blocking and fail-safe: catches all exceptions and never rejects unhandled.
- */
 async function sendEmail({ to, subject, html, text }) {
   try {
     if (!to || !isValidEmail(to)) {
@@ -128,7 +101,6 @@ async function sendEmail({ to, subject, html, text }) {
       text,
     };
 
-    // Deterministic Mock / Offline Capture
     if (isMockMode()) {
       sentEmails.push({
         ...mailOptions,
@@ -162,14 +134,10 @@ async function sendEmail({ to, subject, html, text }) {
     return { success: true, mocked: false, messageId: info.messageId };
   } catch (err) {
     console.error(`[EmailService] Delivery error to ${to}:`, err.message);
-    // CRITICAL: Return fail-safe structured result. Never bubble up unhandled error.
     return { success: false, error: err.message };
   }
 }
 
-/**
- * Standard Email Shell Generator for clean academic styling.
- */
 function buildHtmlTemplate({ badgeLabel, badgeBg = '#FEF3C7', badgeColor = '#92400E', title, introText, items = [], footerNote, actionButton }) {
   const rows = items
     .map(
@@ -263,13 +231,7 @@ function buildHtmlTemplate({ badgeLabel, badgeBg = '#FEF3C7', badgeColor = '#924
   `.trim();
 }
 
-// =========================================================================
-// 1. ADMIN NOTIFICATIONS
-// =========================================================================
 
-/**
- * 1. Alerts Admin when a student submits an identity verification document / ID card.
- */
 async function notifyAdminNewVerification({ studentName, studentEmail, university, degreeProgram, studentId, documentRef }) {
   const adminEmail = getAdminNotificationEmail();
   const subject = `[Action Required] Student Verification Request — ${studentName || studentEmail}`;
@@ -311,9 +273,6 @@ Log in to the Admin Portal to review and approve.
   return sendEmail({ to: adminEmail, subject, html, text });
 }
 
-/**
- * 2. Alerts Admin when a student submits or resubmits a bKash payment request.
- */
 async function notifyAdminNewPayment({ senderNumber, trxId, amount, planLabel, userEmail, userName, orderRef, isResubmission = false }) {
   const adminEmail = getAdminNotificationEmail();
   const subjectPrefix = isResubmission ? '[bKash Resubmission]' : '[bKash Payment]';
@@ -357,9 +316,6 @@ Reconcile against bKash merchant statement and approve in the Admin Merchant Des
   return sendEmail({ to: adminEmail, subject, html, text });
 }
 
-/**
- * 3. Alerts Admin when a user raises a complaint / report on a thesis or paper.
- */
 async function notifyAdminNewReport({ reportId, recordId, issueType, description, reportedBy, title }) {
   const adminEmail = getAdminNotificationEmail();
   const subject = `[Grievance / Report] Publication Issue Reported — ${title ? title.slice(0, 50) : 'Depository Record'}`;
@@ -400,16 +356,10 @@ Review and resolve in Admin Portal -> Grievance & Reports Desk.
   return sendEmail({ to: adminEmail, subject, html, text });
 }
 
-/**
- * Alerts Admin when a signed-in user sends a message to the team (bug, idea, complaint, question).
- * Fail-safe: any problem while building or sending is logged and returned, never thrown,
- * so the user's message is still saved and answered normally.
- */
 async function notifyAdminNewFeedback({ feedbackId, category, categoryLabel, message, pageContext, userName, userEmail } = {}) {
   try {
     const adminEmail = getAdminNotificationEmail();
     const label = categoryLabel || category || 'Feedback';
-    // A name is typed by the user, so keep it on one line and short before it goes in the subject.
     const sender = String(userName || userEmail || 'A user').replace(/\s+/g, ' ').trim().slice(0, 60);
     const subject = `[Feedback] ${label} — from ${sender}`;
     const body = String(message || '').trim() || 'No message text.';
@@ -424,7 +374,6 @@ async function notifyAdminNewFeedback({ feedbackId, category, categoryLabel, mes
         { label: 'From', value: userName || 'Not specified' },
         { label: 'Email', value: userEmail || 'Not specified' },
         { label: 'About', value: label },
-        // Escaped first, then line breaks restored, so the message keeps its paragraphs safely.
         { label: 'Message', value: escapeHtml(body).replace(/\n/g, '<br>'), isHtml: true },
         { label: 'Sent From Page', value: pageContext || 'Not specified' },
         { label: 'Feedback ID', value: String(feedbackId || 'N/A') },
@@ -457,13 +406,7 @@ Reply from Admin Portal -> Feedback queue.
   }
 }
 
-// =========================================================================
-// 2. USER NOTIFICATIONS (Confirmations & Approvals)
-// =========================================================================
 
-/**
- * Alerts User when their student identity verification request has been submitted.
- */
 async function notifyUserVerificationRequested({ userEmail, userName, university, degreeProgram, studentId }) {
   const subject = `Verification Request Received — The Thesis Archive`;
 
@@ -498,9 +441,6 @@ You will receive another email notification as soon as your student researcher s
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * Alerts User when their bKash payment claim has been submitted.
- */
 async function notifyUserPaymentSubmitted({ userEmail, userName, orderRef, trxId, amount, planLabel, isResubmission = false }) {
   const subjectPrefix = isResubmission ? 'Payment Resubmission Received' : 'Payment Claim Received';
   const subject = `${subjectPrefix} — ৳${amount} (${planLabel})`;
@@ -541,9 +481,6 @@ You will receive an activation confirmation email as soon as your payment is app
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * Alerts User when their grievance report is submitted.
- */
 async function notifyUserReportSubmitted({ userEmail, userName, title, issueType, reportId }) {
   if (!userEmail || userEmail === 'anonymous' || !isValidEmail(userEmail)) {
     return { success: false, reason: 'ANONYMOUS_REPORTER' };
@@ -583,9 +520,6 @@ Our moderation team will review and resolve this publication issue.
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * 4. Alerts User when Admin approves their bKash payment.
- */
 async function notifyUserPaymentApproved({ userEmail, userName, planLabel, expiresAt, trxId, amount }) {
   const subject = `Payment Verified — Your ${planLabel || 'Research Membership'} is Now Active!`;
 
@@ -622,9 +556,6 @@ Thank you for supporting The Thesis Archive!
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * 5. Alerts User when Admin manually grants or customizes a membership.
- */
 async function notifyUserMembershipGranted({ userEmail, userName, planLabel, expiresAt, grantReason, grantType }) {
   const isTest = grantType === 'test' || /test/i.test(grantReason || '');
   const subject = `Research Access Granted — ${planLabel || 'Academic Access'}`;
@@ -661,9 +592,6 @@ Enjoy your research sessions on The Thesis Archive!
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * 6. Alerts User when Admin approves their student identity verification.
- */
 async function notifyUserVerificationApproved({ userEmail, userName, university, degreeProgram }) {
   const subject = `Student Researcher Identity Verified — The Thesis Archive`;
 
@@ -700,9 +628,6 @@ You can now submit thesis works and access student depository features.
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * 7. Alerts User when Admin appoints them to the Editorial Board.
- */
 async function notifyUserEditorAppointed({ userEmail, userName, permissions = [], appointedBy }) {
   const subject = `Editorial Board Appointment — The Thesis Archive`;
   const formattedPerms = permissions.length > 0 ? permissions.join(', ') : 'Standard Editorial Capabilities';
@@ -740,9 +665,6 @@ Sign in with your Google account to access staff tools.
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * 8. Alerts User when Admin updates their editorial permissions.
- */
 async function notifyUserEditorPermissionsUpdated({ userEmail, userName, permissions = [], updatedBy }) {
   const subject = `Editorial Permissions Updated — The Thesis Archive`;
   const formattedPerms = permissions.length > 0 ? permissions.join(', ') : 'No granular permissions assigned';
@@ -777,11 +699,6 @@ Your editorial capabilities on The Thesis Archive have been updated:
   return sendEmail({ to: userEmail, subject, html, text });
 }
 
-/**
- * Alerts User when the team replies to a message they sent from the feedback form.
- * Fail-safe: any problem while building or sending is logged and returned, never thrown,
- * so the reply is still saved and shown in the app.
- */
 async function notifyUserFeedbackReply({ userEmail, userName, categoryLabel, originalMessage, reply } = {}) {
   try {
     if (!userEmail || !isValidEmail(userEmail)) {
@@ -799,7 +716,6 @@ async function notifyUserFeedbackReply({ userEmail, userName, categoryLabel, ori
       introText: `Hello <strong>${escapeHtml(userName || 'Scholar')}</strong>,<br><br>Thank you for writing to us. Our team has read your message and replied below.`,
       items: [
         { label: 'About', value: categoryLabel || 'Feedback' },
-        // Escaped first, then line breaks restored, so both texts keep their paragraphs safely.
         { label: 'Your Message', value: escapeHtml(original || 'Not available').replace(/\n/g, '<br>'), isHtml: true },
         { label: 'Our Reply', value: escapeHtml(replyText).replace(/\n/g, '<br>'), isHtml: true },
         { label: 'Replied At', value: formatDhakaDateTime(new Date()) },
@@ -831,9 +747,6 @@ To continue the conversation, sign in to The Thesis Archive and send us a new me
   }
 }
 
-// =========================================================================
-// TEST & AUDIT HELPERS
-// =========================================================================
 
 function getSentEmails() {
   return [...sentEmails];

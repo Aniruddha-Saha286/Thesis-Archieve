@@ -1,22 +1,9 @@
-/**
- * Safe Migration: Backfill Thesis Country Codes
- * 
- * Inspects approved and pending theses missing an explicit ISO-3166 alpha-2 countryCode.
- * Uses curated institution registry and explicit university names to determine country codes safely.
- * Never defaults to 'BD' blindly.
- * 
- * Usage:
- *   node backend/migrations/backfillThesisCountryCodes.js [--dry-run]
- *   node backend/migrations/backfillThesisCountryCodes.js --apply
- */
 
 const mongoose = require('mongoose');
 const Thesis = require('../models/Thesis');
 const { CURATED_INSTITUTIONS } = require('../services/institutionService');
 
-// Extended mapping of university keywords to ISO-3166 alpha-2 country codes
 const KNOWN_INSTITUTION_COUNTRY_MAP = [
-  // Bangladesh
   { pattern: /bangladesh\s+university\s+of\s+engineering|buet/i, code: 'BD', name: 'BUET' },
   { pattern: /university\s+of\s+dhaka|\bdhaka\s+university\b|\bdu\b/i, code: 'BD', name: 'University of Dhaka' },
   { pattern: /jahangirnagar\s+university|\bju\b/i, code: 'BD', name: 'Jahangirnagar University' },
@@ -33,7 +20,6 @@ const KNOWN_INSTITUTION_COUNTRY_MAP = [
   { pattern: /united\s+international\s+university|\buiu\b/i, code: 'BD', name: 'UIU' },
   { pattern: /american\s+international\s+university[- ]bangladesh|\baiub\b/i, code: 'BD', name: 'AIUB' },
   
-  // United States
   { pattern: /massachusetts\s+institute\s+of\s+technology|\bmit\b/i, code: 'US', name: 'MIT' },
   { pattern: /harvard\s+university/i, code: 'US', name: 'Harvard University' },
   { pattern: /stanford\s+university/i, code: 'US', name: 'Stanford University' },
@@ -43,7 +29,6 @@ const KNOWN_INSTITUTION_COUNTRY_MAP = [
   { pattern: /cornell\s+university/i, code: 'US', name: 'Cornell University' },
   { pattern: /princeton\s+university/i, code: 'US', name: 'Princeton University' },
 
-  // United Kingdom
   { pattern: /university\s+of\s+oxford|\boxford\b/i, code: 'GB', name: 'University of Oxford' },
   { pattern: /university\s+of\s+cambridge|\bcambridge\b/i, code: 'GB', name: 'University of Cambridge' },
   { pattern: /imperial\s+college\s+london/i, code: 'GB', name: 'Imperial College London' },
@@ -57,7 +42,6 @@ function resolveCountryCodeForThesis(doc) {
   const rawAffil = (doc.authorships?.[0]?.rawAffiliation || '').trim();
   const candidates = [uni, awardName, rawAffil].filter(Boolean);
 
-  // Check curated institutions first
   for (const text of candidates) {
     for (const cur of CURATED_INSTITUTIONS) {
       if (text.toLowerCase().includes(cur.name.toLowerCase())) {
@@ -73,7 +57,6 @@ function resolveCountryCodeForThesis(doc) {
     }
   }
 
-  // Check known institution country map
   for (const text of candidates) {
     for (const item of KNOWN_INSTITUTION_COUNTRY_MAP) {
       if (item.pattern.test(text)) {
@@ -82,7 +65,6 @@ function resolveCountryCodeForThesis(doc) {
     }
   }
 
-  // Check existing authorships
   if (Array.isArray(doc.authorships)) {
     for (const auth of doc.authorships) {
       for (const inst of auth.institutions || []) {

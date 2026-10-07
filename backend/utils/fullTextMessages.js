@@ -1,5 +1,3 @@
-// Plain messages for each reason the full-text reader can give for not returning text.
-// Shown to students, so no technical words.
 const FULL_TEXT_MESSAGES = {
   no_pdf: 'No free PDF is known for this paper, so only the abstract can be used.',
   reader_not_installed: 'Reading PDFs is not switched on for this site yet.',
@@ -29,7 +27,6 @@ function fullTextMessage(reason) {
   return 'The full text could not be read for this paper.';
 }
 
-// Reasons that are worth trying again shortly (the page offers a "Try again" button for these)
 function isRetryableFullTextReason(reason) {
   const key = String(reason || '');
   return key === 'timeout' || key === 'network' || key === 'busy' || key === 'http_429' || /^http_5\d\d$/.test(key);

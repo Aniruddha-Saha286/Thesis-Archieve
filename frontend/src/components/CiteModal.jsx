@@ -5,7 +5,7 @@ import { Copy, Check, Download, Quote, FileText, AlertCircle, RefreshCw } from '
 
 export default function CiteModal({ thesis, onClose }) {
   useEscapeToClose(onClose, Boolean(thesis));
-  const [activeTab, setActiveTab] = useState('bibtex'); // 'bibtex', 'ris', 'apa'
+  const [activeTab, setActiveTab] = useState('bibtex');
   const [copied, setCopied] = useState(false);
   const [citations, setCitations] = useState({ bibtex: '', ris: '', apa: '' });
   const [missingFields, setMissingFields] = useState([]);

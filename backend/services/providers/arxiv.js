@@ -12,7 +12,6 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
       return { records: [], totalCount: 0, rawCount: 0, hasMore: false, error: null };
     }
 
-    // If user specifically requests only theses, arXiv is a preprint archive and has no doctoral theses
     if (filters.publicationType && filters.publicationType === 'thesis') {
       return { records: [], totalCount: 0, rawCount: 0, hasMore: false, error: null };
     }
@@ -20,7 +19,6 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
     const offset = typeof explicitOffset === 'number' ? explicitOffset : (page - 1) * limit;
     const cleanQ = (query || 'research').trim();
 
-    // Construct search query
     const words = cleanQ.split(/\s+/).filter(Boolean);
     const searchQuery = words.length > 1
       ? words.map((w) => `all:${encodeURIComponent(w)}`).join('+AND+')
@@ -57,7 +55,6 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
       const rawId = (entry.id || '').split('/abs/').pop() || '';
       const cleanArxivId = rawId.replace(/v\d+$/, '').trim();
 
-      // Authors
       let authors = [];
       if (entry.author) {
         const authArray = Array.isArray(entry.author) ? entry.author : [entry.author];
@@ -67,7 +64,6 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
         }));
       }
 
-      // Check for direct PDF link in Atom feed
       let pdfUrl = `https://arxiv.org/pdf/${cleanArxivId}.pdf`;
       if (entry.link) {
         const links = Array.isArray(entry.link) ? entry.link : [entry.link];
@@ -83,11 +79,9 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
       const pubDate = entry.published ? new Date(entry.published).toISOString().split('T')[0] : null;
       const pubYear = entry.published ? new Date(entry.published).getFullYear() : null;
 
-      // Filter by year if requested
       if (filters.yearMin && pubYear && pubYear < parseInt(filters.yearMin)) return null;
       if (filters.yearMax && pubYear && pubYear > parseInt(filters.yearMax)) return null;
 
-      // Extract arXiv primary category code (e.g. cs.CR, cs.AI, stat.ML)
       const rawCatTerm = entry['arxiv:primary_category']?.['@_term'] ||
         (Array.isArray(entry.category) ? entry.category[0]?.['@_term'] : entry.category?.['@_term']) || null;
 
@@ -99,7 +93,7 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
         abstract: entry.summary,
         category: rawCatTerm,
         publicationType: journalRef ? 'journal-article' : 'preprint',
-        isPeerReviewed: Boolean(journalRef), // arXiv preprints are not peer reviewed unless published in journal
+        isPeerReviewed: Boolean(journalRef),
         publicationDate: pubDate,
         publishedYear: pubYear,
         venue: journalRef ? String(journalRef) : 'arXiv Preprints',

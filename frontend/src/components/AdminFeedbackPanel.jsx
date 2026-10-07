@@ -30,8 +30,6 @@ const FILTERS = [
   ['', 'All'],
 ];
 
-// Staff side of "Message the team": read what users wrote, reply, and close.
-// `onCountsChange` lets the console show the number of new messages on its tab.
 export default function AdminFeedbackPanel({ onCountsChange }) {
   const { showNotice, notificationTick } = useSocket();
   const [status, setStatus] = useState('open');

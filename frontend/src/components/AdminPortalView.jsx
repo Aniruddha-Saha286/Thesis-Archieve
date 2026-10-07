@@ -42,7 +42,6 @@ import DocumentViewerModal from './DocumentViewerModal';
 import ManualGrantModal from './ManualGrantModal';
 import EditorManagementModal from './EditorManagementModal';
 
-// Students shown per page in the roster
 const ROSTER_PAGE_SIZE = 25;
 
 export default function AdminPortalView({ onSwitchToStudentPreview }) {
@@ -51,7 +50,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const isDark = resolvedTheme === 'dark';
   const { socket, showNotice } = useSocket();
 
-  // Permission helpers
   const canViewStudents = hasPermission('students.view');
   const canVerifyStudents = hasPermission('students.verify');
   const canSuspendStudents = hasPermission('students.suspend');
@@ -61,7 +59,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   const canModeratePublications = hasPermission('publications.moderate');
   const canModerateReports = hasPermission('reports.moderate');
 
-  // Active admin tab: 'pending' | 'roster' | 'publications' | 'payments' | 'reports' | 'staff' | 'system'
   const permittedTabs = useMemo(() => {
     const tabs = [];
     if (canViewStudents) tabs.push('pending', 'roster');
@@ -82,16 +79,14 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   }, [permittedTabs, activeTab]);
 
-  // Student management state
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [searchStudent, setSearchStudent] = useState('');
-  const [rosterFilter, setRosterFilter] = useState('all'); // 'all', 'approved', 'pending', 'banned'
+  const [rosterFilter, setRosterFilter] = useState('all');
   const [actionLoading, setActionLoading] = useState(null);
   const [rosterPage, setRosterPage] = useState(1);
   const [openRowMenuId, setOpenRowMenuId] = useState(null);
 
-  // A row menu closes on Escape and on a click anywhere outside it
   useEscapeToClose(() => setOpenRowMenuId(null), Boolean(openRowMenuId));
   useEffect(() => {
     if (!openRowMenuId) return undefined;
@@ -102,62 +97,50 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     return () => document.removeEventListener('mousedown', close);
   }, [openRowMenuId]);
 
-  // Publications state (Depository Moderation)
   const [theses, setTheses] = useState([]);
   const [thesesTotal, setThesesTotal] = useState(0);
   const [pendingThesesCount, setPendingThesesCount] = useState(0);
   const [thesesPage, setThesesPage] = useState(1);
   const [loadingTheses, setLoadingTheses] = useState(false);
   const [searchTheses, setSearchTheses] = useState('');
-  const [publicationStatusFilter, setPublicationStatusFilter] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+  const [publicationStatusFilter, setPublicationStatusFilter] = useState('all');
   const [isProposeOpen, setIsProposeOpen] = useState(false);
   const [selectedThesisDetail, setSelectedThesisDetail] = useState(null);
   const [rejectingThesis, setRejectingThesis] = useState(null);
   const [thesisRejectionReason, setThesisRejectionReason] = useState('');
 
-  // Protected Document Viewer Modal
   const [inspectingDocStudent, setInspectingDocStudent] = useState(null);
 
-  // Manual Grant Modal
   const [manualGrantTarget, setManualGrantTarget] = useState(null);
 
-  // Staff (Team & Access) State
   const [staffList, setStaffList] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [editingEditor, setEditingEditor] = useState(null);
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
 
-  // bKash Payments State
   const [payments, setPayments] = useState([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [searchPayment, setSearchPayment] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+  const [paymentFilter, setPaymentFilter] = useState('all');
   const [reviewingPayment, setReviewingPayment] = useState(null);
   const [statementVerified, setStatementVerified] = useState(false);
   const [adminReviewNotes, setAdminReviewNotes] = useState('');
 
-  // Depository Reports State
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
-  const [reportFilter, setReportFilter] = useState('pending'); // 'all', 'pending', 'resolved', 'dismissed'
+  const [reportFilter, setReportFilter] = useState('pending');
 
-  // Messages from users (feedback): only the count of new ones lives here, the tab loads the rest itself
   const [newFeedbackCount, setNewFeedbackCount] = useState(0);
   const handleFeedbackCounts = useCallback((counts) => setNewFeedbackCount((counts && counts.new) || 0), []);
 
-  // System Maintenance State
   const [maintenanceState, setMaintenanceState] = useState({ enabled: false, message: '' });
   const [loadingMaintenance, setLoadingMaintenance] = useState(false);
   const [savingMaintenance, setSavingMaintenance] = useState(false);
 
-  // In-app Modals (confirm & prompt)
   const [confirmModal, setConfirmModal] = useState(null);
   const [promptModal, setPromptModal] = useState(null);
   const [promptInput, setPromptInput] = useState('');
 
-  // ==========================================
-  // API Fetchers
-  // ==========================================
 
   const fetchStudents = async () => {
     try {
@@ -288,8 +271,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   }, [isAdmin]);
 
-  // Load every list the signed-in staff member may see as soon as the console opens,
-  // so the counts on all tabs are right before any tab is clicked.
   const didInitialLoadRef = useRef(false);
   useEffect(() => {
     if (canViewStudents) fetchStudents();
@@ -297,7 +278,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     if (canViewPayments) fetchPayments();
     if (canModerateReports) fetchReports();
     if (canModerateReports) {
-      // Only the number is needed up front; the Feedback tab loads the messages when opened
       axios
         .get('/api/feedback/admin', { params: { status: 'new', limit: 1 } })
         .then((res) => handleFeedbackCounts(res.data?.counts))
@@ -306,7 +286,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     if (isAdmin) fetchStaff();
   }, []);
 
-  // Refresh a tab's data when it is opened (skipped once, because the load above just ran)
   useEffect(() => {
     if (!didInitialLoadRef.current) {
       didInitialLoadRef.current = true;
@@ -327,7 +306,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   }, [activeTab]);
 
-  // Real-time synchronization
   useEffect(() => {
     if (!socket) return;
 
@@ -382,9 +360,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     };
   }, [socket, canViewStudents, canViewPayments, canModerateReports, canModeratePublications, isAdmin]);
 
-  // ==========================================
-  // Student Handlers
-  // ==========================================
 
   const handleVerifyStudent = async (studentId, decision) => {
     try {
@@ -511,9 +486,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     });
   };
 
-  // ==========================================
-  // Publication Handlers
-  // ==========================================
 
   const handleApprovePublication = async (thesisId) => {
     try {
@@ -563,9 +535,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     });
   };
 
-  // ==========================================
-  // Payment Handlers
-  // ==========================================
 
   const handleApprovePayment = async (paymentId) => {
     if (!statementVerified) {
@@ -643,9 +612,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     });
   };
 
-  // ==========================================
-  // System Maintenance Handlers
-  // ==========================================
 
   const handleToggleMaintenance = (newEnabled) => {
     setConfirmModal({
@@ -689,8 +655,6 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
     }
   };
 
-  // Filters
-  // A signup that never finished the registration form has nothing to verify yet
   const pendingStudents = students.filter((s) => s.status === 'pending' && s.isProfileComplete !== false);
   const filteredStudents = students.filter((s) => {
     const matchesFilter =
@@ -712,11 +676,9 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
   return (
     <div className="min-h-screen bg-[#FAF9F5] dark:bg-neutral-950 text-[#1C1B18] dark:text-neutral-100 flex flex-col justify-between transition-colors">
       
-      {/* Top Banner Navigation */}
       <header className="bg-[#1C1B18] text-[#FAF9F5] border-b border-[#38352E] sticky top-0 z-30 shadow-xs">
         <div className="max-w-7xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-4">
           
-          {/* Logo & Portal Identity */}
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-sm bg-white text-[#1C1B18] flex items-center justify-center font-serif-title text-xl font-normal">
               §
@@ -940,7 +902,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   New students to check
                 </h2>
                 <p className="text-xs font-mono-meta text-[#737067]">
-                  Look at each student's details and ID card, then approve or decline.
+                  Look at each student's academic details, then approve or decline.
                 </p>
               </div>
               <button
@@ -1006,7 +968,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                         </button>
                       ) : (
                         <span className="text-[11px] font-mono-meta text-[#8C887E]">
-                          No verification document uploaded
+                          Verification document: Not requested
                         </span>
                       )}
                     </div>
@@ -1140,7 +1102,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                   <MoreHorizontal className="w-4 h-4" />
                 </button>
                 {open && (
-                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 bg-white border border-[#D5D1C7] rounded-sm shadow-xl z-20 py-1 text-xs text-left">
+                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 max-w-[calc(100vw-2rem)] bg-white border border-[#D5D1C7] rounded-sm shadow-xl z-20 py-1 text-xs text-left">
                     {items.map((item) => (
                       <button
                         key={item.label}

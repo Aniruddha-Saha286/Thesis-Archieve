@@ -4,8 +4,6 @@ const { suggestInstitutions } = require('../services/institutionService');
 const { getInstitutionResearchLandscape } = require('../services/institutionAnalyticsService');
 const { analyticsLimiter } = require('../middleware/rateLimit');
 
-// GET /api/institutions/suggest
-// Free discovery autocomplete; never bills search credits
 router.get('/suggest', async (req, res) => {
   try {
     const { q, query, academic_only, limit } = req.query;
@@ -26,8 +24,6 @@ router.get('/suggest', async (req, res) => {
   }
 });
 
-// GET /api/institutions/:id/analytics
-// Authoritative OpenAlex Research Landscape analytics (flagged under INSTITUTION_ANALYTICS_ENABLED)
 router.get('/:id/analytics', analyticsLimiter, async (req, res) => {
   try {
     const { id } = req.params;

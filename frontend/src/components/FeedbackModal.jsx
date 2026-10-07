@@ -5,7 +5,6 @@ import { useSocket } from '../context/SocketContext';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import { timeAgo } from '../utils/timeAgo';
 
-// Same values and wording as the server (backend/utils/feedbackFields.js)
 const CATEGORIES = [
   { value: 'bug', label: 'Something is not working' },
   { value: 'idea', label: 'Idea or suggestion' },
@@ -24,7 +23,6 @@ const STATUS_WORDS = {
 const MIN_LENGTH = 5;
 const MAX_LENGTH = 2000;
 
-// "Send feedback": a signed-in user writes to the team and sees the team's replies here.
 export default function FeedbackModal({ isOpen, onClose, pageContext = '' }) {
   useEscapeToClose(onClose, isOpen);
   const { notificationTick } = useSocket();
@@ -46,7 +44,6 @@ export default function FeedbackModal({ isOpen, onClose, pageContext = '' }) {
       const list = Array.isArray(res.data?.feedback) ? res.data.feedback : [];
       setMine(list);
       setMineFailed(false);
-      // Opening this window is reading the replies: tell the server, quietly
       list
         .filter((item) => item.adminReply && !item.userSeenReply)
         .forEach((item) => {

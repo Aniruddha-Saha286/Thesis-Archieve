@@ -1,28 +1,18 @@
 const crypto = require('crypto');
 
-/**
- * Normalizes any DOI representation into canonical lowercase format:
- * - Accepts "doi:10.xxx", "https://doi.org/10.xxx", "http://dx.doi.org/10.xxx", etc.
- * - Handles case variations, extra whitespace, and harmless trailing punctuation.
- * - Returns canonical "10.xxx/yyy" or null if invalid.
- */
 function normalizeDoi(raw) {
   if (!raw || typeof raw !== 'string') return null;
 
   let cleaned = raw.trim();
 
-  // Strip URI schemes and resolvers
   cleaned = cleaned.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
   cleaned = cleaned.replace(/^doi:\s*/i, '');
   cleaned = cleaned.replace(/^doi\/\s*/i, '');
 
-  // Trim whitespace again
   cleaned = cleaned.trim();
 
-  // Strip harmless trailing punctuation (. , ; / > ) ])
   cleaned = cleaned.replace(/[.,;/>)\]]+$/, '');
 
-  // Must start with "10." and contain at least one slash
   if (!/^10\.\d{4,9}\/\S+$/i.test(cleaned)) {
     return null;
   }
@@ -30,10 +20,6 @@ function normalizeDoi(raw) {
   return cleaned.toLowerCase();
 }
 
-/**
- * Exact equality comparison between two DOIs.
- * Never uses partial substring matching.
- */
 function compareDois(a, b) {
   const normA = normalizeDoi(a);
   const normB = normalizeDoi(b);
@@ -41,12 +27,6 @@ function compareDois(a, b) {
   return normA === normB;
 }
 
-/**
- * Derives a stable, collision-resistant canonical identity for a paper.
- * Prefers: canonical DOI, stable provider ID, or a SHA-256 hash of the FULL
- * normalized title + publication year + first author surname.
- * Never truncates title to 50 characters.
- */
 function computeCanonicalPaperId(paper = {}) {
   const canonicalDoi = normalizeDoi(paper.doi);
   if (canonicalDoi) {
@@ -66,7 +46,6 @@ function computeCanonicalPaperId(paper = {}) {
     return `local:${String(paper._id)}`;
   }
 
-  // Fallback: SHA-256 hash of complete normalized title + year + author
   const fullTitle = String(paper.title || '')
     .trim()
     .toLowerCase()

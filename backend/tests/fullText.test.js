@@ -20,13 +20,9 @@ const { isPublicIpAddress } = require('../utils/urlValidator');
 const FIXTURES = path.join(__dirname, 'fixtures', 'fulltext');
 const fixture = (name) => fs.readFileSync(path.join(FIXTURES, name));
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const PUBLIC_DNS = async () => [{ address: '93.184.216.34', family: 4 }];
 
-/** A stand-in for one HTTP response, shaped like what fetchPdfBuffer expects from its transport. */
 function fakeResponse(status, headers = {}, chunks = []) {
   const lower = {};
   for (const [name, value] of Object.entries(headers)) lower[name.toLowerCase()] = String(value);
@@ -39,7 +35,6 @@ function fakeResponse(status, headers = {}, chunks = []) {
   };
 }
 
-/** A transport stub that answers from a table of URL -> response maker and records every call. */
 function fakeFetch(routes) {
   const calls = [];
   const impl = async (url, options) => {
@@ -54,7 +49,6 @@ function fakeFetch(routes) {
 
 const TINY_PDF = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n');
 
-/** Breaks a paragraph into lines of about `width` characters, the way a PDF page holds it. */
 function wrap(text, width = 80) {
   const lines = [];
   let line = '';
@@ -70,10 +64,6 @@ function wrap(text, width = 80) {
   return lines;
 }
 
-/**
- * Builds one page for splitIntoSections. A string is a paragraph (wrapped into lines),
- * [text, size] is a line in another size, { line } is one line exactly as given.
- */
 function makePage(number, entries, bodySize = 10) {
   const lines = [];
   for (const entry of entries) {
@@ -116,9 +106,6 @@ async function runFullTextTests() {
 
   resetFullTextStateForTests();
 
-  // =========================================================================
-  // 1. Download guard (DNS and HTTP are stubs; nothing leaves this machine)
-  // =========================================================================
   console.log('  -- Download guard --');
 
   await test('IP check: private, loopback, link-local, CGNAT, multicast, metadata and IPv6 forms are not public', () => {
@@ -170,7 +157,6 @@ async function runFullTextTests() {
       [{ address: '::1', family: 6 }],
       [{ address: '::ffff:192.168.1.1', family: 6 }],
       [{ address: '100.100.100.100', family: 4 }],
-      // one good address does not excuse a bad one
       [{ address: '93.184.216.34', family: 4 }, { address: '127.0.0.1', family: 4 }],
     ];
     for (const answer of answers) {
@@ -330,8 +316,6 @@ async function runFullTextTests() {
   });
 
   await test('Built-in transport connects to the checked address, not to whatever the name resolves to later', async () => {
-    // A local server stands in for a repository. The host name below does not exist in DNS;
-    // the request can only arrive because the transport uses the address it was handed.
     const server = http.createServer((req, res) => {
       if (req.url === '/moved') {
         res.writeHead(302, { Location: '/paper.pdf' });
@@ -358,7 +342,6 @@ async function runFullTextTests() {
       assert.strictEqual(moved.headers.get('location'), '/paper.pdf');
       moved.body.resume();
 
-      // And the public entry point refuses the loopback address outright.
       assert.deepStrictEqual(await fetchPdfBuffer(`http://127.0.0.1:${port}/paper.pdf`), { ok: false, reason: 'blocked_host' });
     } finally {
       await new Promise((resolve) => server.close(resolve));
@@ -383,7 +366,7 @@ async function runFullTextTests() {
       } else if (req.url === '/stall.pdf') {
         res.writeHead(200, { 'Content-Type': 'application/pdf' });
         res.write('%PDF-1.7\n');
-        stalled.push(res); // never finished by the server
+        stalled.push(res);
       } else if (req.url === '/login.pdf') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(fixture('login_page.html'));
@@ -395,7 +378,6 @@ async function runFullTextTests() {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
       const { port } = server.address();
-      // The guard sees a public address; only the last step, the socket, is pointed at the test server.
       const viaLoopback = (url, options) => _internals.pinnedHttpRequest(url, { ...options, addresses: [{ address: '127.0.0.1', family: 4 }] });
       const opts = { lookup: PUBLIC_DNS, fetchImpl: viaLoopback };
       const base = `http://repo.example.org:${port}`;
@@ -410,7 +392,6 @@ async function runFullTextTests() {
       assert.deepStrictEqual(await fetchPdfBuffer(`${base}/login.pdf`, opts), { ok: false, reason: 'not_pdf' });
       assert.deepStrictEqual(await fetchPdfBuffer(`${base}/missing.pdf`, opts), { ok: false, reason: 'http_404' });
 
-      // Every connection was closed by the client, including the stalled and the endless one.
       await new Promise((resolve) => setTimeout(resolve, 30));
       const open = await new Promise((resolve) => server.getConnections((err, count) => resolve(count)));
       assert.strictEqual(open, 0, 'no socket is left open');
@@ -421,9 +402,6 @@ async function runFullTextTests() {
     }
   });
 
-  // =========================================================================
-  // 2. Rebuilding lines from positioned text (no PDF library needed)
-  // =========================================================================
   console.log('\n  -- Lines from text positions --');
 
   await test('Two-column page: left column is read before the right one; the full-width title stays on top', () => {
@@ -431,11 +409,10 @@ async function runFullTextTests() {
     const put = (str, x, y, size = 10) => items.push({ str, transform: [size, 0, 0, size, x, y], width: str.length * size * 0.45, fontName: 'f1' });
     put('A Title That Runs Across Both Columns of the Page', 150, 740, 18);
     for (let row = 0; row < 12; row++) {
-      // Left and right baselines are deliberately not level, as in real papers.
       put(`left column line number ${row + 1} runs to the edge of column`, 50, 700 - row * 12);
       put(`right column line number ${row + 1} is read afterwards`, 320, 697 - row * 12);
     }
-    put('3', 303, 30); // page number, centred under the gap
+    put('3', 303, 30);
     const built = _internals.buildPageLines(items, [0, 0, 612, 792]);
     assert.strictEqual(built.columns, 2);
     const texts = built.lines.map((line) => line.text);
@@ -469,19 +446,16 @@ async function runFullTextTests() {
     const put = (str, x, y, size = 11) => items.push({ str, transform: [size, 0, 0, size, x, y], width: str.length * size * 0.45, fontName: 'f1' });
     for (let row = 0; row < 14; row++) {
       const number = String(118 + row);
-      put(number, 52 - number.length * 8 * 0.45, 700 - row * 16, 8); // right-aligned, small
+      put(number, 52 - number.length * 8 * 0.45, 700 - row * 16, 8);
       put(`this is line ${row + 1} of the manuscript and it carries on to the right margin`, 72, 700 - row * 16);
     }
-    put('3 patients left the study in 2019 and', 72, 460); // a real number at the start of a line stays
+    put('3 patients left the study in 2019 and', 72, 460);
     const built = _internals.buildPageLines(items, [0, 0, 612, 792]);
     assert.strictEqual(built.lines.length, 15);
     assert.ok(built.lines.slice(0, 14).every((line, i) => line.text === `this is line ${i + 1} of the manuscript and it carries on to the right margin`));
     assert.strictEqual(built.lines[14].text, '3 patients left the study in 2019 and');
   });
 
-  // =========================================================================
-  // 3. Sections
-  // =========================================================================
   console.log('\n  -- Headings and sections --');
 
   const header = 'Journal of Careful Testing 12(3)';
@@ -504,8 +478,6 @@ async function runFullTextTests() {
       ['4. Discussion', 12],
       `The sensors agreed with the reference instrument. ${FILLER}`,
       ['5. Limitations', 12],
-      // This paragraph runs over the page break, and a word is split by a hyphen there.
-      // "low-cost" is split too, but the paper also writes it inside a line, so it keeps its hyphen.
       { line: 'All farms lie in one valley. Each low-cost probe was checked once, and the low-' },
       { line: 'cost loggers were not checked at all. The findings may not hold outside this general-' },
       'Page 2',
@@ -591,8 +563,6 @@ async function runFullTextTests() {
     assert.strictEqual(numberedSections[numberedSections.length - 1].title, 'References');
   });
 
-  // An IEEE-style paper in which headings are printed as small as the text: only their form
-  // (roman numeral, capitals, a known phrase) and their place between paragraphs can tell.
   const ieeeLike = [
     makePage(1, [
       'Abstract—We measure how quickly a network learns to sort parcels. Index terms are omitted here.',
@@ -734,9 +704,6 @@ async function runFullTextTests() {
     assert.deepStrictEqual(titlesOf(plain), ['Introduction', 'Conclusion']);
   });
 
-  // =========================================================================
-  // 4. Key sections
-  // =========================================================================
   console.log('\n  -- Key sections --');
 
   await test('Dedicated sections are returned whole, with title, page and source own_section', () => {
@@ -873,9 +840,6 @@ async function runFullTextTests() {
     assert.deepStrictEqual(_internals.availabilityKinds('No new data were generated in this study.'), ['data']);
   });
 
-  // =========================================================================
-  // 5. Links
-  // =========================================================================
   console.log('\n  -- Code and dataset links --');
 
   await test('Finds code and dataset links, joins a link broken over two lines, strips sentence punctuation', () => {
@@ -932,7 +896,7 @@ async function runFullTextTests() {
 
     const others = findResourceLinks([{ page: 1, lines: mixed.map((line) => ({ text: line, size: 10 })) }]);
     assert.deepStrictEqual(others.map((link) => [link.url, link.kind]), [
-      ['https://doi.org/10.5281/zenodo.55', 'code'], // a Zenodo DOI, but the sentence says it is software
+      ['https://doi.org/10.5281/zenodo.55', 'code'],
       ['https://project.example.org/demo', 'other'],
       ['https://doi.org/10.1000/j.jss.2020.1', 'other'],
       ['https://huggingface.co/lab/model', 'other'],
@@ -959,9 +923,6 @@ async function runFullTextTests() {
     assert.deepStrictEqual(findResourceLinks(undefined), []);
   });
 
-  // =========================================================================
-  // 6. Cache, queue and failure handling of readPaperFullText (stubbed download and reader)
-  // =========================================================================
   console.log('\n  -- Cache and queue --');
 
   const stubPages = [makePage(1, [
@@ -1023,8 +984,8 @@ async function runFullTextTests() {
     const opts = { lookup: PUBLIC_DNS, fetchImpl, extractImpl: okExtract };
     const read = (i) => readPaperFullText({ pdfUrl: `https://repo.example.org/n${i}.pdf` }, opts);
     for (let i = 0; i < 40; i++) await read(i);
-    await read(0); // paper 0 is used again, so paper 1 is now the oldest
-    await read(40); // pushes paper 1 out
+    await read(0);
+    await read(40);
     assert.strictEqual(fetchImpl.calls.length, 41);
     await read(0);
     assert.strictEqual(fetchImpl.calls.length, 41, 'paper 0 survived because it was used recently');
@@ -1064,7 +1025,6 @@ async function runFullTextTests() {
     assert.ok(results.every((result) => result.ok), 'all four queued papers were read');
     assert.strictEqual(mostActive, 1, 'never two parses at the same time');
 
-    // "busy" is not remembered: the same paper is read as soon as there is room.
     const retry = readPaperFullText({ pdfUrl: 'https://repo.example.org/q4.pdf' }, opts);
     while (release.length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
     release.shift()();
@@ -1110,7 +1070,6 @@ async function runFullTextTests() {
     const headersOnly = async () => ({ ok: true, pageCount: 3, pagesRead: 3, truncated: false, pages: [makePage(1, ['Scanned by the library'])] });
     assert.deepStrictEqual(await readPaperFullText({ pdfUrl: 'https://repo.example.org/scan.pdf' }, { ...base, extractImpl: headersOnly }), { ok: false, reason: 'no_text_layer' });
     assert.deepStrictEqual(await readPaperFullText({ pdfUrl: 'https://repo.example.org/login.pdf' }, { ...base, extractImpl: okExtract }), { ok: false, reason: 'not_pdf' });
-    // After all that the queue is free again.
     assert.strictEqual((await readPaperFullText({ pdfUrl: 'https://repo.example.org/crash.pdf' }, { ...base, extractImpl: okExtract, skipCache: true })).ok, true);
   });
 
@@ -1131,9 +1090,6 @@ async function runFullTextTests() {
     assert.deepStrictEqual(await extractPdfText(Buffer.alloc(0)), { ok: false, reason: 'unreadable' });
   });
 
-  // =========================================================================
-  // 7. Real PDFs (needs the optional package pdfjs-dist)
-  // =========================================================================
   console.log('\n  -- Reading the fixture PDFs --');
   resetFullTextStateForTests();
 
@@ -1158,7 +1114,6 @@ async function runFullTextTests() {
         'III. METHODOLOGY', 'A. Data Collection', 'B. Network Design', 'IV. EXPERIMENTS', 'V. RESULTS AND DISCUSSION', 'VI. LIMITATIONS',
         'VII. CONCLUSION AND FUTURE WORK', 'DATA AVAILABILITY', 'ACKNOWLEDGMENT', 'REFERENCES',
       ]);
-      // If the columns were mixed up, a sentence that runs down the left column would be torn apart.
       const introduction = byTitle(sections, 'I. INTRODUCTION');
       assert.ok(introduction.text.startsWith('Rice and jute are the two crops that most smallholder families in the delta depend on.'));
       assert.ok(introduction.text.endsWith('a study with 64 farmers who used the application for one season.'));
@@ -1329,11 +1284,9 @@ async function runFullTextTests() {
       assert.strictEqual(keys.conclusion.sectionTitle, 'Chapter 5 Conclusions and Future Work');
       assert.strictEqual(keys.conclusion.page, 68);
       assert.ok(keys.conclusion.text.startsWith('The monitoring system built in this thesis ran unattended for fourteen months'));
-      // The chapter before the skipped pages must not swallow the chapter after them.
       const evaluation = byTitle(sections, 'Chapter 4 Evaluation');
       assert.strictEqual(evaluation.endPage, 60);
       assert.ok(!evaluation.text.includes('monitoring system built'));
-      // Reference entries that continue after the second skipped stretch are still references.
       const orphan = sections.find((section) => section.startPage === 76 && !section.title);
       assert.strictEqual(orphan.type, 'references');
     });
@@ -1348,7 +1301,6 @@ async function runFullTextTests() {
       assert.strictEqual(keys.limitations.sectionTitle, '5.1 Limitations');
       assert.strictEqual(keys.conclusion.sectionTitle, 'Chapter 5 Conclusions and Future Work');
 
-      // With the search switched off the chapter is simply not read: proof that the search matters.
       const plain = await read('long_thesis.pdf', { seekPages: 0 });
       assert.strictEqual(plain.pagesRead, 75);
       assert.strictEqual(plain.truncated, true);
@@ -1408,8 +1360,6 @@ async function runFullTextTests() {
       const introduction = byTitle(sections, '1 Introduction').text;
       assert.ok(introduction.includes('a field trial in which managers used the phone application'), '"man-" + "agers" joined');
       assert.ok(introduction.includes('a hand-computed index can be explained to a manager'), 'real hyphen kept, line-break hyphen removed');
-      // The table floats into the middle of this paragraph; caption and rows are lifted out and
-      // the sentence is whole again. The "1" after "stressed." is the footnote mark, as printed.
       assert.strictEqual(
         byTitle(sections, '3.1 Data collection').text,
         'We photographed 2,300 bushes on four estates between March and June. Each bush was photographed with a visible and a thermal camera within ten seconds. ' +
@@ -1446,7 +1396,7 @@ async function runFullTextTests() {
         ['https://github.com/other-lab/thermal-nets', 'code', 1],
         ['https://doi.org/10.5281/zenodo.1234567', 'dataset', 2],
         ['https://github.com/tea-lab/thermal-stress-detection-toolkit-for-phones', 'code', 2],
-        ['https://osf.io/ab3cd', 'dataset', 1], // from the footnote
+        ['https://osf.io/ab3cd', 'dataset', 1],
       ]);
       assert.strictEqual(links[3].context, '1The measurement protocol is described at https://osf.io/ab3cd.');
       assert.ok(!links.some((link) => /else-toolbox|10\.1016/.test(link.url)), 'links of the reference list are ignored');

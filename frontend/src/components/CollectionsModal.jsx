@@ -33,8 +33,6 @@ export default function CollectionsModal({ isOpen, onClose }) {
     }
   };
 
-  // Collections hold references to Saved Papers, so the saved list is needed to show titles
-  // and to offer papers that can be added.
   const fetchSavedPapers = async () => {
     try {
       const res = await axios.get('/api/user/saved-papers');
@@ -152,7 +150,6 @@ export default function CollectionsModal({ isOpen, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-3xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
           <div className="flex items-center gap-2">
             <Folder className="w-5 h-5 text-blue-700 dark:text-blue-400" />
@@ -293,7 +290,6 @@ export default function CollectionsModal({ isOpen, onClose }) {
                     </div>
                   </div>
 
-                  {/* Batch Export Buttons */}
                   <div className="pt-2 border-t border-[#E5E2DA] dark:border-[#2C2A26] flex items-center gap-2 flex-wrap font-mono-meta text-xs">
                     <span className="text-[11px] uppercase font-bold text-[#737067] dark:text-[#9C988F]">Batch Export:</span>
                     <button
@@ -318,7 +314,6 @@ export default function CollectionsModal({ isOpen, onClose }) {
                   </div>
                 </div>
 
-                {/* Papers in Collection */}
                 <div>
                   <div className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55] dark:text-[#9C988F] mb-2">
                     Papers in this collection ({includedIds.length})

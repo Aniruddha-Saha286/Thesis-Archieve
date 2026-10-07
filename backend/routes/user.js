@@ -8,10 +8,8 @@ const { checkAlertsForUser } = require('../services/topicAlertService');
 const { enforceQuota } = require('../middleware/entitlements');
 const { getEffectiveEntitlements } = require('../services/entitlementService');
 
-// All endpoints in this file strictly require user authentication
 router.use(authenticateToken);
 
-// GET /api/user/saved-papers
 router.get('/saved-papers', async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('savedPapers');
@@ -22,7 +20,6 @@ router.get('/saved-papers', async (req, res) => {
   }
 });
 
-// POST /api/user/saved-papers
 router.post('/saved-papers', async (req, res) => {
   try {
     const {
@@ -49,7 +46,6 @@ router.post('/saved-papers', async (req, res) => {
 
     const existingIdx = user.savedPapers.findIndex((p) => p.paperId === paperId);
     if (existingIdx >= 0) {
-      // Update existing saved paper notes & status (allowed even after membership expiry)
       if (notes !== undefined) user.savedPapers[existingIdx].notes = notes;
       if (readingStatus !== undefined) user.savedPapers[existingIdx].readingStatus = readingStatus;
       if (structuredNotes && typeof structuredNotes === 'object') {
@@ -59,7 +55,6 @@ router.post('/saved-papers', async (req, res) => {
         };
       }
     } else {
-      // Adding new paper: check quota limit
       const entitlements = await getEffectiveEntitlements(user._id);
       if (user.savedPapers.length >= entitlements.quotas.maxSavedPapers) {
         return res.status(403).json({
@@ -95,7 +90,6 @@ router.post('/saved-papers', async (req, res) => {
   }
 });
 
-// DELETE /api/user/saved-papers/:paperId
 router.delete('/saved-papers/:paperId', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -111,7 +105,6 @@ router.delete('/saved-papers/:paperId', async (req, res) => {
   }
 });
 
-// PATCH /api/user/saved-papers/:paperId/notes
 router.patch('/saved-papers/:paperId/notes', async (req, res) => {
   try {
     const { notes } = req.body;
@@ -131,7 +124,6 @@ router.patch('/saved-papers/:paperId/notes', async (req, res) => {
   }
 });
 
-// PATCH /api/user/saved-papers/:paperId/reading-status
 router.patch('/saved-papers/:paperId/reading-status', async (req, res) => {
   try {
     const { readingStatus } = req.body;
@@ -156,7 +148,6 @@ router.patch('/saved-papers/:paperId/reading-status', async (req, res) => {
   }
 });
 
-// PATCH /api/user/saved-papers/:paperId/structured-notes
 router.patch('/saved-papers/:paperId/structured-notes', async (req, res) => {
   try {
     const { researchQuestion, method, dataset, findings, limitations, relevanceToMyThesis } = req.body;
@@ -183,7 +174,6 @@ router.patch('/saved-papers/:paperId/structured-notes', async (req, res) => {
   }
 });
 
-// GET /api/user/collections
 router.get('/collections', async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('collections');
@@ -194,8 +184,6 @@ router.get('/collections', async (req, res) => {
   }
 });
 
-// POST /api/user/collections/templates/thesis-chapters
-// Creates standardized thesis chapter collections (Chapter 1 to Chapter 5)
 router.post('/collections/templates/thesis-chapters', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -224,7 +212,6 @@ router.post('/collections/templates/thesis-chapters', async (req, res) => {
       });
     }
 
-    // Add as many chapters as fit in available slots
     const toAdd = templates.slice(0, availableSlots);
     for (const t of toAdd) {
       user.collections.push({
@@ -249,7 +236,6 @@ router.post('/collections/templates/thesis-chapters', async (req, res) => {
   }
 });
 
-// POST /api/user/collections
 router.post('/collections', enforceQuota('collections'), async (req, res) => {
   try {
     const { name, description } = req.body;
@@ -277,7 +263,6 @@ router.post('/collections', enforceQuota('collections'), async (req, res) => {
   }
 });
 
-// POST /api/user/collections/:id/papers
 router.post('/collections/:id/papers', async (req, res) => {
   try {
     const { paperId } = req.body;
@@ -301,8 +286,6 @@ router.post('/collections/:id/papers', async (req, res) => {
   }
 });
 
-// DELETE /api/user/collections/:id/papers/:paperId
-// Remove one paper from a collection (the paper stays in Saved Papers)
 router.delete('/collections/:id/papers/:paperId', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -325,8 +308,6 @@ router.delete('/collections/:id/papers/:paperId', async (req, res) => {
   }
 });
 
-// DELETE /api/user/collections/:id
-// Delete a collection. Saved papers are not touched.
 router.delete('/collections/:id', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -335,7 +316,6 @@ router.delete('/collections/:id', async (req, res) => {
     const coll = user.collections.id(req.params.id);
     if (!coll) return res.status(404).json({ message: 'Collection not found.' });
 
-    // Rewrite the list without this collection (a plain write that every MongoDB-compatible store handles the same way)
     const targetId = String(coll._id);
     user.collections = user.collections.filter((item) => String(item._id) !== targetId);
     await user.save();
@@ -347,8 +327,6 @@ router.delete('/collections/:id', async (req, res) => {
   }
 });
 
-// GET /api/user/collections/:id/export
-// One-click export of saved collection as BibTeX or RIS file (Requires Premium/Trial)
 router.get('/collections/:id/export', enforceQuota('bulkExport'), async (req, res) => {
   try {
     const { format = 'bibtex' } = req.query;
@@ -358,7 +336,6 @@ router.get('/collections/:id/export', enforceQuota('bulkExport'), async (req, re
     const coll = user.collections.id(req.params.id);
     if (!coll) return res.status(404).json({ message: 'Collection not found.' });
 
-    // Gather records matching collection's papers from user's saved papers
     const savedMap = new Map(user.savedPapers.map((p) => [p.paperId, p]));
     const validRecords = [];
     const omissions = [];
@@ -394,7 +371,6 @@ router.get('/collections/:id/export', enforceQuota('bulkExport'), async (req, re
   }
 });
 
-// GET /api/user/comparisons
 router.get('/comparisons', async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('comparisons');
@@ -405,8 +381,6 @@ router.get('/comparisons', async (req, res) => {
   }
 });
 
-// POST /api/user/comparisons
-// Save or update paper comparison matrix (Requires Premium/Trial)
 router.post('/comparisons', enforceQuota('comparisons'), async (req, res) => {
   try {
     const { title, paperIds, criteria } = req.body;
@@ -430,8 +404,6 @@ router.post('/comparisons', enforceQuota('comparisons'), async (req, res) => {
   }
 });
 
-// PUT /api/user/comparisons/:id
-// Update existing comparison matrix
 router.put('/comparisons/:id', enforceQuota('comparisonsAccess'), async (req, res) => {
   try {
     const { title, paperIds, criteria } = req.body;
@@ -454,8 +426,6 @@ router.put('/comparisons/:id', enforceQuota('comparisonsAccess'), async (req, re
   }
 });
 
-// DELETE /api/user/comparisons/:id
-// Delete saved comparison matrix
 router.delete('/comparisons/:id', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -471,7 +441,6 @@ router.delete('/comparisons/:id', async (req, res) => {
   }
 });
 
-// GET /api/user/alerts
 router.get('/alerts', async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('topicAlerts');
@@ -482,7 +451,6 @@ router.get('/alerts', async (req, res) => {
   }
 });
 
-// POST /api/user/alerts
 router.post('/alerts', enforceQuota('topicAlerts'), async (req, res) => {
   try {
     const { topic, category } = req.body;
@@ -506,7 +474,6 @@ router.post('/alerts', enforceQuota('topicAlerts'), async (req, res) => {
   }
 });
 
-// DELETE /api/user/alerts/:id
 router.delete('/alerts/:id', async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -521,8 +488,6 @@ router.delete('/alerts/:id', async (req, res) => {
   }
 });
 
-// POST /api/user/alerts/check
-// Evaluates active topic alerts and generates new in-app notifications
 router.post('/alerts/check', async (req, res) => {
   try {
     const result = await checkAlertsForUser(req.user._id);
@@ -533,8 +498,6 @@ router.post('/alerts/check', async (req, res) => {
   }
 });
 
-// GET /api/user/notifications
-// Retrieves user's in-app notifications
 router.get('/notifications', async (req, res) => {
   try {
     const notifications = await Notification.find({ user: req.user._id })
@@ -547,8 +510,6 @@ router.get('/notifications', async (req, res) => {
   }
 });
 
-// PUT /api/user/notifications/read-all
-// Marks every notification of the signed-in user as read (the bell's "Mark all read")
 router.put('/notifications/read-all', async (req, res) => {
   try {
     const result = await Notification.updateMany({ user: req.user._id, read: { $ne: true } }, { read: true });
@@ -559,8 +520,6 @@ router.put('/notifications/read-all', async (req, res) => {
   }
 });
 
-// PUT /api/user/notifications/:id/read
-// Marks a notification as read
 router.put('/notifications/:id/read', async (req, res) => {
   try {
     const notif = await Notification.findOneAndUpdate(

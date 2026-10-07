@@ -45,7 +45,6 @@ async function runRbacAndGoogleAuthTests() {
     }
   }
 
-  // Helper to create mock req / res
   function createMockReqRes({ user = null, body = {}, params = {}, query = {}, headers = {}, ip = '127.0.0.1' } = {}) {
     const req = { user, body, params, query, headers, ip };
     const res = {
@@ -68,9 +67,6 @@ async function runRbacAndGoogleAuthTests() {
     return { req, res };
   }
 
-  // =========================================================================
-  // 1. Primary Admin Configuration & Fail-Closed Validation
-  // =========================================================================
   console.log('--- 1. Primary Admin Environment Fail-Closed Validation ---');
 
   test('Valid standard email passes getValidatedPrimaryAdminEmail', () => {
@@ -116,7 +112,6 @@ async function runRbacAndGoogleAuthTests() {
   test('Syntactically invalid emails (comma typo, missing domain) return null', () => {
     const original = process.env.PRIMARY_ADMIN_GOOGLE_EMAIL;
     try {
-      // User prompt typo test: sahaaniruddha2004@gmail,com with comma
       process.env.PRIMARY_ADMIN_GOOGLE_EMAIL = 'sahaaniruddha2004@gmail,com';
       assert.strictEqual(getValidatedPrimaryAdminEmail(), null);
 
@@ -133,9 +128,6 @@ async function runRbacAndGoogleAuthTests() {
     }
   });
 
-  // =========================================================================
-  // 2. Google Token Verification Rules & Security Claims
-  // =========================================================================
   console.log('--- 2. Google Credential Verification Rules ---');
 
   await testAsync('verifyGoogleCredential rejects missing or empty credentials', async () => {
@@ -205,7 +197,7 @@ async function runRbacAndGoogleAuthTests() {
         getPayload: () => ({
           iss: 'https://accounts.google.com',
           aud: testAud,
-          exp: Math.floor(Date.now() / 1000) - 60, // Expired 1 min ago
+          exp: Math.floor(Date.now() / 1000) - 60,
           email: 'student@campus.edu',
           email_verified: true,
           sub: 'google-sub-12345',
@@ -258,7 +250,7 @@ async function runRbacAndGoogleAuthTests() {
           exp: Math.floor(Date.now() / 1000) + 3600,
           email: 'student@campus.edu',
           email_verified: true,
-          sub: '', // Missing sub
+          sub: '',
         }),
       }),
     };
@@ -298,9 +290,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.strictEqual(result.sub, 'google-sub-998877');
   });
 
-  // =========================================================================
-  // 3. User DTO Sanitization & Information Exposure Prevention
-  // =========================================================================
   console.log('--- 3. Authoritative DTO Sanitization ---');
 
   test('toSanitizedUserDto never exposes raw storage keys or credentials', () => {
@@ -310,7 +299,7 @@ async function runRbacAndGoogleAuthTests() {
       email: 'sadia@univ.edu',
       role: 'student',
       status: 'pending',
-      permissions: ['students.view'], // student should have no computed perms
+      permissions: ['students.view'],
       password: 'argon2_hashed_secret',
       idCardProof: 'raw_cloudinary_private_public_id_abc123',
       googleId: '1029384756',
@@ -340,9 +329,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.strictEqual(dto.hasVerificationDocument, false);
   });
 
-  // =========================================================================
-  // 4. Granular RBAC Middleware & Capability Enforcement
-  // =========================================================================
   console.log('--- 4. RBAC Capability & Middleware Enforcements ---');
 
   test('Admin implicitly passes all granular permission checks', () => {
@@ -372,7 +358,6 @@ async function runRbacAndGoogleAuthTests() {
       permissions: [PERMISSIONS.STUDENTS_VIEW, PERMISSIONS.PUBLICATIONS_MODERATE],
     };
 
-    // Test allowed permission
     const { req, res } = createMockReqRes({ user: editorUser });
     let called = false;
     requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE)(req, res, () => {
@@ -386,7 +371,7 @@ async function runRbacAndGoogleAuthTests() {
       _id: 'ed_1',
       role: 'editor',
       status: 'approved',
-      permissions: [PERMISSIONS.STUDENTS_VIEW], // Does not have payments.review
+      permissions: [PERMISSIONS.STUDENTS_VIEW],
     };
 
     const { req, res } = createMockReqRes({ user: editorUser });
@@ -404,7 +389,7 @@ async function runRbacAndGoogleAuthTests() {
       _id: 'stu_1',
       role: 'student',
       status: 'approved',
-      permissions: [PERMISSIONS.STUDENTS_VIEW], // Even if forged in doc, student role blocked
+      permissions: [PERMISSIONS.STUDENTS_VIEW],
     };
 
     const { req, res } = createMockReqRes({ user: studentUser });
@@ -442,7 +427,6 @@ async function runRbacAndGoogleAuthTests() {
     const editor = { _id: 'ed_1', role: 'editor', status: 'approved', permissions: ALL_PERMISSIONS };
     const student = { _id: 'stu_1', role: 'student', status: 'approved' };
 
-    // Admin passes
     const { req: req1, res: res1 } = createMockReqRes({ user: admin });
     let adminCalled = false;
     requireAdmin(req1, res1, () => {
@@ -450,7 +434,6 @@ async function runRbacAndGoogleAuthTests() {
     });
     assert.strictEqual(adminCalled, true);
 
-    // Editor blocked
     const { req: req2, res: res2 } = createMockReqRes({ user: editor });
     let editorCalled = false;
     requireAdmin(req2, res2, () => {
@@ -460,7 +443,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.strictEqual(res2.statusCode, 403);
     assert.strictEqual(res2.data.code, 'ADMIN_REQUIRED');
 
-    // Student blocked
     const { req: req3, res: res3 } = createMockReqRes({ user: student });
     let studentCalled = false;
     requireAdmin(req3, res3, () => {
@@ -500,9 +482,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.strictEqual(guestCaps.isStaff, false);
   });
 
-  // =========================================================================
-  // 5. Short-Lived Signed Verification Document Inspection
-  // =========================================================================
   console.log('--- 5. Verification Document Security & Signed URLs ---');
 
   test('Document inspection endpoint requires documents.view permission', () => {
@@ -524,8 +503,6 @@ async function runRbacAndGoogleAuthTests() {
   });
 
   test('Document signing helper generates short-lived URL with 600s TTL and private caching', () => {
-    // Test the signed URL logic:
-    // Expiration must be <= 600 seconds from generation
     const nowSec = Math.floor(Date.now() / 1000);
     const expiresAt = nowSec + 600;
     const cacheControlHeader = 'private, no-cache, no-store, must-revalidate';
@@ -535,9 +512,6 @@ async function runRbacAndGoogleAuthTests() {
     assert(cacheControlHeader.includes('no-store'), 'Signed doc response must be marked no-store');
   });
 
-  // =========================================================================
-  // 6. Manual Timestamp Grant & Overlap Handling
-  // =========================================================================
   console.log('--- 6. Manual Premium Timestamp Grants & Overlap Handling ---');
 
   test('Manual grant start_now sets start to now and applies exact calendar duration', () => {
@@ -546,12 +520,10 @@ async function runRbacAndGoogleAuthTests() {
     const plan = 'premium';
     const durationMonths = 6;
 
-    // Under start_now, startDate is baseNow
     const startDate = baseNow;
     const endDate = addDhakaCalendarMonths(startDate, durationMonths);
 
     assert.strictEqual(startDate.toISOString(), '2026-03-15T10:00:00.000Z');
-    // March 15 + 6 months = September 15
     assert.strictEqual(endDate.getUTCMonth(), 8, 'Must be September (month index 8)');
     assert.strictEqual(endDate.getUTCDate(), 15, 'Must be 15th');
   });
@@ -561,21 +533,18 @@ async function runRbacAndGoogleAuthTests() {
     const overlapMode = 'extend_from_current_expiry';
     const durationMonths = 6;
 
-    // Extends from activeEndDate
     const newStartDate = activeEndDate;
     const newEndDate = addDhakaCalendarMonths(activeEndDate, durationMonths);
 
-    // May 1 + 6 months = November 1
     assert.strictEqual(newEndDate.getUTCMonth(), 10, 'Must be November (month index 10)');
     assert.strictEqual(newEndDate.getUTCDate(), 1);
   });
 
   test('Manual grant schedule uses specified future start date', () => {
     const scheduledStart = new Date('2026-07-01T00:00:00.000Z');
-    const durationMonths = 12; // Pro Max annual
+    const durationMonths = 12;
     const calculatedEnd = addDhakaCalendarMonths(scheduledStart, durationMonths);
 
-    // July 1, 2026 + 12 months = July 1, 2027
     assert.strictEqual(calculatedEnd.getUTCFullYear(), 2027);
     assert.strictEqual(calculatedEnd.getUTCMonth(), 6, 'Must be July');
   });
@@ -588,9 +557,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.strictEqual(isDuplicate, true, 'Duplicate grantRequestId must be detected');
   });
 
-  // =========================================================================
-  // 7. Team & Access (Editor Lifecycle & Primary Admin Immunities)
-  // =========================================================================
   console.log('--- 7. Team & Access Editor Lifecycle & Immunities ---');
 
   test('Primary admin cannot be appointed as editor, demoted, or revoked', () => {
@@ -608,7 +574,6 @@ async function runRbacAndGoogleAuthTests() {
       const isPrimary = Boolean(primaryAdminEmail && targetUser.email === primaryAdminEmail);
       assert.strictEqual(isPrimary, true, 'Must identify primary admin');
 
-      // Attempt to demote/appoint as editor must be blocked:
       assert.throws(() => {
         if (isPrimary) {
           throw new Error('Primary administrator privileges cannot be modified or assigned as editor.');
@@ -656,7 +621,6 @@ async function runRbacAndGoogleAuthTests() {
       roleChangedBy: 'adm_1',
     };
 
-    // Revocation
     editor.role = 'student';
     editor.permissions = [];
     editor.roleChangedAt = new Date();
@@ -666,9 +630,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.deepStrictEqual(editor.permissions, []);
   });
 
-  // =========================================================================
-  // 8. Local Depository Publication Moderation
-  // =========================================================================
   console.log('--- 8. Local Depository Moderation & Mandatory Rejection Reasons ---');
 
   test('Local thesis moderation approval sets approved status and records approvedBy', () => {
@@ -708,25 +669,21 @@ async function runRbacAndGoogleAuthTests() {
 
     const thesis = { _id: 'thes_2', status: 'pending' };
 
-    // Empty reason must throw
     assert.throws(
       () => rejectThesis(thesis, { reason: '', rejectedBy: 'ed_1' }),
       /rejection reason .* is required/
     );
 
-    // Whitespace reason must throw
     assert.throws(
       () => rejectThesis(thesis, { reason: '   ', rejectedBy: 'ed_1' }),
       /rejection reason .* is required/
     );
 
-    // Too short reason must throw
     assert.throws(
       () => rejectThesis(thesis, { reason: 'bad', rejectedBy: 'ed_1' }),
       /minimum 5 characters/
     );
 
-    // Valid rejection succeeds
     const rejected = rejectThesis(thesis, {
       reason: 'Methodology lacks experimental baseline validation against standard benchmark.',
       rejectedBy: 'ed_1',
@@ -738,7 +695,7 @@ async function runRbacAndGoogleAuthTests() {
   });
 
   test('Local depository deletion returns 404 when document not found in local store', () => {
-    const localStore = new Map(); // Empty local repository
+    const localStore = new Map();
 
     function deleteLocalThesis(id) {
       if (!localStore.has(id)) {
@@ -753,9 +710,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.throws(() => deleteLocalThesis('missing_thesis_99'), (err) => err.status === 404);
   });
 
-  // =========================================================================
-  // 9. Student Submission Gate
-  // =========================================================================
   console.log('--- 9. Student Depository Submission Verification Gate ---');
 
   test('requireApproved allows approved students to submit theses', () => {
@@ -790,9 +744,6 @@ async function runRbacAndGoogleAuthTests() {
     assert.strictEqual(res.data.status, 'pending');
   });
 
-  // =========================================================================
-  // 10. Break-Glass Legacy Password Gate
-  // =========================================================================
   console.log('--- 10. Break-Glass Legacy Password Authentication Gate ---');
 
   test('Legacy password login is disabled by default (returns 404)', () => {
@@ -830,11 +781,9 @@ async function runRbacAndGoogleAuthTests() {
         return true;
       }
 
-      // Arbitrary legacy emails must fail
       assert.throws(() => authenticateLegacyLogin('admin@thesis.org'), /Invalid legacy administrative credentials/);
       assert.throws(() => authenticateLegacyLogin('other@campus.edu'), /Invalid legacy administrative credentials/);
 
-      // Exact primary admin matches
       assert.strictEqual(authenticateLegacyLogin('  Admin.Owner@Campus.Edu  '), true);
     } finally {
       process.env.ENABLE_LEGACY_ADMIN_LOGIN = originalFlag;
@@ -842,9 +791,6 @@ async function runRbacAndGoogleAuthTests() {
     }
   });
 
-  // =========================================================================
-  // 11. Test Membership Revocation, Honest Custom Labels & Editor Management
-  // =========================================================================
   console.log('--- 11. Test Membership Revocation, Honest Custom Labels & Editor Management ---');
 
   test('Membership revocation cancels all active periods, expires trials, and returns user to free', () => {
@@ -900,17 +846,14 @@ async function runRbacAndGoogleAuthTests() {
       return 'Academic Research Grant (Premium Tier)';
     }
 
-    // 1-day test grant must NOT say "৳500 / 6 Months"
     const label1d = computeGrantPresentation('test', '1d');
     assert.strictEqual(label1d, 'Complimentary Test Access (24 Hours)');
     assert.strictEqual(label1d.includes('6 Months'), false);
     assert.strictEqual(label1d.includes('৳500'), false);
 
-    // 7-day test grant
     const label7d = computeGrantPresentation('test', '7d');
     assert.strictEqual(label7d, 'Complimentary Test Access (7 Days)');
 
-    // Custom label override
     const labelCustom = computeGrantPresentation('custom', '7d', 'Special Beta Evaluation Access');
     assert.strictEqual(labelCustom, 'Special Beta Evaluation Access');
   });
@@ -929,7 +872,6 @@ async function runRbacAndGoogleAuthTests() {
 
       let user = mockDb.get(cleanEmail);
       if (!user) {
-        // Pre-provision new account
         user = {
           email: cleanEmail,
           name: cleanEmail.split('@')[0],
@@ -948,13 +890,11 @@ async function runRbacAndGoogleAuthTests() {
       return user;
     }
 
-    // Pre-provision an email that has never signed in before
     const newEditor = appointEditor('future.colleague@dept.edu', [PERMISSIONS.PUBLICATIONS_MODERATE, PERMISSIONS.STUDENTS_VIEW], 'adm_1');
     assert.strictEqual(newEditor.role, 'editor');
     assert.strictEqual(newEditor.status, 'approved');
     assert.deepStrictEqual(newEditor.permissions, [PERMISSIONS.PUBLICATIONS_MODERATE, PERMISSIONS.STUDENTS_VIEW]);
 
-    // Primary admin cannot be appointed as editor
     assert.throws(
       () => appointEditor(primaryAdminEmail, [PERMISSIONS.STUDENTS_VIEW], 'adm_1'),
       /Primary administrator account cannot be converted/
@@ -982,12 +922,10 @@ async function runRbacAndGoogleAuthTests() {
       return target;
     }
 
-    // Revoke by _id
     const revoked = revokeEditor('ed_1', 'adm_1');
     assert.strictEqual(revoked.role, 'student');
     assert.deepStrictEqual(revoked.permissions, []);
 
-    // Re-revoking fails because account is already a student
     assert.throws(() => revokeEditor('ed_1', 'adm_1'), /Editor not found or account is not an editor/);
   });
 

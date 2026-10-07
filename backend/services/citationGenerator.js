@@ -1,14 +1,5 @@
-/**
- * Academic Citation Generation Service
- * Produces standards-compliant BibTeX, RIS, and APA (7th Edition) citations
- * strictly from verified metadata. Missing fields are preserved as missing or flagged,
- * NEVER silently filled with fictional values or the current year.
- */
 
 
-// Degree level as stated on the record: 'bachelor' | 'master' | 'doctoral' | 'unknown'.
-// Most theses from Bangladeshi universities are bachelor's theses, so nothing is assumed:
-// an unstated level is cited as plain "Thesis".
 function getDegreeLevel(record) {
   const text = String((record && record.degreeType) || '').toLowerCase();
   if (/\b(ph\.?\s?d|d\.?phil|doctor(al|ate)?)\b/.test(text)) return 'doctoral';
@@ -26,7 +17,6 @@ function describeDegree(record) {
   return 'Thesis';
 }
 
-// Formats an author's name into "Surname, First Initial."
 function formatAuthorApa(name) {
   if (!name) return '';
   const parts = name.trim().split(/\s+/);
@@ -36,11 +26,9 @@ function formatAuthorApa(name) {
   return `${surname}, ${initials}`;
 }
 
-// Generates an APA 7th Edition citation string and reports any missing fields
 function generateApaCitation(record) {
   const missingFields = [];
 
-  // Authors
   let authorStr = '';
   if (Array.isArray(record.authors) && record.authors.length > 0) {
     const apaAuthors = record.authors.map((a) => formatAuthorApa(typeof a === 'string' ? a : a.name));
@@ -60,14 +48,11 @@ function generateApaCitation(record) {
     missingFields.push('author');
   }
 
-  // Year: strictly from publishedYear, NEVER fictional current year
   const yearStr = record.publishedYear ? `(${record.publishedYear})` : '(n.d.)';
   if (!record.publishedYear) missingFields.push('year');
 
-  // Title
   const titleStr = record.title || 'Untitled Work';
 
-  // Venue / Degree / Source
   let venueStr = '';
   const degreeDesc = describeDegree(record);
 
@@ -94,14 +79,12 @@ function generateApaCitation(record) {
       missingFields.push('proceedings');
     }
   } else if (record.publicationType === 'preprint') {
-    // Distinguish preprint server accurately without assuming arXiv
     const preprintVenue = record.venue || record.publisher || record.source || 'Preprint repository';
     venueStr = ` ${preprintVenue}.`;
   } else if (record.venue) {
     venueStr = ` ${record.venue}.`;
   }
 
-  // Identifier link
   let linkStr = '';
   if (record.doi) {
     linkStr = ` https://doi.org/${record.doi}`;
@@ -120,11 +103,9 @@ function generateApaCitation(record) {
   };
 }
 
-// Generates a BibTeX entry
 function generateBibtex(record) {
   const missingFields = [];
 
-  // Determine citation key
   let firstSurname = 'unknown';
   if (Array.isArray(record.authors) && record.authors.length > 0) {
     const raw = typeof record.authors[0] === 'string' ? record.authors[0] : record.authors[0].name;
@@ -148,10 +129,6 @@ function generateBibtex(record) {
 
   const citeKey = `${firstSurname}${year}${firstWord}`;
 
-  // Determine entry type: keep degree level separate
-  // BibTeX has only two thesis entry types. A bachelor's thesis uses @mastersthesis with an
-  // explicit type, and a thesis of unstated level keeps @phdthesis with type "Thesis", so the
-  // printed reference never claims a degree the record does not state.
   const level = getDegreeLevel(record);
   let thesisTypeNote = null;
 
@@ -232,7 +209,6 @@ function generateBibtex(record) {
   };
 }
 
-// Generates an RIS format citation
 function generateRis(record) {
   let risType = 'GEN';
   if (record.publicationType === 'thesis' || record.publicationType === 'dissertation') risType = 'THES';
@@ -283,12 +259,10 @@ function generateRis(record) {
   return lines.join('\n');
 }
 
-// Batch export an array of records to unified BibTeX or RIS file
 function batchExportCitations(records = [], format = 'bibtex', options = {}) {
   const omissions = Array.isArray(options.omissions) ? options.omissions : [];
   const isRis = format.toLowerCase() === 'ris';
 
-  // Strictly filter out any unresolvable placeholder records
   const validRecords = records.filter((r) => r && r.title && r.title.trim().length > 0);
 
   let headerComments = '';

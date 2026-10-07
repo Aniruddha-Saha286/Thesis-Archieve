@@ -14,8 +14,6 @@ async function runSearchHardeningRegressionTests() {
   console.log('  TEST SUITE: SEARCH HARDENING, CANONICAL PARSER & CAPABILITIES');
   console.log('===============================================================');
 
-  // --- 1. Query Parser & Validator ---
-  // 1.1 Defaults and pagination clamping
   const q1 = parseAndValidateThesisQuery({ search: '  machine learning  ', page: '2', limit: '30' });
   assert.strictEqual(q1.valid, true, 'Query parsing should succeed for valid search');
   assert.strictEqual(q1.searchTerm, 'machine learning', 'Search term should be trimmed');
@@ -27,13 +25,11 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(qClamp.valid, true);
   assert.strictEqual(qClamp.limit, 50, 'Limit must be clamped to max 50');
 
-  // 1.2 Invalid page
   const qBadPage = parseAndValidateThesisQuery({ page: '-5' });
   assert.strictEqual(qBadPage.valid, false);
   assert.strictEqual(qBadPage.code, 'INVALID_PAGE');
   assert.strictEqual(qBadPage.status, 400);
 
-  // 1.3 Year range validation
   const qValidYear = parseAndValidateThesisQuery({ yearMin: '2018', yearMax: '2024' });
   assert.strictEqual(qValidYear.valid, true);
   assert.strictEqual(qValidYear.filters.yearMin, '2018');
@@ -51,7 +47,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(qInvertedYears.valid, false);
   assert.strictEqual(qInvertedYears.code, 'INVALID_YEAR_RANGE');
 
-  // 1.4 ISO Country Code validation
   const qValidCountry = parseAndValidateThesisQuery({ countryCodes: 'bd,us,gb' });
   assert.strictEqual(qValidCountry.valid, true);
   assert.strictEqual(qValidCountry.filters.countryCodes, 'BD,GB,US');
@@ -60,7 +55,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(qInvalidCountry.valid, false);
   assert.strictEqual(qInvalidCountry.code, 'INVALID_COUNTRY_CODE');
 
-  // 1.5 Publication Type validation & alias normalization
   const qArticleAlias = parseAndValidateThesisQuery({ publicationType: 'article' });
   assert.strictEqual(qArticleAlias.valid, true);
   assert.strictEqual(qArticleAlias.filters.publicationType, 'journal-article');
@@ -73,7 +67,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(qInvalidPubType.valid, false);
   assert.strictEqual(qInvalidPubType.code, 'INVALID_PUBLICATION_TYPE');
 
-  // 1.6 Sort Order validation
   const qValidSort = parseAndValidateThesisQuery({ sort: 'citations' });
   assert.strictEqual(qValidSort.valid, true);
   assert.strictEqual(qValidSort.sortOrder, 'citations');
@@ -82,7 +75,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(qInvalidSort.valid, false);
   assert.strictEqual(qInvalidSort.code, 'INVALID_SORT_ORDER');
 
-  // 1.7 FieldId & SubjectId validation
   const qValidField = parseAndValidateThesisQuery({ fieldId: 'https://openalex.org/fields/17' });
   assert.strictEqual(qValidField.valid, true);
   assert.strictEqual(qValidField.filters.fieldId, '17');
@@ -99,7 +91,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(qInvalidSubject.valid, false);
   assert.strictEqual(qInvalidSubject.code, 'INVALID_SUBJECT_ID');
 
-  // 1.8 Strict isSearchInquiry computation
   const qEmpty = parseAndValidateThesisQuery({});
   assert.strictEqual(qEmpty.isSearchInquiry, false, 'Empty query is not a search inquiry');
 
@@ -111,7 +102,6 @@ async function runSearchHardeningRegressionTests() {
 
   console.log('  ✓ [PASS] Canonical query parser rigorously enforces validation, clamping, and inquiry detection');
 
-  // --- 2. Publisher Matching & Legal Suffix Stripping ---
   const cleanedElsevier = cleanPublisherForMatching('Elsevier B.V.');
   assert.strictEqual(cleanedElsevier, 'elsevier', 'Should strip legal suffix B.V.');
 
@@ -121,7 +111,6 @@ async function runSearchHardeningRegressionTests() {
   const cleanedSpringer = cleanPublisherForMatching('Springer Nature Publishing Group LLC');
   assert.strictEqual(cleanedSpringer, 'springer nature', 'Should strip Publishing Group LLC');
 
-  // Match assertions
   assert.strictEqual(
     matchesPublisherFilter({ publisher: 'Elsevier BV' }, 'Elsevier'),
     true,
@@ -154,7 +143,6 @@ async function runSearchHardeningRegressionTests() {
   );
   console.log('  ✓ [PASS] Publisher normalization strips legal suffixes and performs accurate token matching');
 
-  // --- 3. Provider Capability Matrix ---
   assert.strictEqual(PROVIDER_CAPABILITIES.crossref.supportsPublisher, true);
   assert.strictEqual(PROVIDER_CAPABILITIES.openalex.supportsPublisher, true);
   assert.strictEqual(PROVIDER_CAPABILITIES.local.supportsPublisher, true);
@@ -168,7 +156,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(PROVIDER_CAPABILITIES.arxiv.supportsInstitution, false);
   console.log('  ✓ [PASS] Provider capability matrix correctly restricts federated providers without false queries');
 
-  // --- 4. Session Hashing & Pagination Independence ---
   const hashP1 = computeSessionHash('quantum computing', { fieldId: '17' }, 'relevance');
   const hashP2 = computeSessionHash('quantum computing', { fieldId: '17' }, 'relevance');
   assert.strictEqual(hashP1, hashP2, 'Identical queries must produce identical session hashes');
@@ -176,7 +163,6 @@ async function runSearchHardeningRegressionTests() {
   const hashDiffFilter = computeSessionHash('quantum computing', { fieldId: '20' }, 'relevance');
   assert.notStrictEqual(hashP1, hashDiffFilter, 'Different filters must produce distinct session hashes');
 
-  // Verify in-memory session persistence
   const testSession = {
     sessionId: 'sess_test_123',
     sessionHash: hashP1,
@@ -194,7 +180,6 @@ async function runSearchHardeningRegressionTests() {
   assert.strictEqual(retrieved.buffer.length, 1);
   console.log('  ✓ [PASS] Search session hashing is deterministic, pagination-invariant, and stored durably');
 
-  // --- 5. Honest Country Resolution Migration ---
   const rBuet = resolveCountryCodeForThesis({ university: 'Bangladesh University of Engineering and Technology' });
   assert.strictEqual(rBuet.code, 'BD');
 

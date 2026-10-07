@@ -8,7 +8,6 @@ export default function LoginView() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Check if client ID is configured and not a placeholder
   const rawClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const isGoogleConfigured = Boolean(
     rawClientId &&
@@ -123,7 +122,6 @@ export default function LoginView() {
             ))}
           </ul>
 
-          {/* What a result looks like */}
           <figure className="hidden sm:block">
             <figcaption className="text-xs text-[#737067] dark:text-[#9C988F] mb-1.5">What a result looks like</figcaption>
             <div className="relative bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm p-3.5 pl-5 shadow-2xs max-w-xl" aria-hidden="true">
@@ -193,7 +191,7 @@ export default function LoginView() {
             <ol className="space-y-2 text-sm text-[#524F47] dark:text-[#B0ACA2]">
               {[
                 'Sign in with Google.',
-                'Add your university, student ID and a photo of your ID card.',
+                'Add your university, student ID and academic program.',
                 'Start searching once the team has checked your details.',
               ].map((text, index) => (
                 <li key={text} className="flex items-start gap-2.5">
@@ -206,7 +204,7 @@ export default function LoginView() {
             </ol>
 
             <p className="text-xs text-[#737067] dark:text-[#9C988F] leading-relaxed border-t border-[#F0ECE1] dark:border-[#2C2A26] pt-3">
-              Your ID card is used only to confirm you are a student. Editors and administrators sign in here as well.
+              Your academic details are used only to confirm you are a university scholar. Editors and administrators sign in here as well.
             </p>
           </div>
         </div>

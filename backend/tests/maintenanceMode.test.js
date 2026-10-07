@@ -10,7 +10,6 @@ const { requireAdmin } = require('../middleware/rbac');
 async function runMaintenanceModeTests() {
   console.log('Testing: Admin-Controlled Maintenance Mode & Invariants Suite...');
 
-  // Mock response helper
   function createMockResponse() {
     const res = {
       statusCode: 200,
@@ -28,7 +27,6 @@ async function runMaintenanceModeTests() {
     return res;
   }
 
-  // --- Test 1: In-Memory Status Cache Initial State ---
   {
     const status = getCachedMaintenanceStatus();
     assert.strictEqual(typeof status.enabled, 'boolean');
@@ -36,7 +34,6 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] Cached maintenance status returns authoritative default shape');
   }
 
-  // --- Test 2: Maintenance Disabled - Unrestricted Access ---
   {
     await setMaintenanceStatus({
       enabled: false,
@@ -57,7 +54,6 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] When maintenance is disabled, student requests proceed without disruption');
   }
 
-  // --- Test 3: Maintenance Enabled - Blocking Student Traffic with 503 ---
   {
     const customNotice = 'Scheduled depository maintenance in progress. Expected return 18:00 UTC.';
     await setMaintenanceStatus({
@@ -85,7 +81,6 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] When maintenance is enabled, student requests are blocked with HTTP 503 and custom notice');
   }
 
-  // --- Test 4: Maintenance Enabled - Whitelisted Public & Auth Endpoints Pass ---
   {
     const exemptEndpoints = [
       '/api/health',
@@ -111,7 +106,6 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] Essential health, system status, and authentication routes remain reachable during maintenance');
   }
 
-  // --- Test 5: Maintenance Enabled - Administrator Role Bypass ---
   {
     let nextCalled = false;
     const req = {
@@ -130,13 +124,12 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] Administrator role bypass allows full access during maintenance');
   }
 
-  // --- Test 6: Maintenance Enabled - Admin Control Routes Allowed ---
   {
     let nextCalled = false;
     const req = {
       baseUrl: '/api',
       path: '/admin/system/maintenance',
-      user: { role: 'editor' }, // Even non-admin hits admin route; maintenance middleware passes it through to RBAC
+      user: { role: 'editor' },
     };
     const res = createMockResponse();
 
@@ -148,9 +141,7 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] Admin endpoints pass through maintenance middleware to trigger strict RBAC validation');
   }
 
-  // --- Test 7: Quota Protection Invariant ---
   {
-    // Simulate search middleware pipeline: [checkMaintenance] -> [checkQuota] -> [executeSearch]
     let quotaDeducted = false;
     const mockCheckQuota = (req, res, next) => {
       quotaDeducted = true;
@@ -160,7 +151,6 @@ async function runMaintenanceModeTests() {
     const req = { baseUrl: '/api', path: '/theses', user: { role: 'student' } };
     const res = createMockResponse();
 
-    // Run middleware chain
     checkMaintenance(req, res, () => {
       mockCheckQuota(req, res, () => {});
     });
@@ -169,9 +159,7 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] Zero quota consumption invariant verified (requests rejected before quota middleware)');
   }
 
-  // --- Test 8: RBAC Security Gate on Maintenance Mode Modifications ---
   {
-    // Test 8a: Student cannot toggle maintenance
     {
       const req = { user: { role: 'student' } };
       const res = createMockResponse();
@@ -182,7 +170,6 @@ async function runMaintenanceModeTests() {
       assert.strictEqual(res.body?.code, 'ADMIN_REQUIRED');
     }
 
-    // Test 8b: Editor cannot toggle maintenance
     {
       const req = { user: { role: 'editor', editorPermissions: ['theses.edit'] } };
       const res = createMockResponse();
@@ -193,7 +180,6 @@ async function runMaintenanceModeTests() {
       assert.strictEqual(res.body?.code, 'ADMIN_REQUIRED');
     }
 
-    // Test 8c: Admin is strictly authorized
     {
       const req = { user: { role: 'admin' } };
       const res = createMockResponse();
@@ -204,7 +190,6 @@ async function runMaintenanceModeTests() {
     console.log('  ✓ [PASS] RBAC strictly restricts maintenance toggle to Admin (Editor and Student rejected with 403)');
   }
 
-  // Cleanup: Reset maintenance back to false
   await setMaintenanceStatus({
     enabled: false,
     message: 'System operating normally',

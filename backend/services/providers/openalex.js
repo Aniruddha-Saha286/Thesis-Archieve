@@ -76,7 +76,6 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
     params.append('per_page', String(Math.min(limit, 50)));
     params.append('page', String(page));
 
-    // Build OpenAlex filters
     const filterParts = [];
 
     if (filters.publicationType) {
@@ -105,13 +104,11 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       filterParts.push(`to_publication_date:${filters.yearMax}-12-31`);
     }
 
-    // Institution filter (works filter: institutions.id)
     if (filters.institutionId) {
       const instId = String(filters.institutionId).trim().split('/').pop();
       filterParts.push(`institutions.id:${instId}`);
     }
 
-    // Country code filter (works filter: authorships.institutions.country_code)
     if (filters.countryCodes) {
       let codes = [];
       if (Array.isArray(filters.countryCodes)) {
@@ -124,13 +121,11 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       }
     }
 
-    // Author filter (works filter: authorships.author.id)
     if (filters.authorId) {
       const authId = String(filters.authorId).trim().split('/').pop();
       filterParts.push(`authorships.author.id:${authId}`);
     }
 
-    // Minimum citations filter (works filter: cited_by_count:>X)
     if (filters.minCitations && !isNaN(parseInt(filters.minCitations))) {
       const minCit = Math.max(0, parseInt(filters.minCitations));
       if (minCit > 0) {
@@ -138,14 +133,12 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       }
     }
 
-    // OpenAlex Field ID filter (e.g. from Institution Landscape chart click)
     if (filters.fieldId) {
       const fId = String(filters.fieldId).trim().split('/').pop();
       filterParts.push(`primary_topic.field.id:${fId}`);
     } else {
       const subId = filters.subjectId || (filters.category && filters.category !== 'All Disciplines' ? mapToCanonicalSubject(filters.category)?.id : null);
       if (subId) {
-        // Canonical Subject / Discipline filter
         const sub = getSubjectById(subId);
         if (sub) {
           if (sub.openAlexTopicIds && sub.openAlexTopicIds.length > 0) {
@@ -165,7 +158,6 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       params.append('filter', filterParts.join(','));
     }
 
-    // Sort order: OpenAlex only allows relevance_score:desc if a search query is present
     const hasQuery = Boolean(query && query.trim());
     if (sort === 'citations') {
       params.append('sort', 'cited_by_count:desc');
@@ -174,7 +166,6 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
     } else if (hasQuery) {
       params.append('sort', 'relevance_score:desc');
     } else {
-      // Without search query, sort by publication date descending as natural default
       params.append('sort', 'publication_date:desc');
     }
 
@@ -215,13 +206,11 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
     const records = items.map((w) => {
       const doi = w.doi ? w.doi.replace('https://doi.org/', '').toLowerCase() : null;
 
-      // Extract authors with affiliations
       const authors = (w.authorships || []).map((auth) => ({
         name: auth.author?.display_name || 'Academic Author',
         affiliation: auth.institutions?.[0]?.display_name || null,
       })).filter((a) => a.name);
 
-      // Extract rich authorships with institutions
       const authorships = (w.authorships || []).map((auth) => ({
         author: {
           id: auth.author?.id ? String(auth.author.id).split('/').pop() : null,
@@ -238,8 +227,6 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
         rawAffiliation: auth.raw_affiliation_string || null,
       }));
 
-      // Never derive degree-awarding institution from author affiliation.
-      // Must remain null unless an explicit degree-granting institution field exists in source metadata.
       let awardingInstitution = null;
       if (w.awarding_institution && w.awarding_institution.display_name) {
         awardingInstitution = {
@@ -252,11 +239,9 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
         };
       }
 
-      // Extract canonical subjects
       const combinedTopics = [w.primary_topic, ...(Array.isArray(w.topics) ? w.topics : [])].filter(Boolean);
       const canonicalSubjects = extractSubjectsFromOpenAlex(w.concepts, combinedTopics, filters?.subjectId);
 
-      // Reconstruct abstract from inverted index if present
       let cleanAbstract = null;
       if (w.abstract_inverted_index) {
         try {
@@ -270,7 +255,6 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
         } catch (e) {}
       }
 
-      // Check for direct PDF URL
       const candidatePdf = w.best_oa_location?.pdf_url || w.primary_location?.pdf_url || w.open_access?.oa_url || null;
       const isDirectPdf = Boolean(
         candidatePdf && (

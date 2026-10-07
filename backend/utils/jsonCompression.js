@@ -1,14 +1,7 @@
-// Sends large JSON answers gzip-compressed, using only Node's built-in zlib.
-//
-// A page of search results is 50 to 150 KB of JSON; compressed it is about a fifth of that,
-// which matters on mobile data. Small answers are left alone because compressing them costs
-// more than it saves. Only res.json() is touched, so file downloads, Socket.IO and anything
-// streamed are unaffected.
 const zlib = require('zlib');
 
 function acceptsGzip(req) {
   const header = String(req.headers['accept-encoding'] || '');
-  // "gzip;q=0" means the client refuses gzip
   return /(^|,)\s*gzip\s*(;(?!\s*q=0(\.0+)?\s*(,|$))[^,]*)?(,|$)/i.test(header) || /(^|,)\s*\*\s*(,|$)/.test(header);
 }
 
@@ -25,7 +18,6 @@ function jsonCompression({ threshold = 1024, level = 6 } = {}) {
       } catch {
         return sendJson(payload);
       }
-      // Nothing to send, already encoded by someone else, or too small to be worth it
       if (typeof body !== 'string' || res.getHeader('Content-Encoding') || Buffer.byteLength(body) < threshold) {
         return sendJson(payload);
       }

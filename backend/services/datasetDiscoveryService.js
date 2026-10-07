@@ -2,7 +2,6 @@ const { URL } = require('url');
 const crypto = require('crypto');
 const { normalizeDoi, compareDois } = require('../utils/doiNormalizer');
 
-// Bounded in-memory cache with 1-hour TTL (max 500 items)
 const datasetCache = new Map();
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
@@ -14,7 +13,6 @@ function getCached(key) {
     datasetCache.delete(key);
     return null;
   }
-  // Return immutable deep copy to prevent cross-request cache pollution
   return JSON.parse(JSON.stringify(item.data));
 }
 
@@ -26,10 +24,6 @@ function setCached(key, data) {
   datasetCache.set(key, { data, cachedAt: Date.now() });
 }
 
-/**
- * SSRF Guard: Validates that an outbound dataset URL targets allowed public scholarly repositories
- * and does not point to internal networks, localhost, or cloud metadata services.
- */
 function isSafeDatasetUrl(urlStr) {
   if (!urlStr || typeof urlStr !== 'string') return false;
   try {
@@ -38,7 +32,6 @@ function isSafeDatasetUrl(urlStr) {
 
     const hostname = parsed.hostname.toLowerCase();
 
-    // Block private/local IP ranges and hostnames
     if (
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
@@ -53,7 +46,6 @@ function isSafeDatasetUrl(urlStr) {
       return false;
     }
 
-    // Whitelist approved scholarly dataset providers & public repositories
     const allowedDomains = [
       'datacite.org',
       'api.datacite.org',
@@ -70,7 +62,7 @@ function isSafeDatasetUrl(urlStr) {
       'osf.io',
       'ncbi.nlm.nih.gov',
       'ieee-dataport.org',
-      'harvard.edu', // Harvard Dataverse
+      'harvard.edu',
       'dataverse.org',
     ];
 
@@ -80,9 +72,6 @@ function isSafeDatasetUrl(urlStr) {
   }
 }
 
-/**
- * Normalizes dataset format representation without fabricating fake "CSV" tags
- */
 function extractFormats(formatsList, filesList) {
   const formats = new Set();
 
@@ -108,9 +97,6 @@ function extractFormats(formatsList, filesList) {
   return Array.from(formats);
 }
 
-/**
- * Inspects DataCite metadata relation type and direction truthfully.
- */
 function evaluateDataCiteRelation(attrs, doi, isLinked) {
   if (doi && Array.isArray(attrs.relatedIdentifiers)) {
     const match = attrs.relatedIdentifiers.find((rel) => {
@@ -162,10 +148,6 @@ function evaluateDataCiteRelation(attrs, doi, isLinked) {
   };
 }
 
-/**
- * Searches DataCite for datasets explicitly linked or related to a DOI or keyword
- * Supports genuine pagination with page number and page size.
- */
 async function queryDataCite({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -224,7 +206,6 @@ async function queryDataCite({ query, doi, isLinked = false, page = 1, size = 5 
       const directUrl = attrs.url || (itemDoi ? `https://doi.org/${itemDoi}` : null);
       const formats = extractFormats(attrs.formats, null);
 
-      // Honest license representation (never fabricate Open Access when missing)
       let license = 'Unknown / Not specified';
       if (attrs.rightsList && attrs.rightsList.length > 0) {
         license = attrs.rightsList[0].rightsIdentifier || attrs.rightsList[0].rights || 'Unknown / Not specified';
@@ -263,9 +244,6 @@ async function queryDataCite({ query, doi, isLinked = false, page = 1, size = 5 
   }
 }
 
-/**
- * Inspects Zenodo metadata relation type and direction truthfully.
- */
 function evaluateZenodoRelation(meta, doi, isLinked) {
   if (doi && Array.isArray(meta.related_identifiers)) {
     const match = meta.related_identifiers.find((rel) => {
@@ -317,10 +295,6 @@ function evaluateZenodoRelation(meta, doi, isLinked) {
   };
 }
 
-/**
- * Searches Zenodo for datasets explicitly linked or related
- * Supports genuine pagination with page number and page size.
- */
 async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -396,7 +370,6 @@ async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 })
         }
       }
 
-      // Honest license representation
       let license = 'Unknown / Not specified';
       if (meta.license) {
         license = meta.license.id || (typeof meta.license === 'string' ? meta.license : 'Unknown / Not specified');
@@ -435,9 +408,6 @@ async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 })
   }
 }
 
-/**
- * Searches Figshare for open scientific datasets
- */
 async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -474,7 +444,7 @@ async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 
       search_for: searchTerm,
       page: pageNum,
       page_size: Math.min(size, 20),
-      item_type: 3, // Datasets
+      item_type: 3,
     };
 
     const res = await fetch('https://api.figshare.com/v2/articles/search', {
@@ -503,7 +473,6 @@ async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 
           it.url_public_html ||
           (itemDoi ? `https://doi.org/${itemDoi}` : `https://figshare.com/articles/dataset/${it.id}`);
 
-        // Verify genuine relational evidence from Figshare metadata
         const hasVerifiedRel = Boolean(
           doi && it.resource_doi && compareDois(it.resource_doi, doi)
         );
@@ -547,9 +516,6 @@ async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 
   }
 }
 
-/**
- * Searches Dryad for curated scientific data packages
- */
 async function queryDryad({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -627,7 +593,6 @@ async function queryDryad({ query, doi, isLinked = false, page = 1, size = 5 }) 
           else license = it.license;
         }
 
-        // Strict relationship verification: verify that Dryad metadata explicitly links to the queried DOI
         let hasVerifiedRel = false;
         if (doi && Array.isArray(it.relatedWorks)) {
           hasVerifiedRel = it.relatedWorks.some((rw) => {
@@ -676,25 +641,9 @@ async function queryDryad({ query, doi, isLinked = false, page = 1, size = 5 }) 
   }
 }
 
-// ---------------------------------------------------------------------------
-// Newer sources: Hugging Face, Harvard Dataverse and OpenAIRE ScholeXplorer
-// ---------------------------------------------------------------------------
-// They follow the same rules as the four sources above:
-//   - same arguments in, same { records, totalCount, hasMore, error } out
-//   - every record carries the same fields, so the pages that show datasets need no changes
-//     (a few extra fields such as "authors" or "downloads" are added on top)
-//   - every link is checked with isSafeDatasetUrl before it is returned
-//   - nothing is thrown: a failure comes back in "error", so one broken source can never
-//     take the others down with it
-//   - a 5 second limit per request
-// One difference: in OFFLINE_MODE these three read a saved copy of a real-shaped response
-// from tests/fixtures and run it through the normal mapping code, so the deterministic
-// test run exercises the same code path as production.
 
 const DATASET_USER_AGENT = 'ThesisArchive/1.0 (academic open research; contact@thesisarchive.org)';
 
-// The offline fixtures live with the tests. If the tests folder is not deployed, offline
-// mode simply returns nothing for these sources.
 function loadOfflineDatasetFixture(name) {
   try {
     return require('../tests/fixtures/datasetSourceFixtures')[name] || null;
@@ -703,14 +652,11 @@ function loadOfflineDatasetFixture(name) {
   }
 }
 
-// Reads the year from the start of a date such as "2019-12-11T15:26:10Z". Returns null
-// instead of NaN when the date is missing or unreadable, so the page never prints "NaN".
 function yearFromDate(value) {
   const match = /^(\d{4})/.exec(typeof value === 'string' ? value.trim() : '');
   return match ? Number(match[1]) : null;
 }
 
-// Keeps only real, non-empty text values from a list (drops nulls, objects, blanks).
 function cleanStringList(list, max = 20) {
   if (!Array.isArray(list)) return [];
   const out = [];
@@ -723,8 +669,6 @@ function cleanStringList(list, max = 20) {
   return out;
 }
 
-// Hugging Face stores most facts about a dataset as "name:value" tags, for example
-// "language:en" or "license:mit". This returns every value for one name.
 function huggingFaceTagValues(tags, name) {
   if (!Array.isArray(tags)) return [];
   const prefix = `${name}:`;
@@ -738,9 +682,6 @@ function huggingFaceTagValues(tags, name) {
   return values;
 }
 
-// The Hub builds its "description" from the dataset's README. It is full of tabs and line
-// breaks and usually opens with the headings "Dataset Card for X" and "Dataset Summary",
-// which tell the reader nothing. Tidy it into one short readable paragraph.
 function cleanHuggingFaceDescription(raw) {
   if (typeof raw !== 'string') return null;
   const text = raw
@@ -753,8 +694,6 @@ function cleanHuggingFaceDescription(raw) {
   return text ? text.slice(0, 300) : null;
 }
 
-// Hugging Face describes size as a range of row counts, written like "10K<n<100K".
-// Turn that into words a visitor can read. This is a number of rows, not a file size.
 function describeHuggingFaceSize(category) {
   if (typeof category !== 'string') return null;
   const text = category.trim();
@@ -767,26 +706,18 @@ function describeHuggingFaceSize(category) {
   return null;
 }
 
-// A dataset id is "name" or "owner/name", made of letters, digits, dot, dash and underscore.
-// We build the link from the id, so anything else is refused.
 const HUGGING_FACE_ID_PATTERN = /^[A-Za-z0-9][\w.-]*(\/[A-Za-z0-9][\w.-]*)?$/;
 
-// The Hub has no "page 2" parameter for this call (it pages with one-time cursors), so to
-// show page N we ask for the first N pages' worth and keep the last slice. This cap stops
-// a very deep page from turning into a huge download.
 const HUGGING_FACE_MAX_FETCH = 100;
 
 function mapHuggingFaceItem(item) {
   if (!item || typeof item !== 'object') return null;
   const hubId = typeof item.id === 'string' ? item.id.trim() : '';
   if (!HUGGING_FACE_ID_PATTERN.test(hubId)) return null;
-  // Private or switched-off datasets cannot be opened by a visitor, so do not list them.
   if (item.disabled === true || item.private === true) return null;
 
   const card = item.cardData && typeof item.cardData === 'object' ? item.cardData : {};
   const tags = Array.isArray(item.tags) ? item.tags : [];
-  // The tags are worked out by the Hub from the actual files, the card is typed in by the
-  // uploader. Prefer the tags and fall back to the card.
   const fromTagsOrCard = (tagName, cardKey) => {
     const fromTags = huggingFaceTagValues(tags, tagName);
     if (fromTags.length > 0) return fromTags;
@@ -799,11 +730,9 @@ function mapHuggingFaceItem(item) {
   const sizeCategory = fromTagsOrCard('size_categories', 'size_categories')[0] || null;
   const modalities = huggingFaceTagValues(tags, 'modality');
 
-  // Honest license representation: "unknown" on the Hub means exactly that
   const licenseId = fromTagsOrCard('license', 'license')[0] || null;
   const license = licenseId && licenseId.toLowerCase() !== 'unknown' ? licenseId : 'Unknown / Not specified';
 
-  // Some Hub datasets have a DOI. Keeping it lets us spot the same dataset in DataCite.
   const itemDoi = normalizeDoi(huggingFaceTagValues(tags, 'doi')[0] || '');
   const url = `https://huggingface.co/datasets/${hubId}`;
   const author = typeof item.author === 'string' && item.author.trim() ? item.author.trim() : hubId.includes('/') ? hubId.split('/')[0] : null;
@@ -816,7 +745,6 @@ function mapHuggingFaceItem(item) {
     publisher: 'Hugging Face Hub',
     publicationYear: yearFromDate(item.createdAt),
     description: cleanHuggingFaceDescription(item.description),
-    // Only file formats the Hub itself reports (never invented)
     formats: extractFormats(huggingFaceTagValues(tags, 'format'), null),
     size: describeHuggingFaceSize(sizeCategory),
     license,
@@ -826,7 +754,6 @@ function mapHuggingFaceItem(item) {
     relationEvidence: 'Discovered through keyword search of the Hugging Face Hub dataset catalogue.',
     source: 'Hugging Face',
     sourceUrl: url,
-    // Extra details that only this source has
     authors: author ? [author] : [],
     tags: cleanStringList([...taskCategories, ...modalities, ...languages], 12),
     languages: languages.slice(0, 20),
@@ -835,17 +762,10 @@ function mapHuggingFaceItem(item) {
     downloads: typeof item.downloads === 'number' ? item.downloads : null,
     likes: typeof item.likes === 'number' ? item.likes : null,
     lastModified: typeof item.lastModified === 'string' ? item.lastModified : null,
-    // true when the owner asks visitors to request access before downloading
     gated: Boolean(item.gated),
   };
 }
 
-/**
- * Searches the Hugging Face Hub for datasets (mostly machine-learning data).
- * Keyword search only: the Hub cannot be asked "which datasets belong to this paper",
- * so a call that has a DOI but no keywords returns nothing without calling out.
- * Results come back most-downloaded first.
- */
 async function queryHuggingFace({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -864,7 +784,6 @@ async function queryHuggingFace({ query, doi, isLinked = false, page = 1, size =
     if (process.env.OFFLINE_MODE === 'true') {
       items = loadOfflineDatasetFixture('huggingFaceDatasetsResponse') || [];
     } else {
-      // full=true adds the dataset card (licence, languages, tasks) to each result.
       const url = `https://huggingface.co/api/datasets?search=${encodeURIComponent(searchTerm)}&limit=${wanted}&full=true&sort=downloads&direction=-1`;
       const res = await fetch(url, {
         signal: AbortSignal.timeout(5000),
@@ -891,7 +810,6 @@ async function queryHuggingFace({ query, doi, isLinked = false, page = 1, size =
 
     return {
       records: mapped,
-      // The Hub does not say how many datasets match in total
       totalCount: mapped.length,
       hasMore: items.length >= wanted && wanted < HUGGING_FACE_MAX_FETCH,
       error: null,
@@ -901,9 +819,6 @@ async function queryHuggingFace({ query, doi, isLinked = false, page = 1, size =
   }
 }
 
-// Dataverse search is built on Solr, where characters such as : / ( ) " have a special
-// meaning. A stray one in what a visitor typed makes the whole search fail, so they are
-// replaced with spaces. A leading "-" (which means "exclude this word") is removed too.
 function cleanDataverseQuery(text) {
   return String(text || '')
     .replace(/&&|\|\||[\\+!(){}[\]^"~*?:/]/g, ' ')
@@ -917,13 +832,9 @@ function mapDataverseItem(it, doi) {
   if (it.type && it.type !== 'dataset') return null;
   if (typeof it.name !== 'string' || !it.name.trim()) return null;
 
-  // global_id looks like "doi:10.7910/DVN/ABC123", or "hdl:1902.1/12345" for older deposits
   const globalId = typeof it.global_id === 'string' ? it.global_id.trim() : '';
   const itemDoi = /^doi:/i.test(globalId) ? normalizeDoi(globalId) : null;
 
-  // Prefer the link Dataverse gives us. If it is missing or points somewhere we do not
-  // allow (a Handle link, for example), fall back to links we build ourselves on hosts we
-  // do allow: the DOI resolver, then the dataset's own page on Harvard Dataverse.
   let itemUrl = typeof it.url === 'string' && isSafeDatasetUrl(it.url.trim()) ? it.url.trim() : null;
   if (!itemUrl && itemDoi) {
     itemUrl = `https://doi.org/${itemDoi}`;
@@ -932,8 +843,6 @@ function mapDataverseItem(it, doi) {
     itemUrl = `https://dataverse.harvard.edu/dataset.xhtml?persistentId=${encodeURIComponent(globalId)}`;
   }
 
-  // Strict relationship verification: a dataset on Dataverse can name the publication it
-  // belongs to ("Related Publication"). Only an exact DOI match counts as a link.
   let hasVerifiedRel = false;
   if (doi && Array.isArray(it.publications)) {
     hasVerifiedRel = it.publications.some((pub) => pub && compareDois(pub.url, doi));
@@ -947,15 +856,11 @@ function mapDataverseItem(it, doi) {
     title: it.name.trim(),
     url: itemUrl,
     doi: itemDoi,
-    // "publisher" is the name of the collection inside Harvard Dataverse that released it
     publisher: (typeof it.publisher === 'string' && it.publisher.trim()) || (typeof it.name_of_dataverse === 'string' && it.name_of_dataverse.trim()) || 'Harvard Dataverse',
     publicationYear: yearFromDate(it.published_at),
     description: typeof it.description === 'string' && it.description.trim() ? it.description.replace(/<[^>]*>/g, '').slice(0, 300) : null,
-    // The search result does not list file types, so none are claimed
     formats: [],
-    // Nor a size in bytes. The number of files is the honest thing we can show.
     size: fileCount !== null && fileCount > 0 ? `${fileCount} ${fileCount === 1 ? 'file' : 'files'}` : null,
-    // The licence is not part of the search result either
     license: 'Unknown / Not specified',
     isLinked: hasVerifiedRel,
     relationType: hasVerifiedRel ? 'Direct Supplemental Dataset' : 'Topic Similarity Discovery',
@@ -965,7 +870,6 @@ function mapDataverseItem(it, doi) {
       : 'Discovered through search against Harvard Dataverse without verified relation.',
     source: 'Harvard Dataverse',
     sourceUrl: itemUrl,
-    // Extra details that only this source has
     authors: cleanStringList(it.authors),
     subjects: cleanStringList(it.subjects),
     keywords: cleanStringList(it.keywords),
@@ -974,18 +878,11 @@ function mapDataverseItem(it, doi) {
   };
 }
 
-/**
- * Searches Harvard Dataverse (strong in social science and replication data).
- * With keywords it is a normal search. With a DOI it looks for datasets that mention that
- * DOI, and marks a dataset as linked only when its "Related Publication" is that DOI.
- * Supports genuine pagination with page number and page size.
- */
 async function queryDataverse({ query, doi, isLinked = false, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(Math.max(1, parseInt(size) || 5), 20);
 
-    // A DOI is searched as an exact phrase (in quotes) so its "/" is not read as a command.
     let searchTerm = '';
     if (doi) {
       const cleanDoi = normalizeDoi(String(doi)) || String(doi).replace(/["\\\s]/g, '');
@@ -999,7 +896,6 @@ async function queryDataverse({ query, doi, isLinked = false, page = 1, size = 5
 
     let data;
     if (process.env.OFFLINE_MODE === 'true') {
-      // The saved response holds one page. Later pages are empty, like a real last page.
       const fixture = loadOfflineDatasetFixture('dataverseSearchResponse');
       const fixtureItems = fixture?.data?.items || [];
       data = {
@@ -1017,9 +913,6 @@ async function queryDataverse({ query, doi, isLinked = false, page = 1, size = 5
         },
       });
 
-      // Harvard Dataverse sits behind a bot filter that can answer "202 Accepted" with a
-      // browser challenge instead of data. That counts as "ok" in HTTP terms but it is
-      // not a search result, so only a plain 200 is accepted.
       if (!res.ok || res.status !== 200) {
         return { records: [], totalCount: 0, hasMore: false, error: `Harvard Dataverse HTTP ${res.status}` };
       }
@@ -1036,7 +929,6 @@ async function queryDataverse({ query, doi, isLinked = false, page = 1, size = 5
       };
     }
 
-    // Never keep more than we asked for, even if the server sends extra
     const items = (Array.isArray(data.data.items) ? data.data.items : []).slice(0, pageSize);
     const totalCount = typeof data.data.total_count === 'number' ? data.data.total_count : items.length;
 
@@ -1055,11 +947,6 @@ async function queryDataverse({ query, doi, isLinked = false, page = 1, size = 5
   }
 }
 
-/**
- * Reads the relation type of a ScholeXplorer link truthfully.
- * "Name" is one of a few broad words (IsSupplementedBy, References, IsRelatedTo...).
- * "SubType" sometimes carries the more exact original wording, so both are looked at.
- */
 function evaluateScholixRelation(link) {
   const rel = link && typeof link.RelationshipType === 'object' && link.RelationshipType ? link.RelationshipType : {};
   const name = typeof rel.Name === 'string' ? rel.Name.trim() : '';
@@ -1100,7 +987,6 @@ function evaluateScholixRelation(link) {
 
 function mapScholixLink(link) {
   if (!link || typeof link !== 'object') return null;
-  // The stable version of the API writes "target", the newer schema writes "Target".
   const target = link.target || link.Target;
   if (!target || typeof target !== 'object') return null;
   if (String(target.Type || '').toLowerCase() !== 'dataset') return null;
@@ -1114,9 +1000,6 @@ function mapScholixLink(link) {
     }
   }
 
-  // With a DOI we build the link ourselves, so it always goes to the official DOI resolver.
-  // Without one (database accession numbers, for example) we can only use the link that
-  // came with the identifier, and the safety check below decides whether it is allowed.
   let itemUrl = itemDoi ? `https://doi.org/${itemDoi}` : null;
   if (!itemUrl) {
     const withUrl = identifiers.find((ident) => ident && typeof ident.IDURL === 'string' && ident.IDURL.trim());
@@ -1136,7 +1019,6 @@ function mapScholixLink(link) {
     doi: itemDoi,
     publisher: cleanStringList(publishers.map((p) => p && (p.name || p.Name)), 1)[0] || 'Not specified',
     publicationYear: yearFromDate(target.PublicationDate),
-    // A link record carries no description, formats, size or licence of the dataset
     description: null,
     formats: [],
     size: null,
@@ -1147,35 +1029,23 @@ function mapScholixLink(link) {
     relationEvidence: rel.relationEvidence,
     source: 'OpenAIRE ScholeXplorer',
     sourceUrl: itemUrl,
-    // Extra details that only this source has
     authors: cleanStringList(creators.map((c) => c && (c.name || c.Name)), 10),
     linkProviders: cleanStringList((Array.isArray(link.LinkProvider) ? link.LinkProvider : []).map((p) => p && (p.name || p.Name)), 5),
-    // Used only to put the strongest links first; removed before the record is returned
     relationRank: rel.rank,
   };
 }
 
 const SCHOLEXPLORER_DEFAULT_URL = 'https://api.scholexplorer.openaire.eu/v2/Links';
 
-// The address can be changed with SCHOLEXPLORER_API_URL (for example to move to the v3
-// service) without touching the code. Anything that is not an https address is ignored.
 function getScholexplorerUrl() {
   const fromEnv = String(process.env.SCHOLEXPLORER_API_URL || '').trim();
   try {
     if (fromEnv && new URL(fromEnv).protocol === 'https:') return fromEnv;
   } catch (err) {
-    // fall through to the default
   }
   return SCHOLEXPLORER_DEFAULT_URL;
 }
 
-/**
- * Asks OpenAIRE ScholeXplorer which datasets a paper is linked to.
- * ScholeXplorer collects "this paper uses / cites / is supplemented by that dataset"
- * statements from Crossref, DataCite, EMBL-EBI and others. It works from the paper's DOI
- * only, so it is used when enriching one paper and never for keyword search.
- * Every record it returns is a declared link, so isLinked is always true.
- */
 async function queryScholexplorer({ query, doi, isLinked = true, page = 1, size = 5 }) {
   try {
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -1191,10 +1061,7 @@ async function queryScholexplorer({ query, doi, isLinked = true, page = 1, size 
     } else {
       const endpoint = new URL(getScholexplorerUrl());
       endpoint.searchParams.set('sourcePid', cleanDoi);
-      // Ask only for links that end at a dataset. A well-cited paper has hundreds of links
-      // to other papers, and its few dataset links would otherwise be lost among them.
       endpoint.searchParams.set('targetType', 'dataset');
-      // ScholeXplorer counts pages from 0
       if (pageNum > 1) endpoint.searchParams.set('page', String(pageNum - 1));
 
       const res = await fetch(endpoint.toString(), {
@@ -1214,9 +1081,6 @@ async function queryScholexplorer({ query, doi, isLinked = true, page = 1, size 
 
     const links = Array.isArray(data && data.result) ? data.result : [];
 
-    // The same dataset is often reported several times (by different link providers, or
-    // once as "supplement" and once as "related"). Put the strongest relation first and
-    // keep one record per dataset.
     const seen = new Set();
     const mapped = links
       .map(mapScholixLink)
@@ -1242,10 +1106,6 @@ async function queryScholexplorer({ query, doi, isLinked = true, page = 1, size 
   }
 }
 
-/**
- * Enriches a specific paper with authentic Linked Datasets (explicit DOI relations)
- * and complementary Related Datasets (topic similarity discovery)
- */
 async function enrichPaperDatasets({
   paperId = null,
   doi = null,
@@ -1259,7 +1119,6 @@ async function enrichPaperDatasets({
   const normTitle = title ? String(title).trim().toLowerCase() : '';
   const normUrl = explicitDatasetUrl ? String(explicitDatasetUrl).trim().toLowerCase() : '';
 
-  // Deterministic SHA-256 cache key ensuring zero cross-paper cache leakage
   const keyPayload = `${normId}|${normDoi}|${normTitle}|${normUrl}`;
   const cacheKey = `enrich_${crypto.createHash('sha256').update(keyPayload).digest('hex')}`;
   const cached = getCached(cacheKey);
@@ -1270,11 +1129,8 @@ async function enrichPaperDatasets({
   const seenDois = new Set();
   const seenUrls = new Set();
   const providerErrors = {};
-  // Every provider we actually sent a question to, so we can tell "all of them failed"
-  // apart from "some failed"
   const askedProviders = new Set();
 
-  // 1. Author-deposited datasetUrl
   if (explicitDatasetUrl && isSafeDatasetUrl(explicitDatasetUrl)) {
     const formats = explicitDatasetFormat ? [explicitDatasetFormat.toUpperCase()] : [];
     linkedDatasets.push({
@@ -1297,10 +1153,7 @@ async function enrichPaperDatasets({
     seenUrls.add(explicitDatasetUrl.toLowerCase());
   }
 
-  // 2. Fetch linked datasets via DOI relations if DOI is present
   if (doi) {
-    // All of these run at the same time, each with its own 5 second limit, so adding a
-    // source does not make the visitor wait longer.
     const [dcLinkedRes, zenodoLinkedRes, figshareLinkedRes, dryadLinkedRes, dataverseLinkedRes, scholixLinkedRes] = await Promise.all([
       queryDataCite({ doi, isLinked: true, page: 1, size: 5 }),
       queryZenodo({ doi, isLinked: true, page: 1, size: 5 }),
@@ -1341,9 +1194,6 @@ async function enrichPaperDatasets({
       }
     }
 
-    // ScholeXplorer is handled on its own because every record it returns is a declared
-    // link between this exact paper and a dataset (not a keyword guess), so it always
-    // belongs under "linked", whatever the relation is called.
     for (const d of scholixLinkedRes.records) {
       const dKey = d.doi ? d.doi.toLowerCase() : d.url.toLowerCase();
       if (!seenDois.has(dKey) && !seenUrls.has(d.url.toLowerCase())) {
@@ -1354,9 +1204,6 @@ async function enrichPaperDatasets({
         continue;
       }
 
-      // Another source already returned this dataset. Keep that record (it has the
-      // description, formats and licence that a link record lacks), but if it was filed
-      // under "related", move it up to "linked": we now know the link is real.
       const relatedIndex = relatedDatasets.findIndex(
         (r) => (d.doi && r.doi && r.doi.toLowerCase() === d.doi.toLowerCase()) || r.url.toLowerCase() === d.url.toLowerCase()
       );
@@ -1364,7 +1211,6 @@ async function enrichPaperDatasets({
         const [existing] = relatedDatasets.splice(relatedIndex, 1);
         existing.isLinked = true;
         if (existing.relationshipDirection === 'topic') {
-          // It was only a keyword match before. Replace that with the declared relation.
           existing.relationType = d.relationType;
           existing.relationshipDirection = d.relationshipDirection;
           existing.relationEvidence = d.relationEvidence;
@@ -1374,7 +1220,6 @@ async function enrichPaperDatasets({
     }
   }
 
-  // 3. Fetch related datasets by title/topic keywords
   if (title && title.trim().length > 5) {
     const cleanWords = title
       .replace(/[^\w\s]/g, '')
@@ -1384,8 +1229,6 @@ async function enrichPaperDatasets({
       .join(' ');
 
     if (cleanWords) {
-      // Hugging Face is left out here on purpose: its search only finds datasets whose
-      // name contains every word, and words taken from a paper title almost never do.
       const [dcRelatedRes, zenodoRelatedRes, figshareRelatedRes, dryadRelatedRes, dataverseRelatedRes] = await Promise.all([
         queryDataCite({ query: cleanWords, isLinked: false, page: 1, size: 3 }),
         queryZenodo({ query: cleanWords, isLinked: false, page: 1, size: 3 }),
@@ -1421,9 +1264,6 @@ async function enrichPaperDatasets({
     }
   }
 
-  // An outage means every provider we asked failed. (With four providers this used to be
-  // written as "4 errors". It is counted against the real list now, so that one of the
-  // newer sources answering is enough to not call it an outage.)
   const hasOutage = askedProviders.size > 0 && [...askedProviders].every((name) => Boolean(providerErrors[name]));
 
   const result = {
@@ -1435,20 +1275,12 @@ async function enrichPaperDatasets({
     retrievedAt: new Date().toISOString(),
   };
 
-  // Only cache if there is not a total provider outage
   if (!result.hasOutage) {
     setCached(cacheKey, result);
   }
   return result;
 }
 
-/**
- * Searches across official open science data repositories (DataCite, Zenodo, Figshare, Dryad,
- * Harvard Dataverse, Hugging Face)
- * Genuine page-based pagination with provider cursor forwarding.
- * (OpenAIRE ScholeXplorer is not here: it answers "which datasets belong to this paper",
- * not keyword searches.)
- */
 async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
   const pageNum = Math.max(1, parseInt(page) || 1);
   const limitNum = Math.min(30, Math.max(5, parseInt(limit) || 15));
@@ -1458,11 +1290,6 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  // Each source is asked for a quarter of the page, exactly as when there were four
-  // sources. The two newer sources get the same amount on top, so the original four return
-  // what they always did and a page can only get fuller, never thinner, if a newer source
-  // has nothing or is down. All sources are asked at the same time, each with its own
-  // 5 second limit, so the wait does not grow with the number of sources.
   const SEARCH_PROVIDER_COUNT = 6;
   const quarterLimit = Math.max(2, Math.ceil(limitNum / 4));
   const [dcRes, zenodoRes, figshareRes, dryadRes, dataverseRes, huggingFaceRes] = await Promise.all([
@@ -1521,12 +1348,10 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
       hasMore,
     },
     providerErrors: Object.keys(providerErrors).length > 0 ? providerErrors : null,
-    // An outage means every one of the sources failed
     hasOutage: Object.keys(providerErrors).length >= SEARCH_PROVIDER_COUNT,
     retrievedAt: new Date().toISOString(),
   };
 
-  // Only cache if at least one provider was reached
   if (!result.hasOutage) {
     setCached(cacheKey, result);
   }

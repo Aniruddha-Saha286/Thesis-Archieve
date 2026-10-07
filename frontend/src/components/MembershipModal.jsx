@@ -27,13 +27,12 @@ export default function MembershipModal({ isOpen, onClose }) {
   const { user } = useAuth();
   const { socket, showNotice } = useSocket();
 
-  const [activeTab, setActiveTab] = useState('plans'); // 'plans' | 'bkash' | 'history'
+  const [activeTab, setActiveTab] = useState('plans');
   const [plans, setPlans] = useState([]);
   const [membershipStatus, setMembershipStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Active Order & Payment Form State
   const [activeOrder, setActiveOrder] = useState(null);
   const [paymentInstructions, setPaymentInstructions] = useState(null);
   const [trxId, setTrxId] = useState('');
@@ -42,17 +41,14 @@ export default function MembershipModal({ isOpen, onClose }) {
   const [submitSuccess, setSubmitSuccess] = useState('');
   const [submitError, setSubmitError] = useState('');
 
-  // Payment History State
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Correction Mode State
   const [editingSubmission, setEditingSubmission] = useState(null);
   const [correctionTrxId, setCorrectionTrxId] = useState('');
   const [correctionSender, setCorrectionSender] = useState('');
   const [correctionLoading, setCorrectionLoading] = useState(false);
 
-  // Cancellation State
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReasonPreset, setCancelReasonPreset] = useState('Completed current research project');
   const [cancelReasonCustom, setCancelReasonCustom] = useState('');
@@ -100,7 +96,6 @@ export default function MembershipModal({ isOpen, onClose }) {
     }
   }, [isOpen]);
 
-  // Listen for real-time membership updates
   useEffect(() => {
     if (!socket) return;
     const handleUpdate = () => {
@@ -252,7 +247,6 @@ export default function MembershipModal({ isOpen, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col text-[#1C1B18] dark:text-[#F0EDE6] overflow-hidden">
-        {/* Modal Header */}
         <div className="bg-[#1C1B18] dark:bg-[#141412] text-[#FAF9F5] px-6 py-4 flex items-center justify-between border-b border-neutral-800 dark:border-[#2C2A26]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-sm bg-amber-500 text-neutral-950 flex items-center justify-center font-bold">
@@ -276,7 +270,6 @@ export default function MembershipModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Navigation Tabs */}
         <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] px-6 py-2 flex items-center justify-between text-xs font-mono-meta">
           <div className="flex items-center gap-2">
             <button
@@ -324,7 +317,6 @@ export default function MembershipModal({ isOpen, onClose }) {
             </button>
           </div>
 
-          {/* Current Status Pill */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#737067] dark:text-[#9C988F]">Current Tier:</span>
             <span

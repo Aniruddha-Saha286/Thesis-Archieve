@@ -8,7 +8,6 @@ const {
   FEEDBACK_PAGE_CONTEXT_MAX,
 } = require('../utils/feedbackFields');
 
-// One message a signed-in user sent to the team, plus the team's reply to it.
 const feedbackSchema = new mongoose.Schema(
   {
     user: {
@@ -17,8 +16,6 @@ const feedbackSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    // Name and email are copied here when the message is sent, so staff can still see who
-    // wrote it (and reply by email) even if the account is later renamed or removed.
     userEmail: {
       type: String,
       default: '',
@@ -41,7 +38,6 @@ const feedbackSchema = new mongoose.Schema(
       minlength: FEEDBACK_MESSAGE_MIN,
       maxlength: FEEDBACK_MESSAGE_MAX,
     },
-    // Which screen the user was on, for example "discover", "library" or "paper:<id>".
     pageContext: {
       type: String,
       default: '',
@@ -74,8 +70,6 @@ const feedbackSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    // False until the user opens the reply. It only means something once adminReply is filled in:
-    // "has an unread reply" is adminReply present and userSeenReply false.
     userSeenReply: {
       type: Boolean,
       default: false,

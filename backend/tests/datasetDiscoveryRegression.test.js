@@ -5,7 +5,6 @@ const MembershipPeriod = require('../models/MembershipPeriod');
 async function runDatasetDiscoveryRegressionTests() {
   console.log('Testing: Dataset Discovery & SSRF Security Regression Suite...');
 
-  // --- Test 1: SSRF URL Security Guard ---
   {
     assert.strictEqual(isSafeDatasetUrl('http://127.0.0.1:8080/data'), false, 'SSRF must block 127.0.0.1');
     assert.strictEqual(isSafeDatasetUrl('http://localhost:5000/api'), false, 'SSRF must block localhost');
@@ -14,7 +13,6 @@ async function runDatasetDiscoveryRegressionTests() {
     assert.strictEqual(isSafeDatasetUrl('ftp://zenodo.org/data'), false, 'SSRF must block non-HTTP(S) protocols');
     assert.strictEqual(isSafeDatasetUrl('file:///etc/passwd'), false, 'SSRF must block local file:// schemes');
 
-    // Approved scholarly repositories
     assert.strictEqual(isSafeDatasetUrl('https://doi.org/10.5281/zenodo.7627309'), true, 'SSRF must allow doi.org');
     assert.strictEqual(isSafeDatasetUrl('https://api.datacite.org/dois/10.1000/123'), true, 'SSRF must allow datacite.org');
     assert.strictEqual(isSafeDatasetUrl('https://zenodo.org/records/7627309'), true, 'SSRF must allow zenodo.org');
@@ -22,7 +20,6 @@ async function runDatasetDiscoveryRegressionTests() {
     console.log('  ✓ [PASS] SSRF security guard blocks malicious/private targets while allowing public repositories');
   }
 
-  // --- Test 2: Honest Dataset Enrichment (Linked vs Related) ---
   {
     const enrichment = await enrichPaperDatasets({
       doi: '10.5281/zenodo.7627309',
@@ -43,7 +40,6 @@ async function runDatasetDiscoveryRegressionTests() {
     console.log('  ✓ [PASS] Dataset enrichment strictly distinguishes Linked from Related datasets with honest formats');
   }
 
-  // --- Test 3: Global Dataset Search (DataCite + Zenodo) ---
   {
     const searchRes = await searchGlobalDatasets({
       query: 'climate change precipitation',
@@ -64,7 +60,6 @@ async function runDatasetDiscoveryRegressionTests() {
     console.log('  ✓ [PASS] Global dataset discovery returns verified DataCite, Zenodo, Figshare & Dryad open science resources');
   }
 
-  // --- Test 4: MembershipPeriod unique index on paymentSubmission ---
   {
     const indexes = MembershipPeriod.schema.indexes();
     const hasUniquePaymentSubIndex = indexes.some(
@@ -80,9 +75,7 @@ async function runDatasetDiscoveryRegressionTests() {
     console.log('  ✓ [PASS] Database schema prevents double-grant via unique partial index on paymentSubmission');
   }
 
-  // --- Test 5: Cross-Paper Dataset Isolation Guard ---
   {
-    // Paper 1: has author-deposited dataset
     const paper1 = await enrichPaperDatasets({
       paperId: 'paper_unique_001',
       doi: '10.5281/zenodo.7627309',
@@ -94,7 +87,6 @@ async function runDatasetDiscoveryRegressionTests() {
 
     assert.ok(paper1.linkedDatasets.some((d) => d.url === 'https://zenodo.org/records/7627309'), 'Paper 1 must have its own deposited dataset');
 
-    // Paper 2: different paper without deposited dataset
     const paper2 = await enrichPaperDatasets({
       paperId: 'paper_unique_002',
       doi: '10.1145/3318464.3389700',
@@ -104,11 +96,9 @@ async function runDatasetDiscoveryRegressionTests() {
       explicitDatasetSize: null,
     });
 
-    // Paper 2 must NEVER contain Paper 1's dataset!
     const leaked = paper2.linkedDatasets.some((d) => d.url === 'https://zenodo.org/records/7627309');
     assert.strictEqual(leaked, false, 'Paper 2 must NEVER contain datasets belonging to Paper 1 (cross-paper cache leak prevented)');
 
-    // Paper 3 with similar starting title but different ID:
     const paper3 = await enrichPaperDatasets({
       paperId: 'paper_unique_003',
       doi: null,

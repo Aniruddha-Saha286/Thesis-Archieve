@@ -20,7 +20,7 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Custom scrollbars */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -36,7 +36,7 @@
   background: #3A3833;
 }
 
-/* Accessibility: respect user preferences for reduced motion */
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;
@@ -46,9 +46,8 @@
   }
 }
 
-/* >>> details window body: dark theme (generated) */
-/* The body of the paper details window and of the staff console are written with light colours. These rules give each of
-   those colours a dark value, only inside that panel and only in the dark theme. */
+
+
 .dark .tta-light-panel .bg-\[\#1C1B18\]{background-color:#F0EDE6;color:#141412}
 .dark .tta-light-panel .bg-\[\#E5E2DA\]{background-color:#34312C}
 .dark .tta-light-panel .bg-\[\#EFECE6\]{background-color:#2A2824}
@@ -177,4 +176,3 @@
 .dark .tta-light-panel .text-rose-800{color:#fda4af}
 .dark .tta-light-panel .text-rose-900{color:#fda4af}
 .dark .tta-light-panel .shadow-2xs{box-shadow:none}
-/* <<< details window body: dark theme */

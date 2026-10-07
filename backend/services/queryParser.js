@@ -1,10 +1,3 @@
-/**
- * Canonical Query Parser & Validator for Thesis Search Endpoint
- * GET /api/thesis
- * 
- * Enforces strict typing, length limits, enum validation, range checks,
- * and produces a single normalized filter representation.
- */
 
 const { SUBJECT_CATALOG, getSubjectById } = require('./subjectCatalog');
 
@@ -17,8 +10,8 @@ const ALLOWED_PUBLICATION_TYPES = new Set([
   'preprint',
   'book',
   'dataset',
-  'article', // legacy alias
-  'proceedings', // legacy alias
+  'article',
+  'proceedings',
 ]);
 
 const ALLOWED_SORT_ORDERS = new Set([
@@ -32,7 +25,6 @@ const ALLOWED_INSTITUTION_MODES = new Set([
   'awarding',
 ]);
 
-// Standard ISO-3166-1 alpha-2 country codes regex (two uppercase letters)
 const ISO_COUNTRY_REGEX = /^[A-Z]{2}$/;
 
 function normalizePublicationType(type) {
@@ -53,10 +45,6 @@ function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Validates and normalizes raw query parameters from GET /api/thesis
- * Returns { valid: true, parsed: { ... } } or { valid: false, status: 400, code, message }
- */
 function parseAndValidateThesisQuery(rawQuery = {}) {
   const {
     search,
@@ -87,11 +75,9 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     searchActionId,
   } = rawQuery;
 
-  // 1. Search text
   const rawSearch = search !== undefined ? search : query;
   const searchTerm = typeof rawSearch === 'string' ? rawSearch.trim().slice(0, 250) : '';
 
-  // 2. Pagination (clamped limit, integer page)
   const parsedPage = parseInt(page, 10);
   if (isNaN(parsedPage) || parsedPage < 1) {
     return {
@@ -108,7 +94,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     ? 20
     : Math.min(50, Math.max(1, parsedLimit));
 
-  // 3. Sort Order
   const cleanSort = String(sort || 'relevance').trim().toLowerCase();
   if (!ALLOWED_SORT_ORDERS.has(cleanSort)) {
     return {
@@ -119,7 +104,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     };
   }
 
-  // 4. Publication Type
   let cleanPubType = 'all';
   if (publicationType && String(publicationType).trim() !== 'all') {
     const rawPub = String(publicationType).trim().toLowerCase();
@@ -134,7 +118,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     cleanPubType = normalizePublicationType(rawPub);
   }
 
-  // 5. Year Range Validation (strictly 4-digit years 1800 <= year <= currentYear + 5)
   const currentYear = new Date().getFullYear();
   let cleanYearMin = null;
   let cleanYearMax = null;
@@ -192,11 +175,9 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     };
   }
 
-  // 6. Strict Booleans
   const cleanHasPdf = parseStrictBoolean(hasPdf) === true;
   const cleanIsOpenAccess = parseStrictBoolean(isOpenAccess) === true;
 
-  // 7. Discipline & Subject
   let cleanCategory = null;
   if (category && typeof category === 'string' && category.trim() !== 'All Disciplines') {
     cleanCategory = category.trim().slice(0, 100);
@@ -216,7 +197,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     cleanSubjectId = subTrim;
   }
 
-  // 8. Broad Field ID
   let cleanFieldId = null;
   if (fieldId && typeof fieldId === 'string' && fieldId.trim()) {
     const rawF = fieldId.trim().split('/').pop();
@@ -231,7 +211,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     cleanFieldId = rawF;
   }
 
-  // 9. Institution
   let cleanInstitutionId = null;
   if (institutionId && typeof institutionId === 'string' && institutionId.trim()) {
     const rawInst = institutionId.trim().split('/').pop();
@@ -261,7 +240,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
   }
   const cleanInstitutionMode = rawInstMode;
 
-  // 10. Country Codes (ISO-3166 alpha-2)
   const rawCountryParam = countryCodes !== undefined ? countryCodes : (countryCode !== undefined ? countryCode : countries);
   let cleanCountryCodes = [];
 
@@ -287,7 +265,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     cleanCountryCodes = Array.from(new Set(cleanCountryCodes)).sort();
   }
 
-  // 11. Author
   let cleanAuthorId = null;
   if (authorId && typeof authorId === 'string' && authorId.trim()) {
     const rawA = authorId.trim().split('/').pop();
@@ -302,7 +279,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     cleanAuthorId = rawA;
   }
 
-  // 12. Minimum Citations
   let cleanMinCitations = null;
   if (minCitations !== undefined && minCitations !== null && String(minCitations).trim() !== '') {
     const parsedMinC = parseInt(String(minCitations).trim(), 10);
@@ -317,11 +293,9 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     cleanMinCitations = parsedMinC;
   }
 
-  // 13. Publisher & Source
   const cleanPublisher = typeof publisher === 'string' ? publisher.trim().slice(0, 200) : null;
   const cleanSource = typeof source === 'string' ? source.trim().slice(0, 100) : null;
 
-  // 14. Session / Context Tracking
   const cleanSessionId = typeof sessionId === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(sessionId.trim())
     ? sessionId.trim()
     : null;
@@ -329,7 +303,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     ? searchContextId.trim()
     : (typeof searchActionId === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(searchActionId.trim()) ? searchActionId.trim() : null);
 
-  // Build canonical normalized filters object
   const filters = {};
   if (cleanCategory) filters.category = cleanCategory;
   if (cleanSubjectId) filters.subjectId = cleanSubjectId;
@@ -348,7 +321,6 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
   if (cleanAuthorId) filters.authorId = cleanAuthorId;
   if (cleanMinCitations !== null && cleanMinCitations > 0) filters.minCitations = cleanMinCitations;
 
-  // Compute whether request is an active search inquiry
   const isSearchInquiry = Boolean(
     searchTerm ||
     cleanCategory ||

@@ -1,13 +1,7 @@
-/**
- * Institutional Discovery and Suggestion Service
- * Queries OpenAlex Institutions API with in-memory caching and offline resilience.
- * Does NOT bill search quota.
- */
 
 const institutionCache = new Map();
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-// Curated fallbacks for offline testing & rapid resolution
 const CURATED_INSTITUTIONS = [
   {
     id: 'I136199984',
@@ -190,11 +184,9 @@ async function suggestInstitutions(queryOrOptions = '', maybeOptions = {}) {
       return finalResults;
     }
   } catch (err) {
-    // Network or rate limit fallback
     console.warn('OpenAlex institution suggest fallback:', err.message);
   }
 
-  // Fallback to local matching against curated set
   const lowerQ = q.toLowerCase();
   const matched = CURATED_INSTITUTIONS.filter((inst) => {
     if (academicOnly && inst.type !== 'education') return false;

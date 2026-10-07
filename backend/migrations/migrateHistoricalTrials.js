@@ -1,8 +1,3 @@
-/**
- * Migration Script: Migrate Historical Trial Grants
- * Safely tags existing trial records that lack policyVersion with 'v1'
- * to preserve grandfathered terms without manual database intervention.
- */
 
 const mongoose = require('mongoose');
 const TrialGrant = require('../models/TrialGrant');

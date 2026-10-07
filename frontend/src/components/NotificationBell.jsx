@@ -5,8 +5,6 @@ import { useSocket } from '../context/SocketContext';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import { timeAgo } from '../utils/timeAgo';
 
-// The bell in the header. The server already saved notifications (approvals, payment
-// decisions, alert matches, replies to feedback); this is where a user finally sees them.
 export default function NotificationBell({ onOpenFeedback, onOpenMembership, onOpenAlerts }) {
   const { notificationTick } = useSocket();
   const [open, setOpen] = useState(false);
@@ -30,7 +28,6 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
     }
   }, []);
 
-  // On first show, and again whenever the server pushes something new
   useEffect(() => {
     load();
   }, [load, notificationTick]);
@@ -51,7 +48,6 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
     try {
       await axios.put(`/api/user/notifications/${id}/read`);
     } catch (err) {
-      // Not worth interrupting the user: the next load shows the true state
     }
   };
 
@@ -64,7 +60,6 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
     }
   };
 
-  // Where a notification leads, when it leads somewhere
   const actionFor = (n) => {
     if (n.type === 'feedback_reply' && onOpenFeedback) return { label: 'Read the reply', run: onOpenFeedback };
     if (/^(payment_|membership_)/.test(n.type || '') && onOpenMembership) return { label: 'Open membership', run: onOpenMembership };

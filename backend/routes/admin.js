@@ -53,16 +53,9 @@ if (hasCloudinary) {
   });
 }
 
-// All admin routes require a verified authenticated session.
-// Granular capability permissions are attached to each route.
 router.use(authenticateToken);
 
-// ==========================================
-// 1. Student Roster & Management Endpoints
-// ==========================================
 
-// GET /api/admin/students
-// Returns sanitized student roster with canonical plan codes and membership status
 router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req, res) => {
   try {
     const students = await User.find({ role: { $in: ['student', 'editor'] } })
@@ -72,7 +65,6 @@ router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req
     const now = new Date();
     const studentIds = students.map((s) => s._id);
 
-    // Fetch active periods and active trials in bulk
     const [activePeriods, activeTrials] = await Promise.all([
       MembershipPeriod.find({
         user: { $in: studentIds },
@@ -142,7 +134,6 @@ router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req
         };
       }
 
-      // SECURITY: Expose only hasVerificationDocument boolean, never raw storage reference
       sObj.hasVerificationDocument = Boolean(sObj.idCardProof);
       delete sObj.idCardProof;
       delete sObj.googleId;
@@ -158,11 +149,8 @@ router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req
   }
 });
 
-// GET /api/admin/pending-students
-// Returns students awaiting registration verification
 router.get('/pending-students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req, res) => {
   try {
-    // Only students who finished the registration form belong in the review queue
     const pendingStudents = await User.find({ role: 'student', status: 'pending', isProfileComplete: true })
       .select('-password -savedPapers -collections -comparisons -searchHistory')
       .sort({ createdAt: -1 });
@@ -182,9 +170,6 @@ router.get('/pending-students', requirePermission(PERMISSIONS.STUDENTS_VIEW), as
   }
 });
 
-// GET /api/admin/students/:id/document
-// Protected endpoint for staff with documents.view permission to inspect student ID proof
-// Returns a short-lived (10-minute) signed URL or secure response. Never exposes permanent raw storage keys.
 router.get('/students/:id/document', requirePermission(PERMISSIONS.DOCUMENTS_VIEW), async (req, res) => {
   try {
     const student = await User.findOne({ _id: req.params.id, role: 'student' }).select('name email idCardProof');
@@ -203,10 +188,9 @@ router.get('/students/:id/document', requirePermission(PERMISSIONS.DOCUMENTS_VIE
         secure: true,
         resource_type: resourceType,
         sign_url: true,
-        expires_at: Math.floor(Date.now() / 1000) + 600, // 10 minutes
+        expires_at: Math.floor(Date.now() / 1000) + 600,
       });
     } else if (isDirectHttp) {
-      // Validate domain against trusted cloud providers only
       const parsed = new URL(documentUrl);
       const isTrustedCloud = parsed.hostname.endsWith('cloudinary.com') ||
         parsed.hostname.endsWith('res.cloudinary.com') ||
@@ -217,11 +201,9 @@ router.get('/students/:id/document', requirePermission(PERMISSIONS.DOCUMENTS_VIE
       }
     }
 
-    // Set secure anti-caching and no-sniff headers
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
-    // Audit document access without logging storage keys or credentials
     await AuditEvent.create({
       actor: req.user._id,
       action: 'ADMIN_VIEWED_STUDENT_DOCUMENT',
@@ -246,8 +228,6 @@ router.get('/students/:id/document', requirePermission(PERMISSIONS.DOCUMENTS_VIE
   }
 });
 
-// POST /api/admin/verify-student/:id
-// Approves or rejects student verification
 router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY), adminActionLimiter, async (req, res) => {
   try {
     const { decision } = req.body;
@@ -257,7 +237,6 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
       return res.status(400).json({ message: 'Decision must be either "approve" or "reject".' });
     }
 
-    // Target mutation safety: ensure target is strictly role: 'student' and not self
     if (String(req.user._id) === String(studentId)) {
       return res.status(400).json({ message: 'Self-modification is prohibited.' });
     }
@@ -337,8 +316,6 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
   }
 });
 
-// POST /api/admin/student/:id/ban
-// Suspends a student account
 router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND), adminActionLimiter, async (req, res) => {
   try {
     const { reason } = req.body;
@@ -348,7 +325,6 @@ router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND),
       return res.status(400).json({ message: 'Self-suspension is prohibited.' });
     }
 
-    // Target mutation safety: strictly student
     const student = await User.findOne({ _id: studentId, role: 'student' });
     if (!student) {
       return res.status(404).json({ message: 'Student not found or account is not an eligible student target.' });
@@ -388,8 +364,6 @@ router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND),
   }
 });
 
-// POST /api/admin/student/:id/unban
-// Reinstates a student account
 router.post('/student/:id/unban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND), adminActionLimiter, async (req, res) => {
   try {
     const studentId = req.params.id;
@@ -431,8 +405,6 @@ router.post('/student/:id/unban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND
   }
 });
 
-// DELETE /api/admin/student/:id
-// Admin only: Permanently deletes a student account
 router.delete('/student/:id', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const studentId = req.params.id;
@@ -459,8 +431,6 @@ router.delete('/student/:id', requireAdmin, adminActionLimiter, async (req, res)
   }
 });
 
-// GET /api/admin/stats
-// Returns administrative telemetry (staff authorization required)
 router.get('/stats', requireStaff, async (req, res) => {
   try {
     const [pendingCount, pendingThesesCount, approvedStudents, bannedStudents, totalTheses, totalDatasets, totalEditors, pendingPaymentsCount, pendingReportsCount, newFeedbackCount] = await Promise.all([
@@ -494,12 +464,7 @@ router.get('/stats', requireStaff, async (req, res) => {
   }
 });
 
-// ==========================================
-// 2. Team & Access (Editor RBAC Management) - Admin Only
-// ==========================================
 
-// GET /api/admin/editors
-// Lists all staff members (primary admin and appointed editors)
 router.get('/editors', requireAdmin, async (req, res) => {
   try {
     const staff = await User.find({ role: { $in: ['admin', 'editor'] } })
@@ -515,8 +480,6 @@ router.get('/editors', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/editors
-// Appoints an existing verified Google user as an editor with specified permissions
 router.post('/editors', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const { email, permissions } = req.body;
@@ -540,7 +503,6 @@ router.post('/editors', requireAdmin, adminActionLimiter, async (req, res) => {
     const previousRole = isNewUser ? 'none' : targetUser.role;
 
     if (isNewUser) {
-      // Pre-provision account as approved editor so when they sign in with Google they immediately have editor access
       targetUser = new User({
         email: cleanEmail,
         name: cleanEmail.split('@')[0],
@@ -616,8 +578,6 @@ router.post('/editors', requireAdmin, adminActionLimiter, async (req, res) => {
   }
 });
 
-// PATCH /api/admin/editors/:id
-// Updates permissions for an existing editor
 router.patch('/editors/:id', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const editorId = req.params.id;
@@ -687,8 +647,6 @@ router.patch('/editors/:id', requireAdmin, adminActionLimiter, async (req, res) 
   }
 });
 
-// DELETE /api/admin/editors/:id
-// Revokes editor access, returning user to approved student status
 router.delete('/editors/:id', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const editorId = req.params.id;
@@ -710,7 +668,6 @@ router.delete('/editors/:id', requireAdmin, adminActionLimiter, async (req, res)
     editor.roleChangedBy = req.user._id;
     await editor.save();
 
-    // Revoke privileged socket rooms immediately
     revokeUserSocketPrivileges(editor._id);
 
     await AuditEvent.create({
@@ -742,12 +699,7 @@ router.delete('/editors/:id', requireAdmin, adminActionLimiter, async (req, res)
   }
 });
 
-// ==========================================
-// 3. Local Depository Publications Moderation
-// ==========================================
 
-// GET /api/admin/publications
-// Returns local repository publications with pagination, status filters, and search
 router.get('/publications', requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), async (req, res) => {
   try {
     const { status = 'all', q = '', page = 1, limit = 20 } = req.query;
@@ -796,8 +748,6 @@ router.get('/publications', requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE)
   }
 });
 
-// GET /api/admin/pending-theses
-// Backward-compatible alias for user-submitted publications pending moderation
 router.get('/pending-theses', requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), async (req, res) => {
   try {
     const pendingTheses = await Thesis.find({ status: 'pending' })
@@ -811,8 +761,6 @@ router.get('/pending-theses', requirePermission(PERMISSIONS.PUBLICATIONS_MODERAT
   }
 });
 
-// PUT /api/admin/publications/:id/approve
-// Approves a pending thesis
 router.put('/publications/:id/approve', requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), adminActionLimiter, async (req, res) => {
   try {
     const now = new Date();
@@ -860,8 +808,6 @@ router.put('/publications/:id/approve', requirePermission(PERMISSIONS.PUBLICATIO
   }
 });
 
-// PUT /api/admin/publications/:id/reject
-// Rejects a submitted thesis with mandatory reason
 router.put('/publications/:id/reject', requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), adminActionLimiter, async (req, res) => {
   try {
     const { rejectionReason } = req.body;
@@ -915,8 +861,6 @@ router.put('/publications/:id/reject', requirePermission(PERMISSIONS.PUBLICATION
   }
 });
 
-// DELETE /api/admin/publications/:id
-// Admin only: Permanently removes a publication from the local repository
 router.delete('/publications/:id', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const thesis = await Thesis.findByIdAndDelete(req.params.id);
@@ -928,7 +872,6 @@ router.delete('/publications/:id', requireAdmin, adminActionLimiter, async (req,
 
     emitToAdmins('admin:thesis_deleted', { thesisId: String(thesis._id) });
 
-    // Remove the uploaded PDF with the record (does nothing for linked PDFs; never blocks the delete)
     if (thesis.pdfStorageRef) {
       await thesisFileStorage.destroyThesisPdfIfUnused(thesis.pdfStorageRef, Thesis);
     }
@@ -949,11 +892,7 @@ router.delete('/publications/:id', requireAdmin, adminActionLimiter, async (req,
   }
 });
 
-// ==========================================
-// 4. Reports Queue & Resolution
-// ==========================================
 
-// GET /api/admin/reports
 router.get('/reports', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (req, res) => {
   try {
     const { status } = req.query;
@@ -968,7 +907,6 @@ router.get('/reports', requirePermission(PERMISSIONS.REPORTS_MODERATE), async (r
   }
 });
 
-// PUT /api/admin/reports/:id
 router.put('/reports/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), adminActionLimiter, async (req, res) => {
   try {
     const { status, adminNotes } = req.body || {};
@@ -983,7 +921,6 @@ router.put('/reports/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), admi
     if (adminNotes !== undefined) report.adminNotes = String(adminNotes || '').trim().slice(0, 1000);
 
     if (report.status === 'pending') {
-      // Reopened: it is no longer closed by anyone
       report.resolvedBy = null;
       report.resolvedAt = null;
     } else {
@@ -999,11 +936,7 @@ router.put('/reports/:id', requirePermission(PERMISSIONS.REPORTS_MODERATE), admi
   }
 });
 
-// ==========================================
-// 5. bKash Payment Review Queue
-// ==========================================
 
-// GET /api/admin/payments
 router.get('/payments', requirePermission(PERMISSIONS.PAYMENTS_VIEW), async (req, res) => {
   try {
     const { status, search } = req.query;
@@ -1035,12 +968,10 @@ router.get('/payments', requirePermission(PERMISSIONS.PAYMENTS_VIEW), async (req
   }
 });
 
-// POST /api/admin/payments/:id/approve
 router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVIEW), paymentActionLimiter, adminActionLimiter, async (req, res) => {
   try {
     const adminNotes = (req.body?.adminNotes || req.body?.adminInstructions || req.body?.notes || '').trim();
 
-    // 1. Merchant reconciliation proof
     const isStatementVerified =
       req.body.verifiedInMerchantStatement === true ||
       req.body.merchantStatementVerified === true ||
@@ -1053,7 +984,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
       });
     }
 
-    // 2. Check existing state
     const existingSubmission = await PaymentSubmission.findById(req.params.id)
       .populate('user', 'name email')
       .populate('order');
@@ -1062,7 +992,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
       return res.status(404).json({ message: 'Payment submission not found.' });
     }
 
-    // 3. Idempotency Guard
     if (existingSubmission.status === 'approved') {
       const existingPeriod = await MembershipPeriod.findOne({
         paymentSubmission: existingSubmission._id,
@@ -1100,7 +1029,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
       });
     }
 
-    // 4. Resolve Plan & Order Snapshot
     const order = existingSubmission.order;
     const durationMonths = order?.durationMonths || 6;
     const planCode = order?.planCode || order?.plan || 'premium_6m';
@@ -1109,7 +1037,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
     const userId = existingSubmission.user._id;
     const now = new Date();
 
-    // 5. Concurrency & Execution
     let session = null;
     let submission = null;
     let period = null;
@@ -1137,7 +1064,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
         return { conflict: true };
       }
 
-      // Renewal chaining calculation
       const foundActivePaid = await MembershipPeriod.findOne(
         {
           user: userId,
@@ -1160,14 +1086,12 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
         calculatedExpiresAt = addDhakaCalendarMonths(now, durationMonths);
       }
 
-      // Convert active trial
       await TrialGrant.updateMany(
         { user: userId, status: 'active' },
         { status: 'converted' },
         sessionOpt
       );
 
-      // Create MembershipPeriod
       let p = await MembershipPeriod.findOne({ paymentSubmission: sub._id }, null, sessionOpt);
       if (!p) {
         p = new MembershipPeriod({
@@ -1277,7 +1201,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
       if (session) await session.endSession();
     }
 
-    // In-app Notification using accurate terms
     const notif = new Notification({
       user: userId,
       type: 'payment_approved',
@@ -1325,7 +1248,6 @@ router.post('/payments/:id/approve', requirePermission(PERMISSIONS.PAYMENTS_REVI
   }
 });
 
-// POST /api/admin/payments/:id/reject
 router.post('/payments/:id/reject', requirePermission(PERMISSIONS.PAYMENTS_REVIEW), paymentActionLimiter, adminActionLimiter, async (req, res) => {
   try {
     const { rejectionReason } = req.body;
@@ -1378,7 +1300,6 @@ router.post('/payments/:id/reject', requirePermission(PERMISSIONS.PAYMENTS_REVIE
   }
 });
 
-// POST /api/admin/payments/:id/request-correction
 router.post('/payments/:id/request-correction', requirePermission(PERMISSIONS.PAYMENTS_REVIEW), paymentActionLimiter, adminActionLimiter, async (req, res) => {
   try {
     const { adminInstructions } = req.body;
@@ -1429,8 +1350,6 @@ router.post('/payments/:id/request-correction', requirePermission(PERMISSIONS.PA
   }
 });
 
-// POST /api/admin/membership/:userId/cancel and /revoke
-// Admin only: Cancels an active membership with optional or mandatory reason
 async function handleRevokeUserMembership(req, res) {
   try {
     const { cancellationReason, reason } = req.body || {};
@@ -1497,12 +1416,7 @@ router.post('/membership/:userId/cancel', requireAdmin, adminActionLimiter, hand
 router.post('/membership/:userId/revoke', requireAdmin, adminActionLimiter, handleRevokeUserMembership);
 router.post('/students/:id/revoke-membership', requireAdmin, adminActionLimiter, handleRevokeUserMembership);
 
-// ==========================================
-// 6. Manual Premium Grants with Exact Timestamps (Admin Only)
-// ==========================================
 
-// POST /api/admin/memberships/grants
-// Provisions manual Premium or Pro Max access with timezone awareness and idempotency
 router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const {
@@ -1517,7 +1431,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       customLabel = '',
     } = req.body;
 
-    // 1. Target validation
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: 'Valid student user ID is required.' });
     }
@@ -1531,17 +1444,14 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       return res.status(404).json({ message: 'Target user is not an eligible student account.' });
     }
 
-    // 2. Plan code validation
     if (!['premium_6m', 'pro_max_12m'].includes(planCode)) {
       return res.status(400).json({ message: 'Plan must be either "premium_6m" or "pro_max_12m".' });
     }
 
-    // 3. Reason validation
     if (!grantReason || typeof grantReason !== 'string' || grantReason.trim().length < 5) {
       return res.status(400).json({ message: 'A mandatory grant reason of at least 5 characters is required.' });
     }
 
-    // 4. Idempotency check
     if (grantRequestId && typeof grantRequestId === 'string') {
       const existingGrant = await MembershipPeriod.findOne({ grantRequestId: grantRequestId.trim() });
       if (existingGrant) {
@@ -1568,7 +1478,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       }
     }
 
-    // 5. Date parsing and validation
     const parsedStartsAt = new Date(startsAt);
     const parsedExpiresAt = new Date(expiresAt);
     const now = new Date();
@@ -1581,13 +1490,11 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       return res.status(400).json({ message: 'Expiry timestamp must be strictly after start timestamp.' });
     }
 
-    // Maximum grant duration clamp: 730 days (2 years)
     const durationDays = (parsedExpiresAt.getTime() - parsedStartsAt.getTime()) / (1000 * 60 * 60 * 24);
     if (durationDays > 730) {
       return res.status(400).json({ message: 'Grant duration cannot exceed 730 days (2 years).' });
     }
 
-    // 6. Overlap mode resolution
     let effectiveStartsAt = parsedStartsAt;
     let effectiveExpiresAt = parsedExpiresAt;
 
@@ -1603,7 +1510,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
         return res.status(400).json({ message: 'Expiry must be in the future when starting immediately.' });
       }
 
-      // Safety check: Never silently shorten an existing active paid period
       if (latestActivePaid && latestActivePaid.expiresAt > effectiveExpiresAt) {
         return res.status(400).json({
           message: `User already has active paid coverage until ${formatDhakaDateTime(latestActivePaid.expiresAt)}. An immediate grant with an earlier expiry would shorten their coverage. Please use 'extend_from_current_expiry' or select a later expiry.`,
@@ -1622,7 +1528,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       if (effectiveStartsAt < now) {
         return res.status(400).json({ message: 'Scheduled start timestamp must be in the future.' });
       }
-      // Preserves active trial without converting prematurely
     } else {
       return res.status(400).json({ message: 'Invalid overlapMode. Must be "start_now", "schedule", or "extend_from_current_expiry".' });
     }
@@ -1630,7 +1535,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
     const planDef = getPlan(planCode);
     const effectiveDurationDays = (effectiveExpiresAt.getTime() - effectiveStartsAt.getTime()) / (1000 * 60 * 60 * 24);
 
-    // Auto-compute an honest, professional label if not explicitly provided
     let effectiveCustomLabel = customLabel ? customLabel.trim() : '';
     if (!effectiveCustomLabel) {
       const isTest = grantType === 'test' || /test|testing|eval/i.test(grantReason);
@@ -1663,7 +1567,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       }
     }
 
-    // 7. Create MembershipPeriod
     const period = new MembershipPeriod({
       user: student._id,
       source: 'manual_admin',
@@ -1679,7 +1582,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
     });
     await period.save();
 
-    // Convert active trial only after period has successfully persisted
     if (overlapMode === 'start_now') {
       await TrialGrant.updateMany(
         { user: student._id, status: 'active' },
@@ -1687,7 +1589,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       );
     }
 
-    // 8. Audit Event
     await AuditEvent.create({
       actor: req.user._id,
       action: 'membership.manual_grant',
@@ -1706,7 +1607,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
       ipAddress: req.ip || '',
     });
 
-    // 9. Notify user and emit real-time updates
     const notif = new Notification({
       user: student._id,
       type: 'membership_granted',
@@ -1753,8 +1653,6 @@ router.post('/memberships/grants', requireAdmin, adminActionLimiter, async (req,
   }
 });
 
-// POST /api/admin/memberships/grants/:id/revoke
-// Admin only: Revokes a manual grant
 router.post('/memberships/grants/:id/revoke', requireAdmin, adminActionLimiter, async (req, res) => {
   try {
     const { revocationReason } = req.body;
@@ -1801,9 +1699,6 @@ router.post('/memberships/grants/:id/revoke', requireAdmin, adminActionLimiter, 
   }
 });
 
-// ==========================================
-// 12. System Settings & Maintenance Controls
-// ==========================================
 
 const { getMaintenanceStatus, setMaintenanceStatus } = require('../services/systemSettingService');
 const { getIO } = require('../socket');

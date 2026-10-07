@@ -1,5 +1,3 @@
-// Safe, Idempotent Development Sample-Data Seeder
-// Refuses to run against production environments and never executes destructive collection wipes.
 const dns = require('dns');
 try {
   dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
@@ -26,7 +24,6 @@ async function seedDatabase() {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('Connected. Upserting verified reference sample records...');
 
-    // Verified Reference Scholarly Works with Authentic Metadata & Provenance
     const sampleRecords = [
       {
         catalogId: 'SAMPLE-1706-03762',
@@ -37,7 +34,7 @@ async function seedDatabase() {
         university: 'Google Research / University of Toronto',
         department: 'Machine Learning & Natural Language Processing',
         author: 'Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, Illia Polosukhin',
-        advisor: null, // Left null: NeurIPS research papers do not have thesis advisors
+        advisor: null,
         publisher: 'Advances in Neural Information Processing Systems 30 (NeurIPS 2017)',
         publishedYear: 2017,
         doi: '10.48550/arXiv.1706.03762',
@@ -150,7 +147,6 @@ async function seedDatabase() {
       },
     ];
 
-    // Idempotent upsert: updates existing or inserts if missing, WITHOUT wiping collections!
     for (const record of sampleRecords) {
       await Thesis.findOneAndUpdate(
         { catalogId: record.catalogId },

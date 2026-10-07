@@ -1,55 +1,25 @@
-/**
- * Repository Harvester
- *
- * Copies thesis catalogue records (title, abstract, author, advisor, department, year and a link
- * back) from university repositories into the local archive, using OAI-PMH. OAI-PMH is the
- * protocol repositories publish for exactly this purpose, so this is the polite, supported way
- * to do it: no page scraping.
- *
- * What it never does:
- *   - It never downloads or re-hosts a PDF. A harvested record only points back to the original.
- *   - It never invents text. A record without a real title, author or abstract is skipped and counted.
- *   - It never changes a thesis a student deposited here, or one an admin edited or rejected.
- *
- * The file is split in four layers so each one can be tested on its own:
- *   1. parseOaiResponse     text in, plain objects out            (no network, no database)
- *   2. mapRecordToThesis    one OAI record -> one Thesis-shaped object  (no network, no database)
- *   3. upsertHarvested      decides insert / update / leave alone (talks to the model it is given)
- *   4. harvestRepository    the loop: fetch a page, wait, fetch the next (network and clock are injected)
- */
 
 const crypto = require('crypto');
 const { XMLParser, XMLValidator } = require('fast-xml-parser');
 const { SUBJECT_CATALOG } = require('./subjectCatalog');
 
-// ---------------------------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------------------------
 
 const SITE_NAME = 'The Thesis Archive';
 const HARVESTER_VERSION = '1.0';
 
-const DEFAULT_DELAY_MS = 1000; // pause between two requests to the same repository
-const DEFAULT_TIMEOUT_MS = 30000; // give up on one request after 30 seconds
-const DEFAULT_MAX_RETRIES = 3; // extra attempts per request after the first one fails
-const DEFAULT_RETRY_BACKOFF_MS = 5000; // first wait after a failure without Retry-After; doubles each time
-const MAX_RETRY_AFTER_MS = 10 * 60 * 1000; // a repository asking us to wait longer than this ends the run
-const MAX_STORED_ERRORS = 50; // keep the summary readable when thousands of records fail the same way
+const DEFAULT_DELAY_MS = 1000;
+const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_BACKOFF_MS = 5000;
+const MAX_RETRY_AFTER_MS = 10 * 60 * 1000;
+const MAX_STORED_ERRORS = 50;
 
-// Used when a thesis-type record gives no degree level. The model default is "M.Sc. Thesis",
-// which would be a made-up claim for a harvested record, so we always set this neutral value instead.
 const NEUTRAL_DEGREE_TYPE = 'Thesis';
 
-// Same neutral value the deposit form uses (routes/thesis.js). The record normaliser treats it as
-// "no discipline chosen" and may still infer one from the title at display time.
 const NEUTRAL_CATEGORY = 'Other Disciplines';
 
-// Thesis.department is a required field for theses. Some repositories do not record it at all.
-// Dropping an otherwise complete thesis for that would lose most of such a repository, so we store
-// this honest placeholder instead of guessing a department.
 const UNKNOWN_DEPARTMENT = 'Department not stated';
 
-// Written into rejectionReason when the source repository withdraws a record we had copied.
 const SOURCE_DELETED_REASON = 'Withdrawn from the source repository (reported as deleted over OAI-PMH).';
 
 const SKIP_REASONS = Object.freeze({
@@ -66,13 +36,6 @@ const SKIP_REASONS = Object.freeze({
   ADMIN_EDITED: 'admin-edited',
 });
 
-// The fields the harvester owns on a harvested record. Three things depend on this one list:
-//   - these are the only content fields an update writes,
-//   - the fingerprint ("harvestChecksum") is computed from exactly these,
-//   - so "did an admin change this record by hand?" means "do these fields still match the
-//     fingerprint we stored when we last wrote them?".
-// Adding a field here changes every fingerprint: existing harvested records would then look
-// hand-edited and stop updating. Only do that together with a migration that recomputes them.
 const HARVESTED_CONTENT_FIELDS = Object.freeze([
   'title',
   'abstract',
@@ -94,9 +57,6 @@ const HARVESTED_CONTENT_FIELDS = Object.freeze([
   'sourceRights',
 ]);
 
-// ---------------------------------------------------------------------------------------------
-// Small text helpers
-// ---------------------------------------------------------------------------------------------
 
 function asArray(value) {
   if (value === undefined || value === null) return [];
@@ -111,8 +71,6 @@ const NAMED_ENTITIES = {
   alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', mu: 'μ',
 };
 
-// Turns "&amp;", "&#169;", "&#xd;" and friends into the characters they stand for.
-// Unknown names are left exactly as written rather than dropped.
 function decodeEntities(text) {
   return String(text).replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,10});/gi, (whole, body) => {
     if (body[0] === '#') {
@@ -127,19 +85,12 @@ function decodeEntities(text) {
   });
 }
 
-// Only real HTML tags are removed. A looser pattern such as /<[^>]*>/ would also eat
-// "p < 0.05 and n > 30" out of an abstract, which silently changes what the author wrote.
 const BLOCK_TAGS = /<\/?(?:p|br|div|li|ul|ol|tr|td|th|table|h[1-6]|blockquote)(?:\s[^<>]*)?\/?>/gi;
 const INLINE_TAGS = /<\/?(?:i|b|u|em|strong|sub|sup|span|font|a|small|tt|code)(?:\s[^<>]*)?\/?>/gi;
 
-// Cleans one metadata value for display: entities decoded, HTML tags removed, line breaks and
-// repeated spaces folded into single spaces (repository abstracts are usually pasted from a PDF
-// and carry a hard line break every few words).
 function cleanText(value) {
   if (value === undefined || value === null) return '';
   let text = String(value);
-  // Repositories often store text that was already escaped once ("&amp;nbsp;"), so the XML layer
-  // leaves "&nbsp;" behind. One more pass here turns that into the intended character.
   text = decodeEntities(text);
   text = text.replace(BLOCK_TAGS, ' ').replace(INLINE_TAGS, '');
   text = text.replace(/[\u0000-\u001F\u007F ​﻿]+/g, ' ');
@@ -159,21 +110,17 @@ function uniqueCaseInsensitive(values) {
   return out;
 }
 
-// ---------------------------------------------------------------------------------------------
-// 1. Parsing an OAI-PMH response
-// ---------------------------------------------------------------------------------------------
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
-  removeNSPrefix: true, // "dc:title" and "oai_dc:dc" become "title" and "dc", whatever prefix the server picked
-  parseTagValue: false, // keep "0012" and "2023" as text, never as numbers
+  removeNSPrefix: true,
+  parseTagValue: false,
   parseAttributeValue: false,
   trimValues: true,
-  processEntities: false, // decoded by decodeEntities() below, so behaviour does not depend on parser limits
+  processEntities: false,
 });
 
-// Text of an element, whether the parser gave us "text" or { '#text': 'text', '@_lang': 'en' }.
 function xmlText(node) {
   if (node === undefined || node === null) return '';
   if (typeof node === 'object') {
@@ -188,9 +135,6 @@ function addField(fields, key, text) {
   fields[key].push(text);
 }
 
-// Both metadata formats are turned into the same simple shape:
-//   { 'dc.title': ['...'], 'dc.contributor.advisor': ['...'], ... }
-// "dim" already has schema.element.qualifier; "oai_dc" only has dc.<element>.
 function readMetadata(metadataNode) {
   if (!metadataNode || typeof metadataNode !== 'object') {
     return { metadataFormat: null, fields: {} };
@@ -224,20 +168,6 @@ function readMetadata(metadataNode) {
   return { metadataFormat: 'unknown', fields: {} };
 }
 
-/**
- * parseOaiResponse(xmlString)
- *   -> { records, resumptionToken, completeListSize, error }
- *
- * records[i] = { identifier, datestamp, setSpecs, deleted, metadataFormat, fields }
- * resumptionToken   text to send for the next page, or null when this was the last page
- * completeListSize  total the repository says it has for this query, or null when it does not say
- * error             null, or { code, message }. Codes are the OAI ones ("noRecordsMatch",
- *                   "badResumptionToken", "cannotDisseminateFormat", ...) plus two of our own:
- *                   "malformedXml" and "notOaiPmh". "noRecordsMatch" simply means "nothing new";
- *                   the caller decides it is not a failure.
- *
- * Never throws: bad input comes back as an error object so one broken page cannot crash a run.
- */
 function parseOaiResponse(xmlString) {
   const empty = { records: [], resumptionToken: null, completeListSize: null, error: null };
 
@@ -245,8 +175,6 @@ function parseOaiResponse(xmlString) {
     return { ...empty, error: { code: 'malformedXml', message: 'Empty response body.' } };
   }
 
-  // The parser itself is forgiving (it accepts unclosed tags), so check first. A half-delivered
-  // page must be reported, not silently read as "a short page with no resumption token".
   const validation = XMLValidator.validate(xmlString);
   if (validation !== true) {
     const detail = validation && validation.err ? `${validation.err.msg} (line ${validation.err.line})` : 'Invalid XML.';
@@ -262,7 +190,6 @@ function parseOaiResponse(xmlString) {
 
   const root = parsed && parsed['OAI-PMH'];
   if (!root || typeof root !== 'object') {
-    // Typically an HTML error page from a proxy or a login wall.
     return { ...empty, error: { code: 'notOaiPmh', message: 'Response is XML but not an OAI-PMH document.' } };
   }
 
@@ -283,7 +210,7 @@ function parseOaiResponse(xmlString) {
     if (!recordNode || typeof recordNode !== 'object') continue;
     const header = recordNode.header && typeof recordNode.header === 'object' ? recordNode.header : {};
     const identifier = xmlText(header.identifier);
-    if (!identifier) continue; // a record we cannot name can never be updated later, so it is useless to us
+    if (!identifier) continue;
 
     const deleted = String(header['@_status'] || '').trim().toLowerCase() === 'deleted';
     const { metadataFormat, fields } = deleted
@@ -300,7 +227,6 @@ function parseOaiResponse(xmlString) {
     });
   }
 
-  // <resumptionToken> with text = more pages. Present but empty = this was the last page.
   let resumptionToken = null;
   let completeListSize = null;
   const tokenNode = asArray(container.resumptionToken)[0];
@@ -315,11 +241,7 @@ function parseOaiResponse(xmlString) {
   return { records, resumptionToken, completeListSize, error };
 }
 
-// ---------------------------------------------------------------------------------------------
-// 2. Mapping one OAI record to a Thesis
-// ---------------------------------------------------------------------------------------------
 
-// Cleaned, non-empty values of the first listed keys that have any.
 function firstValues(fields, keys) {
   for (const key of keys) {
     const values = asArray(fields[key]).map(cleanText).filter(Boolean);
@@ -328,7 +250,6 @@ function firstValues(fields, keys) {
   return [];
 }
 
-// Cleaned, non-empty values of all listed keys together.
 function allValues(fields, keys) {
   const out = [];
   for (const key of keys) {
@@ -340,16 +261,12 @@ function allValues(fields, keys) {
   return out;
 }
 
-// "Thesis", "Doctoral thesis", "Master's Dissertation", "info:eu-repo/semantics/masterThesis", ...
-// Deliberately NOT matched: "Internship Report", "Project Report", "Article".
 const THESIS_TYPE_PATTERN = /thes[ie]s|dissertation/i;
 
 function isThesisType(typeValues) {
   return typeValues.some((value) => THESIS_TYPE_PATTERN.test(value));
 }
 
-// Repositories store names as "Family, Given". The rest of the site shows "Given Family".
-// Only the unambiguous one-comma form is turned around; anything else is kept as written.
 function normalisePersonName(raw) {
   const name = cleanText(raw).replace(/[\s,;]+$/, '');
   const parts = name.split(',').map((part) => part.trim());
@@ -359,8 +276,6 @@ function normalisePersonName(raw) {
   return name;
 }
 
-// One field sometimes holds several people ("Rahman, A.; Karim, B."). A comma is NOT a separator
-// here because it is part of "Family, Given".
 function splitPeople(values) {
   const names = [];
   for (const value of values) {
@@ -383,12 +298,10 @@ function looksLikeOrganisation(value) {
   return ORGANISATION_START.test(value) || ORGANISATION_ANYWHERE.test(value);
 }
 
-// Standard notes DSpace cataloguers add as extra description fields. In "oai_dc" they are not
-// labelled, so they must be told apart from the abstract.
 const DESCRIPTION_BOILERPLATE = /^(this (thesis|dissertation|report|project|paper|internship report) (is|was|has been) (submitted|presented)|a (thesis|dissertation|project|report) (submitted|presented)|submitted in partial fulfil+ment|in partial fulfil+ment|catalogu?ed from|includes bibliograph)/i;
 
-const MIN_LABELLED_ABSTRACT_CHARS = 20; // labelled as abstract by the repository: accept unless it is a stub like "N/A"
-const MIN_GUESSED_ABSTRACT_CHARS = 150; // unlabelled: must be clearly a paragraph, not a note or a name
+const MIN_LABELLED_ABSTRACT_CHARS = 20;
+const MIN_GUESSED_ABSTRACT_CHARS = 150;
 const MIN_GUESSED_ABSTRACT_WORDS = 20;
 
 function pickAbstract(record) {
@@ -423,12 +336,6 @@ function firstYear(values, currentYear) {
   return null;
 }
 
-// A DSpace record carries several dates. Only one of them is the year of the thesis:
-//   issued       when the thesis was published  <- the one we want
-//   copyright    "©2023", almost always the same year
-//   accessioned / available   when a librarian uploaded it, often years later
-// So: issued first, then copyright/submitted/created, and the upload date only as a last resort
-// (earliest one, because the thesis cannot be newer than its upload).
 function chooseYear(record, currentYear = new Date().getFullYear()) {
   const { fields } = record;
 
@@ -443,8 +350,6 @@ function chooseYear(record, currentYear = new Date().getFullYear()) {
     return uploadYears.length > 0 ? Math.min(...uploadYears) : null;
   }
 
-  // oai_dc: the dates are not labelled. DSpace writes the upload dates as full timestamps
-  // ("2024-05-14T04:06:06Z") and the issue date as a plain date ("2023-11"), so the shape tells them apart.
   const dates = allValues(fields, ['dc.date']);
   const timestamps = dates.filter((value) => /^\d{4}-\d{2}-\d{2}T/.test(value));
   const others = dates.filter((value) => !/^\d{4}-\d{2}-\d{2}T/.test(value));
@@ -458,8 +363,6 @@ function chooseYear(record, currentYear = new Date().getFullYear()) {
   return uploadYears.length > 0 ? Math.min(...uploadYears) : null;
 }
 
-// Degree level is only taken from wording that names a degree. Bare two-letter forms such as
-// "MA" or "BS" are ignored unless written with dots, because they also appear as ordinary words.
 const PHD_PATTERN = /\b(ph\.?\s?d|d\.?\s?phil|doctor of philosophy)\b/i;
 const DOCTORAL_PATTERN = /\b(doctor of|doctoral|doctorate)\b/i;
 const MPHIL_PATTERN = /\b(m\.?\s?phil|master of philosophy)\b/i;
@@ -480,11 +383,9 @@ function degreeFromText(text) {
   return null;
 }
 
-// Looks for a stated degree, most specific source first. Returns null when nothing states one.
 function detectDegree(record, typeValues) {
   const { fields } = record;
 
-  // 1. Fields whose whole purpose is to name the degree ("Bachelor of Science in Biotechnology").
   const degreeKeys = Object.keys(fields).filter((key) => /(^|\.)degree(\.|$)/.test(key));
   const nameKeys = degreeKeys.filter((key) => !key.endsWith('.level'));
   const levelKeys = degreeKeys.filter((key) => key.endsWith('.level'));
@@ -495,15 +396,11 @@ function detectDegree(record, typeValues) {
     }
   }
 
-  // 2. The type itself ("Doctoral thesis", "masterThesis").
   for (const value of typeValues) {
     const found = degreeFromText(value.replace(/([a-z])([A-Z])/g, '$1 $2'));
     if (found) return found;
   }
 
-  // 3. A note such as "...in partial fulfillment of the requirements for the degree of Master of
-  //    Arts in English". Only the words right after "degree of" are read, never a whole abstract,
-  //    so a thesis ABOUT doctoral education is not mistaken for a doctoral thesis.
   for (const text of allValues(fields, ['dc.description', 'dc.description.note', 'dc.description.statementofresponsibility'])) {
     const match = text.match(/\bdegree of\s+(.{3,90})/i);
     if (match) {
@@ -515,8 +412,6 @@ function detectDegree(record, typeValues) {
   return null;
 }
 
-// Catalogue keywords that are also everyday words in other fields ("market segmentation",
-// "consensus building", "accessibility of health care"). They are not trusted on their own.
 const AMBIGUOUS_SUBJECT_KEYWORDS = new Set(['segmentation', 'consensus', 'accessibility', 'usability', 'sensors']);
 
 function escapeRegex(text) {
@@ -529,14 +424,9 @@ const SUBJECT_MATCHERS = SUBJECT_CATALOG
     subject,
     patterns: subject.keywords
       .filter((keyword) => !AMBIGUOUS_SUBJECT_KEYWORDS.has(keyword))
-      // whole words only: "nlp" must not match inside another word
       .map((keyword) => new RegExp(`(^|[^a-z0-9])${escapeRegex(keyword)}($|[^a-z0-9])`, 'i')),
   }));
 
-// Maps the repository's own subject keywords to one of the site's disciplines, but only when the
-// evidence points one way: one discipline must match more keywords than every other. A tie, or no
-// match, returns null and the record gets the neutral category. A wrong discipline is worse than
-// none, because the discipline filter would then show the thesis to the wrong readers.
 function matchDiscipline(subjectTerms) {
   const terms = uniqueCaseInsensitive(subjectTerms.map((term) => term.toLowerCase()));
   if (terms.length === 0) return null;
@@ -554,8 +444,6 @@ function matchDiscipline(subjectTerms) {
   return scored[0].subject;
 }
 
-// The handle ("http://hdl.handle.net/10361/22810") is the permanent address of the record in its
-// own repository. It keeps working when the repository changes software, which a page URL does not.
 function pickSourceUrl(record) {
   const candidates = allValues(record.fields, ['dc.identifier.uri', 'dc.identifier'])
     .filter((value) => /^https?:\/\/\S+$/i.test(value));
@@ -566,8 +454,6 @@ function pickSourceUrl(record) {
   const repositoryHandlePage = candidates.find((value) => /\/handle\/\d[\d.]*\/\S+/.test(value));
   if (repositoryHandlePage) return repositoryHandlePage;
 
-  // DSpace builds its OAI identifier as "oai:<host>:<handle>", so the handle can be read from it
-  // when the record lists no URL at all.
   const fromIdentifier = String(record.identifier || '').match(/^oai:[^:\s]+:(\d[\d.]*\/[^\s/]+)$/);
   if (fromIdentifier) return `https://hdl.handle.net/${fromIdentifier[1]}`;
 
@@ -578,24 +464,13 @@ function detectOpenAccess(fields) {
   const statements = allValues(fields, ['datacite.rights', 'others.access-status', 'dc.rights.accessrights', 'dcterms.accessrights']);
   if (statements.some((text) => /\b(restricted|embargo(ed)?|closed)\b/i.test(text))) return false;
   if (statements.some((text) => /open[\s._-]*access/i.test(text))) return true;
-  return null; // not stated: leave the model default, do not claim either way
+  return null;
 }
 
 function skip(reason) {
   return { thesis: null, skipReason: reason };
 }
 
-/**
- * mapRecordToThesis(oaiRecord, repository, options?)
- *   -> { thesis, skipReason }
- *
- * Exactly one of the two is set:
- *   thesis      plain object with every field the Thesis model needs for a harvested record
- *   skipReason  one of SKIP_REASONS when the record must not be stored
- *
- * Pure function: no network, no database. `options.currentYear` exists only so tests can pin
- * the "year cannot be in the future" check.
- */
 function mapRecordToThesis(oaiRecord, repository, options = {}) {
   if (!oaiRecord || typeof oaiRecord !== 'object') return skip(SKIP_REASONS.NO_METADATA);
   if (!repository || !repository.key || !repository.name) {
@@ -609,29 +484,23 @@ function mapRecordToThesis(oaiRecord, repository, options = {}) {
   const fields = oaiRecord.fields || {};
   const isDim = oaiRecord.metadataFormat === 'dim';
 
-  // Is it a thesis at all? Repositories also hold articles, reports, newsletters and drawings.
   const typeValues = allValues(fields, ['dc.type', 'dcterms.type']);
   if (!repository.treatAllAsThesis && !isThesisType(typeValues)) return skip(SKIP_REASONS.NOT_THESIS);
 
   const title = firstValues(fields, ['dc.title'])[0] || '';
   if (title.length < 3) return skip(SKIP_REASONS.NO_TITLE);
 
-  // In dim the author is "dc.contributor.author"; in oai_dc DSpace publishes the same people as dc:creator.
   const authorNames = splitPeople(isDim
     ? firstValues(fields, ['dc.contributor.author', 'dc.creator'])
     : firstValues(fields, ['dc.creator']));
   if (authorNames.length === 0) return skip(SKIP_REASONS.NO_AUTHOR);
 
-  // Thesis.abstract is required and the site searches and summarises it. We do not write a
-  // placeholder abstract: a thesis without one is skipped and shows up in the summary count.
   const abstract = pickAbstract(oaiRecord);
   if (!abstract) return skip(SKIP_REASONS.NO_ABSTRACT);
 
   const sourceUrl = pickSourceUrl(oaiRecord);
-  if (!sourceUrl) return skip(SKIP_REASONS.NO_SOURCE_LINK); // every copied record must lead back to its original
+  if (!sourceUrl) return skip(SKIP_REASONS.NO_SOURCE_LINK);
 
-  // Advisor and department. dim labels them. In oai_dc both arrive as plain dc:contributor, so a
-  // contributor that reads like "Department of ..." is the department and a person-like one is the advisor.
   let advisorNames;
   let department;
   if (isDim) {
@@ -676,10 +545,7 @@ function mapRecordToThesis(oaiRecord, repository, options = {}) {
     isOpenAccess: detectOpenAccess(fields),
     license: licenceUrl || '',
 
-    // Harvest bookkeeping (see models/Thesis.js).
     origin: 'harvest',
-    // Searchable straight away: the local search only returns status "approved", and the record
-    // was already reviewed and published by its own university library.
     status: 'approved',
     sourceRepository: repository.key,
     sourceRepositoryName: repository.repositoryName || repository.name,
@@ -692,9 +558,6 @@ function mapRecordToThesis(oaiRecord, repository, options = {}) {
   return { thesis, skipReason: null };
 }
 
-// ---------------------------------------------------------------------------------------------
-// 3. Saving: insert, update, or leave alone
-// ---------------------------------------------------------------------------------------------
 
 function fingerprintValue(field, value) {
   if (value === undefined || value === null) return '';
@@ -704,11 +567,6 @@ function fingerprintValue(field, value) {
   return String(value);
 }
 
-/**
- * computeHarvestChecksum(doc) -> string
- * Fingerprint of the harvester-owned fields of a mapped object OR of a stored Thesis document.
- * Works on both because it only reads plain values (author names, subject ids), never Mongo ids.
- */
 function computeHarvestChecksum(doc) {
   const snapshot = HARVESTED_CONTENT_FIELDS.map((field) => [field, fingerprintValue(field, doc ? doc[field] : undefined)]);
   return crypto.createHash('sha1').update(JSON.stringify(snapshot)).digest('hex');
@@ -716,7 +574,6 @@ function computeHarvestChecksum(doc) {
 
 async function findByExternalId(ThesisModel, externalId) {
   const query = ThesisModel.findOne({ externalId });
-  // Real Mongoose: ask for a plain object. Test doubles may return the document directly.
   return query && typeof query.lean === 'function' ? query.lean() : query;
 }
 
@@ -728,34 +585,10 @@ function pickContentFields(mapped) {
   return out;
 }
 
-// True when the record is hidden because the SOURCE withdrew it (markHarvestedDeleted below),
-// as opposed to an admin rejecting it. Admin rejections always carry rejectedBy.
 function isHiddenBySourceDeletion(doc) {
   return doc.status === 'rejected' && Boolean(doc.sourceDeletedAt) && !doc.rejectedBy;
 }
 
-/**
- * upsertHarvested(ThesisModel, mapped, { dryRun, now }?)
- *   -> { action: 'inserted' | 'updated' | 'unchanged' | 'skipped', reason? }
- *
- * THE DO-NOT-OVERWRITE RULE (checked in this order for a record that already exists here):
- *   1. origin is not "harvest"   -> skipped "not-harvest-origin". A thesis deposited on this site
- *                                   is never touched, whatever the harvester finds.
- *   2. status is "rejected" by an admin -> skipped "admin-rejected". It stays rejected and is
- *                                   never re-created, because the rejected record itself remains
- *                                   as the marker.
- *   3. the harvester-owned fields no longer match the fingerprint stored at the last harvest
- *      write (harvestChecksum)   -> skipped "admin-edited". Somebody corrected the record by
- *                                   hand; their version wins for good.
- *   4. fingerprint of the new data equals the stored one -> "unchanged", nothing is written.
- *   5. otherwise                 -> "updated": only the harvester-owned fields are written.
- *                                   status, pin, upvotes, catalogId, approval fields are never
- *                                   written by an update.
- * One exception to 2: a record the harvester itself hid because the source reported it deleted
- * comes back (status "approved") when the source lists it again.
- *
- * With dryRun the same decision is returned but nothing is written.
- */
 async function upsertHarvested(ThesisModel, mapped, { dryRun = false, now = new Date() } = {}) {
   if (!mapped || !mapped.externalId) {
     throw new Error('upsertHarvested needs a mapped thesis with an externalId.');
@@ -811,25 +644,14 @@ async function upsertHarvested(ThesisModel, mapped, { dryRun = false, now = new 
     if (hiddenBySource) {
       Object.assign(changes, { status: 'approved', approvedAt: now, rejectionReason: '', rejectedAt: null, sourceDeletedAt: null });
     }
-    // origin is repeated in the filter so that this statement can never modify a deposited thesis,
-    // even if the document changed between the read above and this write.
     await ThesisModel.updateOne({ _id: existing._id, origin: 'harvest' }, { $set: changes });
   }
   return { action: 'updated' };
 }
 
-/**
- * markHarvestedDeleted(ThesisModel, externalId, { dryRun, now }?)
- *   -> { action: 'deleted' | 'unchanged' | 'skipped', reason? }
- *
- * Called when the source repository reports a record as deleted (withdrawn, embargoed, removed).
- * We must stop showing it, but we do not destroy the row: bookmarks and reports may point at it.
- * It is hidden by setting status "rejected" with a fixed reason and sourceDeletedAt, which also
- * lets it come back automatically if the source restores it (see upsertHarvested).
- */
 async function markHarvestedDeleted(ThesisModel, externalId, { dryRun = false, now = new Date() } = {}) {
   const existing = await findByExternalId(ThesisModel, externalId);
-  if (!existing) return { action: 'skipped', reason: SKIP_REASONS.DELETED_AT_SOURCE }; // we never had it
+  if (!existing) return { action: 'skipped', reason: SKIP_REASONS.DELETED_AT_SOURCE };
   if (existing.origin !== 'harvest') return { action: 'skipped', reason: SKIP_REASONS.NOT_HARVEST_ORIGIN };
   if (existing.status === 'rejected') {
     return isHiddenBySourceDeletion(existing)
@@ -846,20 +668,11 @@ async function markHarvestedDeleted(ThesisModel, externalId, { dryRun = false, n
   return { action: 'deleted' };
 }
 
-// ---------------------------------------------------------------------------------------------
-// 4. The harvest loop
-// ---------------------------------------------------------------------------------------------
 
 function defaultSleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * buildUserAgent(contactEmail?, siteUrl?) -> string
- * An honest name so a repository administrator who sees us in their logs knows who we are and
- * how to reach us. Throws when no contact address is configured: an anonymous crawler is exactly
- * what repositories block, and a block would hurt every later harvest.
- */
 function buildUserAgent(contactEmail = process.env.HARVEST_CONTACT_EMAIL, siteUrl = process.env.HARVEST_SITE_URL) {
   const email = String(contactEmail || '').trim();
   if (!/^[^\s@<>()]+@[^\s@<>()]+\.[^\s@<>()]+$/.test(email)) {
@@ -870,8 +683,6 @@ function buildUserAgent(contactEmail = process.env.HARVEST_CONTACT_EMAIL, siteUr
   return `TheThesisArchiveHarvester/${HARVESTER_VERSION} (${SITE_NAME}; ${about})`;
 }
 
-// OAI-PMH accepts a day ("2024-01-01") everywhere, and a full UTC second where the repository
-// supports it. Anything else is rejected here, before a request is sent.
 function normaliseOaiDate(value, label) {
   if (value === undefined || value === null || value === '') return null;
   const text = value instanceof Date ? value.toISOString().replace(/\.\d{3}Z$/, 'Z') : String(value).trim();
@@ -881,10 +692,6 @@ function normaliseOaiDate(value, label) {
   return text;
 }
 
-/**
- * buildListRecordsUrl(baseUrl, { metadataPrefix, from, until, set, resumptionToken }) -> string
- * OAI-PMH rule: when a resumptionToken is sent it must be the ONLY argument besides the verb.
- */
 function buildListRecordsUrl(baseUrl, { metadataPrefix, from, until, set, resumptionToken } = {}) {
   const params = new URLSearchParams();
   params.set('verb', 'ListRecords');
@@ -900,7 +707,6 @@ function buildListRecordsUrl(baseUrl, { metadataPrefix, from, until, set, resump
   return `${baseUrl}${separator}${params.toString()}`;
 }
 
-// "Retry-After: 120" (seconds) or "Retry-After: Wed, 21 Oct 2026 07:28:00 GMT". Returns ms or null.
 function parseRetryAfter(headerValue, nowMs = Date.now()) {
   if (headerValue === undefined || headerValue === null) return null;
   const text = String(headerValue).trim();
@@ -919,8 +725,6 @@ function readHeader(response, name) {
   return key ? response.headers[key] : null;
 }
 
-// One page, with timeout and retries. Returns { ok: true, body } or { ok: false, message }.
-// It does not throw for network trouble: the caller turns a failure into a clean, resumable stop.
 async function fetchPage(url, { fetchImpl, headers, timeoutMs, maxRetries, retryBackoffMs, sleep, onWait }) {
   let lastMessage = 'unknown error';
 
@@ -940,7 +744,6 @@ async function fetchPage(url, { fetchImpl, headers, timeoutMs, maxRetries, retry
 
       lastMessage = `HTTP ${status}`;
       if (status === 503 || status === 429) {
-        // The repository is telling us it is busy. Wait exactly as long as it asks.
         const asked = parseRetryAfter(readHeader(response, 'retry-after'));
         if (asked !== null) {
           if (asked > MAX_RETRY_AFTER_MS) {
@@ -950,12 +753,12 @@ async function fetchPage(url, { fetchImpl, headers, timeoutMs, maxRetries, retry
           lastMessage = `${lastMessage} (Retry-After ${Math.round(asked / 1000)}s)`;
         }
       } else if (status < 500) {
-        retryable = false; // 400, 403, 404: asking again will not help and would only add load
+        retryable = false;
       }
     } catch (err) {
       lastMessage = err && err.name === 'AbortError' ? `timed out after ${timeoutMs} ms` : `network error: ${err && err.message ? err.message : err}`;
     } finally {
-      clearTimeout(timer); // otherwise the pending timer would keep the process alive after the run
+      clearTimeout(timer);
     }
 
     if (!retryable || attempt === maxRetries) break;
@@ -975,37 +778,6 @@ function recordError(summary, message) {
   if (summary.errors.length < MAX_STORED_ERRORS) summary.errors.push(message);
 }
 
-/**
- * harvestRepository({
- *   repository,          registry entry (services/repositoryRegistry.js)                    required
- *   from, until,         'YYYY-MM-DD' or 'YYYY-MM-DDThh:mm:ssZ'. These filter on the date the
- *                        record last CHANGED IN THE REPOSITORY, not on the year of the thesis.
- *   maxRecords,          stop after this many records were read (kept or skipped). Default: no limit.
- *   resumptionToken,     continue an earlier run from `summary.lastResumptionToken`.
- *   fetchImpl,           defaults to the global fetch; tests pass a stub.
- *   ThesisModel,         the Mongoose model (or a test double). May be omitted only with dryRun,
- *                        in which case every kept record is reported as "inserted".
- *   dryRun,              true = decide and count, write nothing.
- *   onProgress,          called after every page with { page, completeListSize, ...counts }.
- *   sleep,               async (ms) => void. Injected by tests so they do not really wait.
- *   delayMs,             pause before every request after the first. Default 1000 ms.
- *   timeoutMs, maxRetries, retryBackoffMs,   per-request limits.
- *   contactEmail, siteUrl,                   override HARVEST_CONTACT_EMAIL / HARVEST_SITE_URL.
- *   sampleLimit,         how many mapped records to return in summary.samples (default 3 in dry run, else 0).
- *   now,                 () => Date, for tests.
- * })
- *   -> {
- *     fetched, inserted, updated, unchanged, skipped: { reason: count }, deleted,
- *     errors: [message], errorCount, lastResumptionToken,
- *     complete, requests, metadataPrefix, completeListSize, dryRun, samples
- *   }
- *
- * `errors` is empty on a clean run. A network failure does not throw: it is recorded in `errors`
- * and the run stops with `lastResumptionToken` set, so it can be continued later.
- * `lastResumptionToken` is always safe to resume from: when the run stopped in the middle of a
- * page it is the token of THAT page (re-reading a page is harmless, records are matched by id),
- * and it is null when the run started and stopped inside the first page or finished everything.
- */
 async function harvestRepository({
   repository,
   from,
@@ -1040,14 +812,13 @@ async function harvestRepository({
   const contact = String(contactEmail === undefined ? process.env.HARVEST_CONTACT_EMAIL : contactEmail).trim();
   const headers = {
     'User-Agent': userAgent,
-    From: contact, // the standard HTTP header for "who operates this robot"
+    From: contact,
     Accept: 'text/xml, application/xml;q=0.9',
   };
 
   const fromDate = normaliseOaiDate(from, 'from');
   const untilDate = normaliseOaiDate(until, 'until');
   if (fromDate && untilDate && fromDate.length !== untilDate.length) {
-    // OAI-PMH rule: both ends of the range must use the same precision (both days, or both seconds).
     throw new Error('from and until must use the same format (both YYYY-MM-DD, or both YYYY-MM-DDThh:mm:ssZ).');
   }
   const limit = Number.isFinite(Number(maxRecords)) && Number(maxRecords) > 0 ? Math.floor(Number(maxRecords)) : Infinity;
@@ -1083,7 +854,6 @@ async function harvestRepository({
 
   for (let setIndex = 0; setIndex < sets.length && !stopped; setIndex += 1) {
     const set = sets[setIndex];
-    // A resumption token belongs to one query, so it is only used for the first set of this run.
     let pageToken = setIndex === 0 ? (startToken || null) : null;
     let morePages = true;
 
@@ -1094,8 +864,6 @@ async function harvestRepository({
         break;
       }
 
-      // Politeness: never two requests back to back. The repository is a small university
-      // server, not a CDN; one request per second is the usual courtesy for OAI harvesting.
       if (summary.requests > 0) await sleep(pause);
 
       const url = buildListRecordsUrl(repository.oaiBaseUrl, { metadataPrefix, from: fromDate, until: untilDate, set, resumptionToken: pageToken });
@@ -1116,12 +884,10 @@ async function harvestRepository({
 
       if (parsed.error) {
         if (parsed.error.code === 'noRecordsMatch') {
-          // Not a failure: nothing was added or changed in the requested period (or set).
           morePages = false;
           continue;
         }
         if (parsed.error.code === 'cannotDisseminateFormat' && !pageToken && metadataPrefix !== fallbackPrefix) {
-          // The repository does not offer the richer format. Ask again in the mandatory basic one.
           metadataPrefix = fallbackPrefix;
           summary.metadataPrefix = metadataPrefix;
           continue;
@@ -1170,7 +936,6 @@ async function harvestRepository({
           if (outcome.action === 'skipped') countSkip(summary, outcome.reason);
           else summary[outcome.action] += 1;
         } catch (err) {
-          // One bad record (for example a database validation error) must not end the whole run.
           recordError(summary, `Record ${record.identifier}: ${err && err.message ? err.message : err}`);
         }
       }
@@ -1193,7 +958,7 @@ async function harvestRepository({
       }
 
       if (stoppedMidPage) {
-        summary.lastResumptionToken = pageToken; // re-read this page next time: its tail was not processed
+        summary.lastResumptionToken = pageToken;
         stopped = true;
       } else if (parsed.resumptionToken) {
         pageToken = parsed.resumptionToken;

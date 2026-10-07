@@ -1,5 +1,3 @@
-// "5 min ago", "3 days ago", or the date for anything older than a month.
-// Small and dependency-free; `now` can be passed in so it is easy to test.
 export function timeAgo(value, now = Date.now()) {
   const then = new Date(value).getTime();
   if (!Number.isFinite(then)) return '';

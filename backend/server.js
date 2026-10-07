@@ -1,4 +1,3 @@
-// Configure reliable DNS servers for Windows MongoDB SRV resolution
 const dns = require('dns');
 try {
   dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
@@ -29,14 +28,10 @@ const feedbackRoutes = require('./routes/feedback');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Read the visitor's real address when the app runs behind a hosting proxy.
-// Without this, rate limits count every visitor as one address (see utils/trustProxy.js).
 const trustProxy = resolveTrustProxy(process.env);
 app.set('trust proxy', trustProxy);
-// Do not announce which framework runs the site
 app.disable('x-powered-by');
 
-// Configuration validation (Priority 0)
 if (!process.env.MONGODB_URI) {
   console.error('✗ Fatal Configuration Error: MONGODB_URI environment variable is required.');
   process.exit(1);
@@ -46,7 +41,6 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-// Explicit CORS origin validator (rejects wildcard credentialed CORS)
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://localhost:3000',
@@ -57,18 +51,16 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 function isAllowedOrigin(origin) {
-  if (!origin) return true; // Allow same-origin / server-to-server / curl / test runners
+  if (!origin) return true;
   if (ALLOWED_ORIGINS.has(origin)) return true;
   try {
     const url = new URL(origin);
     if (url.hostname.endsWith('.vercel.app')) return true;
   } catch {
-    // ignore invalid URL format
   }
   return false;
 }
 
-// HTTP Security Headers & Content Security Policy (compatible with Google sign-in and Vite)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -76,7 +68,6 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
-  // Tell browsers to keep using https for this address (only sent on real https requests)
   if (process.env.NODE_ENV === 'production' && req.secure) {
     res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
   }
@@ -87,7 +78,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -100,11 +90,9 @@ app.use(
   })
 );
 app.use(express.json({ limit: '5mb' }));
-// Send large JSON answers (search results) gzip-compressed
 app.use(jsonCompression());
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
-// Health Check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
@@ -115,22 +103,18 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Apply API baseline rate limiter to all API endpoints
 app.use('/api', apiLimiter);
 
 const systemRoutes = require('./routes/system');
 const { optionalAuth } = require('./middleware/auth');
 const { checkMaintenance } = require('./middleware/maintenanceMiddleware');
 
-// Mount public non-maintenance endpoints first
 app.use('/api/system', systemRoutes);
 app.use('/api/auth', authRoutes);
 
-// Identify user for administrative bypass, then apply maintenance check
 app.use(optionalAuth);
 app.use(checkMaintenance);
 
-// Mount administrative and research routes
 app.use('/api/admin', adminRoutes);
 app.use('/api/thesis', thesisRoutes);
 app.use('/api/upload', uploadRoutes);
@@ -157,12 +141,10 @@ app.get('/api/datasets', async (req, res) => {
   }
 });
 
-// Unknown API address: answer in JSON so the page can show a message instead of an HTML error page
 app.use('/api', (req, res) => {
   res.status(404).json({ message: 'This address does not exist on the server.' });
 });
 
-// Last stop for any error a route did not handle itself. Logs the real error; tells the visitor little.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
@@ -175,7 +157,6 @@ app.use((err, req, res, next) => {
   if (err && /^CORS:/.test(String(err.message))) {
     return res.status(403).json({ message: 'This site address is not allowed to use the server.' });
   }
-  // A request Express itself refused (a badly formed address, for example) is the caller's mistake, not ours
   const status = Number(err && (err.status || err.statusCode));
   if (status >= 400 && status < 500) {
     return res.status(status).json({ message: status === 404 ? 'This address does not exist on the server.' : 'The request could not be understood.' });
@@ -190,7 +171,6 @@ const { initSocket } = require('./socket');
 const server = http.createServer(app);
 initSocket(server);
 
-// Database Connection with DNS SRV Fallback (for Windows local resolvers)
 async function startServer() {
   console.log('Connecting to database...');
   try {
@@ -212,7 +192,6 @@ async function startServer() {
       console.log(`✓ Realtime WebSocket engine active on port ${PORT}`);
       console.log(`✓ Proxy trust: ${trustProxy === false ? 'off (direct connections)' : trustProxy}`);
 
-      // Start periodic topic alert scanner (every 15 minutes)
       const { runAllScheduledAlerts } = require('./services/topicAlertService');
       const ALERT_INTERVAL_MS = 15 * 60 * 1000;
       setInterval(() => {

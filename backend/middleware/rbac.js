@@ -1,8 +1,5 @@
 const { PERMISSIONS, ALL_PERMISSIONS } = require('../constants/permissions');
 
-/**
- * Returns computed capabilities and permissions for a user object.
- */
 function getCapabilities(user) {
   if (!user) {
     return {
@@ -54,13 +51,6 @@ function getCapabilities(user) {
   };
 }
 
-/**
- * Middleware: Requires a specific granular capability.
- * - Admin implicitly has every permission.
- * - Editors must possess the exact permission string in user.permissions.
- * - Students have none.
- * - Banned users are denied immediately.
- */
 function requirePermission(permission) {
   return (req, res, next) => {
     if (!req.user) {
@@ -98,10 +88,6 @@ function requirePermission(permission) {
   };
 }
 
-/**
- * Middleware: Strictly requires Admin role (Owner-only operations).
- * Editors receive 403.
- */
 function requireAdmin(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required.' });
@@ -124,10 +110,6 @@ function requireAdmin(req, res, next) {
   });
 }
 
-/**
- * Middleware: Requires staff status (admin or editor).
- * Students receive 403.
- */
 function requireStaff(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required.' });

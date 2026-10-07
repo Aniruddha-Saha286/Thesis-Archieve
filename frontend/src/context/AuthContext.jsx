@@ -3,12 +3,10 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
-// Configure API base URL for production deployments (e.g. Vercel -> Render backend)
 if (import.meta.env.VITE_API_URL) {
   axios.defaults.baseURL = import.meta.env.VITE_API_URL.replace(/\/+$/, '');
 }
 
-// Global Axios request interceptor: guarantees Bearer token is attached to every single request
 axios.interceptors.request.use((config) => {
   const savedToken = localStorage.getItem('thesis_vault_token');
   if (savedToken) {
@@ -36,7 +34,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Set default axios authorization header whenever token changes
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;

@@ -21,17 +21,14 @@ function isAllowedOrigin(origin) {
     const url = new URL(origin);
     if (url.hostname.endsWith('.vercel.app')) return true;
   } catch {
-    // ignore invalid URL format
   }
   return false;
 }
 
 function assignSocketRooms(socket, user) {
   if (!socket || !user) return;
-  // Always join personal user room
   socket.join(`user:${user.id}`);
 
-  // Clean all previous privileged rooms
   socket.leave('role:admin');
   socket.leave('role:editor');
   socket.leave('perm:students.view');
@@ -78,7 +75,6 @@ function initSocket(httpServer) {
     pingInterval: 25000,
   });
 
-  // Socket middleware: Verifies token AND re-checks current user from DB
   io.use(async (socket, next) => {
     try {
       const rawToken =
@@ -119,7 +115,6 @@ function initSocket(httpServer) {
       assignSocketRooms(socket, socket.user);
     }
 
-    // Client can dynamically re-authenticate after login
     socket.on('auth:authenticate', async (token) => {
       try {
         if (!token) return;
@@ -156,7 +151,6 @@ function initSocket(httpServer) {
     });
 
     socket.on('disconnect', () => {
-      // Clean disconnect
     });
   });
 
@@ -167,9 +161,6 @@ function getIO() {
   return io;
 }
 
-/**
- * Remove privileged rooms and disconnect sockets when a user is banned, demoted, or revoked.
- */
 function revokeUserSocketPrivileges(userId) {
   if (!io || !userId) return;
   const sId = String(userId);
@@ -199,9 +190,6 @@ function revokeUserSocketPrivileges(userId) {
   }
 }
 
-/**
- * Synchronize socket rooms and permissions in realtime when an editor's role or permissions change.
- */
 function syncUserSocketRooms(userId, user) {
   if (!io || !userId) return;
   const sId = String(userId);
@@ -226,13 +214,7 @@ function syncUserSocketRooms(userId, user) {
   }
 }
 
-// -------------------------------------------------------------
-// Realtime Minimal Broadcast Event Helpers
-// -------------------------------------------------------------
 
-/**
- * Broadcast when an admin/editor approves, rejects, bans, or reinstates a student.
- */
 function emitStudentStatusChanged(studentId, payload) {
   if (!io) return;
   const sId = String(studentId);
@@ -246,9 +228,6 @@ function emitStudentStatusChanged(studentId, payload) {
   io.to('role:admin').to('perm:students.view').emit('admin:student_updated', sanitized);
 }
 
-/**
- * Broadcast when a new student registers via Google OAuth.
- */
 function emitNewStudentRegistered(student) {
   if (!io) return;
   io.to('role:admin').to('perm:students.view').emit('admin:new_student_application', {
@@ -260,9 +239,6 @@ function emitNewStudentRegistered(student) {
   });
 }
 
-/**
- * Broadcast when a student updates their academic profile.
- */
 function emitStudentProfileUpdated(student) {
   if (!io) return;
   const sId = String(student._id || student.id);
@@ -277,9 +253,6 @@ function emitStudentProfileUpdated(student) {
   io.to('role:admin').to('perm:students.view').emit('admin:student_profile_updated', { studentId: sId });
 }
 
-/**
- * Broadcast when a new thesis or research paper is proposed.
- */
 function emitThesisCreated(thesis) {
   if (!io) return;
   const minimalAdminPayload = {
@@ -306,9 +279,6 @@ function emitThesisCreated(thesis) {
   }
 }
 
-/**
- * Broadcast when a publication is updated.
- */
 function emitThesisUpdated(thesis) {
   if (!io) return;
   io.emit('thesis:updated', {
@@ -319,39 +289,25 @@ function emitThesisUpdated(thesis) {
   });
 }
 
-/**
- * Broadcast when a publication is permanently removed.
- */
 function emitThesisDeleted(thesisId) {
   if (!io) return;
   io.emit('thesis:deleted', { thesisId: String(thesisId) });
 }
 
-/**
- * Broadcast when a publication is pinned / unpinned by the editorial board.
- */
 function emitThesisPinned(thesisId, isPinned) {
   if (!io) return;
   io.emit('thesis:pinned', { thesisId: String(thesisId), isPinned: Boolean(isPinned) });
 }
 
-/**
- * Send an event directly to a specific user's live session room.
- */
 function emitToUser(userId, event, payload) {
   if (!io || !userId) return;
   io.to(`user:${String(userId)}`).emit(event, payload);
 }
 
-/**
- * Send an event to connected staff with permission or admin role.
- */
 function emitToAdmins(event, payload) {
   if (!io) return;
-  // Always broadcast to all authenticated administrators
   io.to('role:admin').emit(event, payload);
 
-  // Also broadcast to granular permission holders (editors)
   if (event.includes('payment')) {
     io.to('perm:payments.view').emit(event, payload);
   } else if (event.includes('student')) {

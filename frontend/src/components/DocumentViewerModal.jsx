@@ -43,7 +43,6 @@ export default function DocumentViewerModal({ isOpen, onClose, studentId, studen
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs transition-opacity"
         onClick={onClose}
@@ -51,7 +50,6 @@ export default function DocumentViewerModal({ isOpen, onClose, studentId, studen
 
       <div className="relative bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden z-10">
         
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C]">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />

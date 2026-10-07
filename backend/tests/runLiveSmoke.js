@@ -43,7 +43,6 @@ async function runLiveSmokeTests() {
     }
   }
 
-  // 1. Live Federated Paper Search
   await test('Live Federated Search: retrieves scholarly records from external providers without authentication', async () => {
     const res = await orchestrateScholarlySearch({
       query: 'Quantum computing algorithms',
@@ -59,7 +58,6 @@ async function runLiveSmokeTests() {
     console.log(`    Retrieved ${res.records.length} records. Provider telemetry:`, Object.keys(res.providerStatus));
   });
 
-  // 2. Live Global Dataset Search (DataCite / Zenodo)
   await test('Live Dataset Discovery: retrieves real open science datasets from DataCite and Zenodo', async () => {
     const dsRes = await searchGlobalDatasets({
       query: 'genomics benchmark',
@@ -71,7 +69,6 @@ async function runLiveSmokeTests() {
     console.log(`    Retrieved ${dsRes.datasets.length} datasets. Outage status: ${dsRes.hasOutage}`);
   });
 
-  // 3. Live Institution Search
   await test('Live Institution Search: queries OpenAlex institution registry', async () => {
     const insts = await institutionService.suggestInstitutions('Oxford', { academicOnly: true, limit: 3 });
     assert(Array.isArray(insts), 'Institutions must be an array');
@@ -79,7 +76,6 @@ async function runLiveSmokeTests() {
     console.log(`    Found institution: ${insts[0].name} (${insts[0].countryCode || 'N/A'})`);
   });
 
-  // 4. Live Author Search
   await test('Live Author Search: queries OpenAlex author registry with citation metrics', async () => {
     const authors = await authorService.searchAuthors('LeCun', { limit: 3 });
     assert(Array.isArray(authors), 'Authors must be an array');
@@ -87,11 +83,10 @@ async function runLiveSmokeTests() {
     console.log(`    Found author: ${authors[0].name}, Works: ${authors[0].worksCount}, Citations: ${authors[0].citationCount}`);
   });
 
-  // 5. Live Institution Research Landscape Analytics
   await test('Live Institution Landscape: queries OpenAlex research fields and yearly publication trends', async () => {
     process.env.INSTITUTION_ANALYTICS_ENABLED = 'true';
     const landscape = await getInstitutionResearchLandscape({
-      institutionId: 'I40120149', // Oxford
+      institutionId: 'I40120149',
       fromYear: 2022,
       toYear: 2024,
       forceRefresh: true,
@@ -109,7 +104,6 @@ async function runLiveSmokeTests() {
     }
   });
 
-  // 6. Live Grounded Paper Summary Generation
   await test('Live Grounded Paper Summary: generates grounded abstract findings and key terms', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
     const summaryResult = await getOrGeneratePaperSummary({
@@ -142,7 +136,6 @@ async function runLiveSmokeTests() {
     assert(Array.isArray(summaryResult.summary?.keyTerms), 'Key terms should be an array');
     console.log(`    Generated grounded summary with ${summaryResult.summary.keyTerms.length} key domain terms.`);
 
-    // Verify unauthenticated guest is strictly blocked
     const guestResult = await getOrGeneratePaperSummary({
       paper: { id: 'smoke_guest_check', title: 'Test', abstract: 'Substantial abstract for testing that guest is blocked.' },
       user: null,

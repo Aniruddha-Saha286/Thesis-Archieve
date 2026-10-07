@@ -8,12 +8,8 @@ async function runProviderIntegrationTests() {
   const originalFetch = global.fetch;
   const originalEnvOffline = process.env.OFFLINE_MODE;
 
-  // =========================================================================
-  // PART A: SEMANTIC SCHOLAR PROVIDER TESTS
-  // =========================================================================
   console.log('--- 1. Semantic Scholar Provider Adapter ---');
 
-  // Test A1: Offline Mode Deterministic Records
   {
     process.env.OFFLINE_MODE = 'true';
     const res = await searchSemanticScholar({ query: 'deep learning', page: 1, limit: 2 });
@@ -24,10 +20,8 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar offline mode returns deterministic normalized records');
   }
 
-  // Switch to online simulation mode for network mocking
   process.env.OFFLINE_MODE = 'false';
 
-  // Test A2: Successful 200 OK Response Parsing
   {
     global.fetch = async (url) => {
       assert.ok(url.includes('api.semanticscholar.org/graph/v1/paper/search'));
@@ -71,7 +65,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar 200 OK accurately maps fields and normalized record structures');
   }
 
-  // Test A3: 429 Rate Limit Handling
   {
     global.fetch = async () => ({
       ok: false,
@@ -87,7 +80,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar 429 rate limit safely handled without throwing');
   }
 
-  // Test A4: 429 Retry Mechanism (Retry-After <= 2s)
   {
     let attempts = 0;
     global.fetch = async () => {
@@ -117,7 +109,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar single retry succeeds when Retry-After is <= 2s');
   }
 
-  // Test A5: 500 Upstream Service Error Isolation
   {
     global.fetch = async () => ({
       ok: false,
@@ -131,7 +122,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar 500 upstream failure isolated without unhandled rejection');
   }
 
-  // Test A6: 401 & 403 Access Denial Handling
   {
     global.fetch = async () => ({
       ok: false,
@@ -153,7 +143,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar 401 and 403 responses handled gracefully');
   }
 
-  // Test A7: Malformed JSON Resilience
   {
     global.fetch = async () => ({
       ok: true,
@@ -170,7 +159,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar malformed JSON handled cleanly');
   }
 
-  // Test A8: Zero Results Handling
   {
     global.fetch = async () => ({
       ok: true,
@@ -187,12 +175,8 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] Semantic Scholar zero results handled properly');
   }
 
-  // =========================================================================
-  // PART B: OPENAIRE GRAPH API V3 PROVIDER TESTS
-  // =========================================================================
   console.log('--- 2. OpenAIRE Graph API V3 Provider Adapter ---');
 
-  // Test B1: Offline Mode Deterministic Records
   {
     process.env.OFFLINE_MODE = 'true';
     const res = await searchOpenAire({ query: 'energy systems', page: 1, limit: 2 });
@@ -203,10 +187,8 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] OpenAIRE Graph V3 offline mode returns deterministic normalized records');
   }
 
-  // Switch to online simulation mode for OpenAIRE
   process.env.OFFLINE_MODE = 'false';
 
-  // Test B2: OpenAIRE V3 Endpoint & Query Parameter Structure
   {
     let interceptedUrl = '';
     global.fetch = async (url) => {
@@ -266,7 +248,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] OpenAIRE Graph V3 accurately targets v3 endpoints, extracts instances, and handles pagination');
   }
 
-  // Test B3: 500 Upstream Service Error Isolation
   {
     global.fetch = async () => ({
       ok: false,
@@ -280,7 +261,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] OpenAIRE 500 upstream failure isolated gracefully');
   }
 
-  // Test B4: 400 Bad Request Graceful Fallback
   {
     global.fetch = async () => ({
       ok: false,
@@ -294,7 +274,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] OpenAIRE 400 bad query handled without crash');
   }
 
-  // Test B5: Zero Results Handling
   {
     global.fetch = async () => ({
       ok: true,
@@ -311,7 +290,6 @@ async function runProviderIntegrationTests() {
     console.log('  ✓ [PASS] OpenAIRE zero results handled cleanly');
   }
 
-  // Restore mocks
   global.fetch = originalFetch;
   process.env.OFFLINE_MODE = originalEnvOffline;
 

@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-/**
- * Harvest thesis records from a university repository into the local archive.
- *
- *   node scripts/harvestRepository.js --list
- *   node scripts/harvestRepository.js --repo bracu --from 2024-01-01 --max 500 --dry-run
- *   node scripts/harvestRepository.js --repo bracu --from 2024-01-01
- *
- * Start with --dry-run: it contacts the repository, shows what WOULD be stored, and never opens
- * the database. See services/repositoryHarvester.js for the rules about what is stored.
- */
 const dns = require('dns');
 const path = require('path');
 
@@ -39,9 +29,6 @@ Environment (backend/.env):
   MONGODB_URI             required unless --dry-run or --list.
 `;
 
-// Same start-up steps as scripts/createAdmin.js (public DNS servers, then backend/.env).
-// Kept in a function that only runs when the file is started from the command line, so that
-// the tests can load this file without touching DNS settings or reading any .env file.
 function loadEnvironment() {
   try {
     dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
@@ -52,8 +39,6 @@ function loadEnvironment() {
 const FLAG_OPTIONS = new Set(['dry-run', 'list', 'force', 'help']);
 const VALUE_OPTIONS = new Set(['repo', 'from', 'until', 'max', 'resume', 'delay']);
 
-// Accepts "--key value" and "--key=value". Unknown options are an error, not ignored:
-// a mistyped "--dryrun" must never turn into a real write.
 function parseArgs(argv) {
   const options = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -183,7 +168,6 @@ async function main(argv = process.argv.slice(2)) {
     return 1;
   }
 
-  // Checked before anything else touches the network or the database.
   let userAgent;
   try {
     userAgent = buildUserAgent();
@@ -209,13 +193,10 @@ async function main(argv = process.argv.slice(2)) {
 
   try {
     if (!dryRun) {
-      // Loaded here, not at the top, so that --dry-run and --list work on a machine with no database.
       mongoose = require('mongoose');
       Thesis = require('../models/Thesis');
       await mongoose.connect(process.env.MONGODB_URI);
       console.log('Connected to database.');
-      // Wait until the indexes exist. The unique index on externalId is what guarantees that
-      // two overlapping runs can never store the same thesis twice.
       await Thesis.init();
     }
 
@@ -267,7 +248,6 @@ if (require.main === module) {
   loadEnvironment();
   main().then(
     (code) => {
-      // exitCode instead of process.exit(): lets pending output flush before the process ends.
       process.exitCode = code;
     },
     (err) => {

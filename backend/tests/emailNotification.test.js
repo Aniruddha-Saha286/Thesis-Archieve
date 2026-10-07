@@ -1,21 +1,3 @@
-/**
- * Comprehensive Automated Email Notification Test Suite
- *
- * Verifies that:
- * 1. Admin Email (sahaaniruddha2004@gmail.com) is alerted for:
- *    - Student verification requests (ID card upload)
- *    - bKash payment claims & resubmissions
- *    - Depository reports / grievances
- * 2. User Email is alerted for:
- *    - Payment verification & membership activation
- *    - Administrative membership grants (test/custom/standard)
- *    - Student verification approval
- *    - Editorial Board appointment & permission updates
- * 3. Fail-safe & Non-blocking guarantees:
- *    - In test/offline mode, zero real network sockets are opened
- *    - Missing or invalid inputs never crash the server
- *    - HTML injection is strictly prevented via entity escaping
- */
 
 const assert = require('assert');
 const emailService = require('../services/emailService');
@@ -39,7 +21,6 @@ async function runEmailNotificationTests() {
     }
   };
 
-  // --- 1. Environment & Admin Recipient Resolution ---
   console.log('--- 1. Admin Notification Recipient Resolution ---');
 
   await test('Resolves default admin email to sahaaniruddha2004@gmail.com', () => {
@@ -82,7 +63,6 @@ async function runEmailNotificationTests() {
     }
   });
 
-  // --- 2. HTML Injection & Sanitization ---
   console.log('--- 2. HTML Injection Escaping & Template Security ---');
 
   await test('escapeHtml escapes dangerous XSS script and tag characters', () => {
@@ -95,7 +75,6 @@ async function runEmailNotificationTests() {
     assert(escaped.includes('&#39;'), 'Must contain escaped apostrophe');
   });
 
-  // --- 3. Offline & Mock Isolation ---
   console.log('--- 3. Offline Mode & In-Memory Capturing ---');
 
   await test('Emails in test mode are captured in memory and mock flag is true', async () => {
@@ -115,7 +94,6 @@ async function runEmailNotificationTests() {
     assert.strictEqual(sent[0].subject, 'Test Academic Subject');
   });
 
-  // --- 4. Admin Triggers (Verification, Payment, Grievance) ---
   console.log('--- 4. Admin Email Triggers ---');
 
   await test('Trigger: notifyAdminNewVerification dispatches complete student dossier to admin', async () => {
@@ -209,7 +187,6 @@ async function runEmailNotificationTests() {
     assert(email.html.includes('metadata-inaccuracy'));
   });
 
-  // --- 5. User Triggers (Confirmations & Approvals) ---
   console.log('--- 5. User Email Triggers ---');
 
   await test('Trigger: notifyUserVerificationRequested sends receipt to the requesting student', async () => {
@@ -377,7 +354,6 @@ async function runEmailNotificationTests() {
     assert(email.html.includes('payments.review'));
   });
 
-  // --- 6. Non-blocking / Fail-Safe Resilience ---
   console.log('--- 6. Fail-Safe & Non-blocking Boundary Resilience ---');
 
   await test('sendEmail returns structured failure and never throws when recipient is invalid or empty', async () => {

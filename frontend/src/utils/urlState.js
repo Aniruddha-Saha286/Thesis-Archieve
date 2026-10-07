@@ -1,12 +1,3 @@
-// Keeps the address bar in step with what is on screen, so that Back, refresh and
-// copy-the-link all work.
-//
-//   /?view=library                      which page is open (discover is the default and is left out)
-//   /?q=bangla+sentiment&type=thesis    the search and its main filters
-//   /?paper=<id>                        the paper whose details are open
-//
-// Only query parameters on "/" are used, so no server or hosting rewrite rule is needed.
-// Pure functions: nothing here touches the browser, which keeps them easy to test.
 
 export const VIEWS = ['discover', 'datasets', 'topic', 'library'];
 export const SORTS = ['relevance', 'citations', 'newest'];
@@ -34,7 +25,6 @@ function cleanText(value, max) {
   return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 }
 
-// "?view=library&q=..." -> state. Anything unknown or malformed falls back to the default.
 export function parseUrlState(search) {
   const params = new URLSearchParams(typeof search === 'string' ? search : '');
   const view = params.get('view');
@@ -55,8 +45,6 @@ export function parseUrlState(search) {
   };
 }
 
-// state -> "/?..." with defaults left out, so the plain home page stays "/".
-// Search filters are written only for the Discover page, where they apply.
 export function buildUrl(state, pathname = '/') {
   const s = { ...DEFAULT_URL_STATE, ...(state || {}) };
   const params = new URLSearchParams();
@@ -82,20 +70,16 @@ export function buildUrl(state, pathname = '/') {
   return query ? `${pathname}?${query}` : pathname;
 }
 
-// The part of the address that says which paper is open
 export function paperParams(paper) {
   if (!paper) return { paper: '', doi: '' };
   const id = String(paper._id || paper.id || '').trim();
   return { paper: id.slice(0, 200), doi: paper.doi ? String(paper.doi).trim().slice(0, 200) : '' };
 }
 
-// A record deposited in this archive has a 24-character database id; outside records do not.
 export function isArchiveId(id) {
   return /^[a-f0-9]{24}$/i.test(String(id || ''));
 }
 
-// Outside papers exist only in the search results that were on screen, so a small copy is
-// kept for this browser tab. It lets refresh, Back and Forward reopen the same paper.
 const SNAPSHOT_PREFIX = 'tta:paper:';
 
 export function rememberPaper(storage, paper) {
@@ -104,7 +88,6 @@ export function rememberPaper(storage, paper) {
   try {
     storage.setItem(SNAPSHOT_PREFIX + id, JSON.stringify(paper));
   } catch {
-    // Storage full or blocked: the link still works for archive papers and papers with a DOI
   }
 }
 
@@ -119,9 +102,6 @@ export function recallPaper(storage, id) {
   }
 }
 
-// A search is counted against the daily limit once. The server knows it by a "context id".
-// Keeping that id for this browser tab means a refresh, Back or Forward shows the same search
-// again without counting it a second time.
 const CONTEXT_PREFIX = 'tta:search:';
 
 function contextKey(query) {
@@ -133,7 +113,6 @@ export function rememberSearchContext(storage, query, contextId) {
   try {
     storage.setItem(contextKey(query), String(contextId));
   } catch {
-    // Storage full or blocked: the search still works, a refresh is then counted again
   }
 }
 

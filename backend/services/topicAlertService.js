@@ -6,20 +6,12 @@ const { emitToUser } = require('../socket');
 
 let isRunning = false;
 
-/**
- * Evaluates topic alerts for a specific user.
- * Searches for newly approved publications matching the topic keyword.
- * Generates deduplicated in-app notifications and records the lastCheckedAt timestamp.
- */
 async function checkAlertsForUser(userId) {
   const user = await User.findById(userId);
   if (!user || !Array.isArray(user.topicAlerts) || user.topicAlerts.length === 0) {
     return { notificationsCreated: 0 };
   }
 
-  // Check active entitlements at runtime:
-  // (e.g., Free accounts: 0 alerts, Trial v2: 1 alert, Premium: 10 alerts).
-  // Preserves existing alerts in user.topicAlerts after expiry or downgrade.
   let maxAllowedAlerts = 0;
   try {
     const entitlements = await getEffectiveEntitlements(user._id);
@@ -37,7 +29,6 @@ async function checkAlertsForUser(userId) {
   for (const alert of user.topicAlerts) {
     if (!alert.active) continue;
     if (evaluatedAlertsCount >= maxAllowedAlerts) {
-      // Evaluate only up to allowed quota (1 for trial, 10 for premium), preserving any extra alerts in DB
       break;
     }
     evaluatedAlertsCount++;
@@ -67,13 +58,11 @@ async function checkAlertsForUser(userId) {
       filter.category = alert.category;
     }
 
-    // Complete batch scanning with watermark ordering (no arbitrary 5-paper cutoff)
     const matchingTheses = await Thesis.find(filter)
       .sort({ approvedAt: 1, updatedAt: 1, createdAt: 1 })
       .lean();
 
     if (matchingTheses.length > 0) {
-      // Per-paper deduplication check so one already-notified paper does not suppress other new papers
       const existingNotifs = await Notification.find({
         user: user._id,
         type: 'topic_alert',
@@ -113,12 +102,10 @@ async function checkAlertsForUser(userId) {
         await newNotif.save();
         totalNotificationsCreated++;
 
-        // Real-time dispatch if user is online
         emitToUser(String(user._id), 'notification:new', newNotif);
       }
     }
 
-    // Record last checked time
     alert.lastCheckedAt = new Date();
   }
 
@@ -126,10 +113,6 @@ async function checkAlertsForUser(userId) {
   return { notificationsCreated: totalNotificationsCreated };
 }
 
-/**
- * Scheduled runner: scans all users with active alerts
- * Protected by concurrency lock to prevent overlapping runs
- */
 async function runAllScheduledAlerts() {
   if (isRunning) {
     return;

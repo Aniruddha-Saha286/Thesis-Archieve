@@ -12,7 +12,7 @@ export default function ComparisonMatrixModal({
   onSetComparisonPapers,
 }) {
   useEscapeToClose(onClose, isOpen);
-  const [viewTab, setViewTab] = useState('matrix'); // 'matrix' | 'saved'
+  const [viewTab, setViewTab] = useState('matrix');
   const [matrixTitle, setMatrixTitle] = useState('Comparative Literature Matrix');
   const [currentMatrixId, setCurrentMatrixId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -61,14 +61,12 @@ export default function ComparisonMatrixModal({
       const paperIds = comparisonPapers.map((p) => p._id || p.id || p.paperId);
 
       if (currentMatrixId && !saveAsNew) {
-        // Update existing matrix
         await axios.put(`/api/user/comparisons/${currentMatrixId}`, {
           title: matrixTitle,
           paperIds,
           criteria: editableNotes,
         });
       } else {
-        // Save new matrix
         const res = await axios.post('/api/user/comparisons', {
           title: matrixTitle,
           paperIds,
@@ -94,10 +92,8 @@ export default function ComparisonMatrixModal({
     setCurrentMatrixId(matrix._id);
     setEditableNotes(matrix.criteria || {});
 
-    // If papers need to be reloaded from IDs
     if (onSetComparisonPapers && Array.isArray(matrix.paperIds)) {
       try {
-        // Fetch saved papers to populate full paper objects
         const res = await axios.get('/api/user/saved-papers');
         const userSaved = res.data || [];
         const matched = matrix.paperIds.map((id) => {
@@ -106,7 +102,6 @@ export default function ComparisonMatrixModal({
         });
         onSetComparisonPapers(matched);
       } catch (err) {
-        // Keep existing if fetch fails
       }
     }
 
@@ -163,7 +158,6 @@ export default function ComparisonMatrixModal({
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-6xl p-6 shadow-2xl relative max-h-[92vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
           <div className="flex items-center gap-3">
             <Scale className="w-5 h-5 text-purple-700 dark:text-purple-400" />

@@ -123,7 +123,6 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
 
       <div className="relative bg-white dark:bg-neutral-900 border border-[#D5D1C7] dark:border-neutral-800 rounded-sm shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden z-10 font-mono-meta text-xs text-[#1C1B18] dark:text-neutral-100">
         
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#E2DFD8] dark:border-neutral-800 bg-[#FAF9F5] dark:bg-neutral-950">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -141,7 +140,6 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
           
           {error && (
@@ -151,7 +149,6 @@ export default function EditorManagementModal({ isOpen, onClose, editor, onSucce
             </div>
           )}
 
-          {/* Email field */}
           <div>
             <label className="block font-bold text-[#1C1B18] dark:text-neutral-200 mb-1 uppercase text-[11px]">
               Editor Google Email *

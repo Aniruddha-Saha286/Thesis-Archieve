@@ -20,6 +20,7 @@ import {
   MoreHorizontal,
   Sparkles,
   Check,
+  X,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -53,7 +54,6 @@ export default function ThesisCard({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const menuRef = useRef(null);
 
-  // Escape closes the menu or the delete question, whichever is open
   useEscapeToClose(() => setShowMoreMenu(false), showMoreMenu);
   useEscapeToClose(() => setShowDeleteConfirm(false), showDeleteConfirm);
 
@@ -71,7 +71,6 @@ export default function ThesisCard({
     };
   }, [showMoreMenu]);
 
-  // Keep the button in step with the saved list (after a reload, or when a paper is removed elsewhere)
   useEffect(() => {
     setIsSaved(Boolean(initiallySaved));
   }, [initiallySaved]);
@@ -131,7 +130,6 @@ export default function ThesisCard({
       if (onSavedChange) onSavedChange();
     } catch (err) {
       console.error('Failed to toggle save paper:', err);
-      // e.g. the saved-papers limit of the current plan: tell the user instead of doing nothing
       showNotice(err.response?.data?.message || 'Could not update your saved papers. Please try again.', 'error');
       if (err.response?.data?.code === 'QUOTA_EXCEEDED' && onOpenMembership) onOpenMembership();
     } finally {
@@ -167,13 +165,11 @@ export default function ThesisCard({
     }
   };
 
-  // Determine publication type styling
   const pubType = (thesis.publicationType || thesis.degreeType || 'article').toLowerCase();
   const isThesisType = pubType.includes('thesis') || pubType.includes('dissertation') || pubType.includes('capstone');
   const isPreprint = pubType.includes('preprint') || thesis.source === 'arXiv';
   const isConference = pubType.includes('proceedings') || pubType.includes('conference');
 
-  // Same colour as the type chip, as a thin edge, so a long list can be scanned by type
   const typeEdge = isThesisType
     ? 'bg-blue-500 dark:bg-blue-400'
     : isPreprint
@@ -182,10 +178,8 @@ export default function ThesisCard({
     ? 'bg-purple-500 dark:bg-purple-400'
     : 'bg-emerald-500 dark:bg-emerald-400';
 
-  // Search results carry provenance in `sources`; older/local records use `source`
   const sourceLabel = thesis.source || thesis.sources?.[0]?.provider || '';
 
-  // Direct authentic PDF detection
   const isDirectPdf = Boolean(
     thesis.isDirectPdf ||
     (thesis.pdfUrl && (
@@ -196,7 +190,6 @@ export default function ThesisCard({
     ))
   );
 
-  // One main action per card: the best way to read this paper
   const primaryLink = isDirectPdf && thesis.pdfUrl
     ? { href: thesis.pdfUrl, label: 'Open PDF', icon: FileText, title: `Open the PDF: ${thesis.title}` }
     : (thesis.fullTextUrl || thesis.pdfUrl)
@@ -225,13 +218,12 @@ export default function ThesisCard({
   const plainAuthors = thesis.author || (Array.isArray(thesis.authors) && thesis.authors.map((a) => a.name).join(', ')) || '';
   const institutionName = thesis.awardingInstitution?.name || thesis.authorships?.[0]?.institutions?.[0]?.name || thesis.university || '';
   const venueName = thesis.publisher || thesis.venue || '';
-  // A thesis usually lists its university as both institution and publisher: show it once
   const showVenue = Boolean(venueName) && !(institutionName && venueName.toLowerCase().includes(institutionName.toLowerCase()));
 
   const buttonBase = 'inline-flex items-center justify-center gap-1.5 rounded-sm text-sm lg:text-[13px] transition cursor-pointer min-h-[40px] lg:min-h-[32px] px-3 lg:px-2.5';
   const quietButton = `${buttonBase} bg-[#FAF9F5] dark:bg-[#201F1C] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] font-medium`;
   const mainButton = `${buttonBase} bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 font-semibold shadow-2xs`;
-  const menuItem = 'w-full text-left flex items-center justify-between gap-2 px-3 py-2 hover:bg-[#FAF9F5] dark:hover:bg-[#282622] text-[#1C1B18] dark:text-[#F0EDE6] transition cursor-pointer';
+  const menuItem = 'w-full text-left flex items-center justify-between gap-2 px-3 py-2.5 lg:py-2 hover:bg-[#FAF9F5] dark:hover:bg-[#282622] text-[#1C1B18] dark:text-[#F0EDE6] transition cursor-pointer';
   const closeMenu = () => setShowMoreMenu(false);
 
   return (
@@ -242,7 +234,6 @@ export default function ThesisCard({
     >
       <span aria-hidden="true" className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-sm ${typeEdge}`} />
 
-      {/* Retraction warning */}
       {thesis.isRetracted && (
         <div className="mb-2.5 bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 px-2.5 py-2 rounded-sm text-xs text-red-900 dark:text-red-300 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-1.5 font-bold">
@@ -263,7 +254,6 @@ export default function ThesisCard({
       )}
 
       <div className="flex flex-col lg:flex-row lg:items-start gap-2.5 lg:gap-4">
-        {/* What the paper is */}
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="text-[17px] font-serif-title font-normal leading-snug">
             <button
@@ -276,7 +266,6 @@ export default function ThesisCard({
             </button>
           </h3>
 
-          {/* One line of facts: type, who, when, where, source */}
           <div className="text-[13px] text-[#605D55] dark:text-[#A8A49C] flex items-center gap-x-1.5 gap-y-0.5 flex-wrap leading-snug">
             {thesis.isPinned && (
               <span className="inline-flex items-center gap-1 bg-amber-400 text-neutral-950 px-1.5 rounded-sm text-[11px] font-bold">
@@ -424,7 +413,29 @@ export default function ThesisCard({
             </button>
 
             {showMoreMenu && (
-              <div role="menu" className="absolute right-0 bottom-full mb-1 lg:bottom-auto lg:top-full lg:mt-1 w-60 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm shadow-xl z-20 py-1 text-[13px]">
+              <>
+                <div
+                  className="fixed inset-0 bg-neutral-950/40 backdrop-blur-2xs z-40 lg:hidden"
+                  onClick={() => setShowMoreMenu(false)}
+                  aria-hidden="true"
+                />
+
+                <div
+                  role="menu"
+                  aria-label="More actions"
+                  className="fixed inset-x-3 bottom-3 sm:inset-x-6 sm:bottom-4 max-h-[78dvh] overflow-y-auto overscroll-contain z-50 rounded-lg shadow-2xl lg:shadow-xl lg:rounded-sm lg:inset-auto lg:absolute lg:right-0 lg:bottom-auto lg:top-full lg:mt-1 lg:w-60 lg:max-h-[calc(100vh-120px)] lg:z-20 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] py-1 text-[13px]"
+                >
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#F2EFE8] dark:border-[#2C2A26] lg:hidden sticky top-0 bg-white dark:bg-[#1E1D1A] z-10">
+                    <span className="text-xs font-semibold text-[#737067] dark:text-[#9A968D]">More actions</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowMoreMenu(false)}
+                      className="text-[#737067] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] p-1 -mr-1 cursor-pointer"
+                      aria-label="Close menu"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 {primaryLink && (
                   <button type="button" role="menuitem" onClick={() => { closeMenu(); if (onViewDetail) onViewDetail(thesis, 'overview'); }} className={menuItem}>
                     <span className="flex items-center gap-2"><FileText className="w-3.5 h-3.5 text-[#737067] dark:text-[#9A968D]" />Details</span>
@@ -510,7 +521,8 @@ export default function ThesisCard({
                     </button>
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
         </div>

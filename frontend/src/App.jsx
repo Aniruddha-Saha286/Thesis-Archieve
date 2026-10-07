@@ -44,8 +44,6 @@ import {
 } from 'lucide-react';
 import lazyWithRetry from './utils/lazyWithRetry';
 
-// Loaded only when first opened, so the first screen downloads less. The search page itself,
-// the header and the result cards stay in the main file.
 const VerificationDrawer = lazyWithRetry(() => import('./components/VerificationDrawer'));
 const ProposeThesisModal = lazyWithRetry(() => import('./components/ProposeThesisModal'));
 const FeedbackModal = lazyWithRetry(() => import('./components/FeedbackModal'));
@@ -65,7 +63,6 @@ const CoverageModal = lazyWithRetry(() => import('./components/CoverageModal'));
 const LibraryHub = lazyWithRetry(() => import('./components/LibraryHub'));
 const TopicCheck = lazyWithRetry(() => import('./components/TopicCheck'));
 
-// Shown for a moment while one of the parts above is being fetched
 function PartLoading() {
   return (
     <div role="status" className="py-16 text-center text-xs text-[#737067] dark:text-[#9A968D]">
@@ -577,11 +574,9 @@ export default function App() {
           return;
         }
       } catch (err) {
-        // Not in the archive (or removed): fall through to the DOI or the message below
       }
     }
     if (doi) {
-      // A paper from an outside source: search for its DOI and open it when it comes back
       pendingDoiRef.current = doi.toLowerCase();
       doiSearchSeenRef.current = false;
       setActiveTab('discover');
@@ -601,7 +596,6 @@ export default function App() {
     window.history.replaceState(null, '', buildUrl({ ...parseUrlState(window.location.search), paper: '', doi: '' }, window.location.pathname));
   };
 
-  // A shared link or a refresh: open the paper once the user is signed in and approved
   useEffect(() => {
     if (!isApproved || !pendingPaperRef.current) return;
     const target = pendingPaperRef.current;
@@ -609,11 +603,10 @@ export default function App() {
     openPaperFromAddress(target);
   }, [isApproved]);
 
-  // The DOI search came back: open the matching paper
   useEffect(() => {
     if (!pendingDoiRef.current) return;
     if (loadingTheses) {
-      doiSearchSeenRef.current = true; // the search for this DOI is on its way
+      doiSearchSeenRef.current = true;
       return;
     }
     const wanted = pendingDoiRef.current;
@@ -624,7 +617,6 @@ export default function App() {
       setSelectedDetailThesis(match);
       setDetailInitialTab('overview');
     } else if (theses.length > 0 || searchError || searchQuotaError || doiSearchSeenRef.current) {
-      // The search answered without that paper (or was refused): stop waiting, say so, and drop it from the address
       pendingDoiRef.current = '';
       doiSearchSeenRef.current = false;
       resolvingPaperRef.current = null;
@@ -633,14 +625,10 @@ export default function App() {
     }
   }, [theses, loadingTheses, searchError, searchQuotaError]);
 
-  // Screen -> address. A new step in the browser history for a real move (another page, another
-  // search, opening a paper); a silent update when a paper window is simply closed.
   useEffect(() => {
-    // The linked paper is on screen now, so it is no longer "being looked up"
     if (selectedDetailThesis) resolvingPaperRef.current = null;
     if (!isApproved || pendingPaperRef.current) return;
     const openPaper = paperParams(selectedDetailThesis);
-    // While a linked paper is still being looked up, keep it in the address
     const awaited = !selectedDetailThesis ? resolvingPaperRef.current : null;
     const next = buildUrl(
       {
@@ -662,8 +650,6 @@ export default function App() {
     firstAddressSyncRef.current = false;
     if (next === current) return;
     if (firstSync) {
-      // The page has just loaded: tidy the address it was opened with (extra tracking words, an
-      // unknown value) in place. A new history step here would cost the visitor an extra Back.
       window.history.replaceState(window.history.state, '', next);
       return;
     }
@@ -673,10 +659,8 @@ export default function App() {
     if (selectedDetailThesis) rememberPaper(safeSessionStorage(), selectedDetailThesis);
 
     if (selectedDetailThesis && !hadPaper) {
-      // A paper was opened: one new step, which Back (or the close button) undoes
       window.history.pushState({ ttaPaper: true }, '', next);
     } else if (hadPaper && !onPaperStep) {
-      // The page was loaded from a paper link: correct that same step, add none
       window.history.replaceState(null, '', next);
     } else if (!selectedDetailThesis && hadPaper) {
       window.history.replaceState(null, '', next);
@@ -685,7 +669,6 @@ export default function App() {
     }
   }, [isApproved, activeTab, searchQuery, selectedPublicationType, sortOrder, hasPdfOnly, isOpenAccessOnly, yearMin, yearMax, selectedDetailThesis]);
 
-  // Address -> screen: the Back and Forward buttons
   useEffect(() => {
     const handlePopState = () => {
       const target = parseUrlState(window.location.search);
@@ -697,7 +680,6 @@ export default function App() {
           target.pdf !== hasPdfOnly || target.oa !== isOpenAccessOnly || target.from !== yearMin || target.to !== yearMax;
         if (changed) {
           setSessionId(null);
-          // Going back to a search already made: reuse its id so it is not counted again
           setSearchContextId(recallSearchContext(safeSessionStorage(), target.q));
           setCurrentPage(1);
           setSearchQuery(target.q);
@@ -718,7 +700,6 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   });
 
-  // Fetch theses whenever user is approved and search criteria changes
   useEffect(() => {
     if (isApproved) {
       fetchTheses();
@@ -745,21 +726,18 @@ export default function App() {
     paperLimit,
   ]);
 
-  // Fetch publishers directory
   useEffect(() => {
     if (isApproved) {
       fetchPublishers();
     }
   }, [isApproved]);
 
-  // Fetch staff pending tasks if admin or editor with students.view permission
   useEffect(() => {
     if (isAdmin || (isEditor && hasPermission('students.view'))) {
       fetchPendingStudents();
     }
   }, [isAdmin, isEditor, hasPermission]);
 
-  // Fetch saved papers count and membership status if user is authenticated and approved
   useEffect(() => {
     if (isApproved) {
       fetchUserSavedCount();
@@ -773,7 +751,6 @@ export default function App() {
     }
   }, [activeTab, datasetQuery, datasetPage]);
 
-  // Real-time WebSocket synchronization for catalog and administrative states
   useEffect(() => {
     if (!socket) return;
 
@@ -947,7 +924,6 @@ export default function App() {
     );
   };
 
-  // 1. Initial Auth Check Loading Screen
   if (loading) {
     return (
       <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex items-center justify-center font-mono-meta text-xs transition-colors">
@@ -961,7 +937,6 @@ export default function App() {
     );
   }
 
-  // 1.5. Maintenance Gate: If maintenance mode is active and user is not an administrator
   if (systemMaintenance.enabled && !isAdmin && !checkingMaintenance) {
     return (
       <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex flex-col justify-center items-center p-6">
@@ -1016,17 +991,14 @@ export default function App() {
     return <LoginView />;
   }
 
-  // 3. Post-Signin Student Academic Registration (if profile is incomplete)
   if (needsRegistration) {
     return <StudentRegistrationView />;
   }
 
-  // 4. Verification Gate: If student account is awaiting verification, banned, or rejected
   if (!isApproved) {
     return <PendingView />;
   }
 
-  // 5. Dedicated Staff / Admin Portal: If user is staff (admin or editor) and not previewing student view
   if (isStaff && !adminPreviewStudentView) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C]"><PartLoading /></div>}>
@@ -1039,9 +1011,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex flex-col justify-between transition-colors duration-150">
       <div>
-        {/* App-wide messages are shown by <NoticeToast /> (mounted in main.jsx) on every screen */}
 
-        {/* Admin Maintenance Mode Active Notice */}
         {systemMaintenance.enabled && isAdmin && (
           <div className="bg-amber-500 text-neutral-950 px-6 py-2 flex items-center justify-between text-xs font-mono-meta font-bold border-b border-amber-600 sticky top-0 z-50 shadow-xs">
             <div className="flex items-center gap-2">
@@ -1061,7 +1031,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Top Preview Banner (Shown if Admin or Editor is inspecting Student View) */}
         {isStaff && adminPreviewStudentView && (
           <div className="bg-amber-400 text-neutral-950 px-6 py-2 flex items-center justify-between text-xs font-mono-meta font-bold border-b border-amber-500 sticky top-0 z-40 shadow-xs">
             <div className="flex items-center gap-2">
@@ -1100,7 +1069,6 @@ export default function App() {
           onOpenAlerts={() => setIsTopicAlertsOpen(true)}
         />
 
-        {/* Admin Quick Action Desk Banner */}
         {(isAdmin || (isEditor && hasPermission('students.verify'))) && (
           <AdminDesk
             pendingCount={pendingStudents.length}
@@ -1110,9 +1078,7 @@ export default function App() {
           />
         )}
 
-        {/* Primary Navigation Destinations */}
 
-        {/* 1. Research Library Hub */}
         {activeTab === 'library' && (
           <Suspense fallback={<PartLoading />}>
           <LibraryHub
@@ -1147,7 +1113,6 @@ export default function App() {
             onOpenMembership={() => setIsMembershipOpen(true)}
             onOpenTopicAlerts={() => setIsTopicAlertsOpen(true)}
             onSearchInDiscover={(query, contextId) => {
-              // Reuse the search context so opening the same topic in Discover is not billed again
               setSearchMode('publications');
               setSessionId(null);
               setSearchContextId(contextId || null);

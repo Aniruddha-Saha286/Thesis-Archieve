@@ -44,7 +44,6 @@ export default function Header({
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
 
-  // Close profile dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
@@ -57,7 +56,6 @@ export default function Header({
 
   const totalLibraryItems = (savedPapersCount || 0) + (comparisonCount || 0);
 
-  // Map activeTab values for safety ('publications' -> 'discover')
   const currentTab = activeTab === 'publications' ? 'discover' : activeTab;
 
   const handleTabClick = (tab) => {
@@ -70,7 +68,6 @@ export default function Header({
     <header className="bg-white dark:bg-[#151413] border-b border-[#E2DFD8] dark:border-[#2A2824] sticky top-0 z-30 shadow-2xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between h-14 md:h-16 gap-3">
-          {/* Left: Brand Identity */}
           <button
             type="button"
             onClick={() => handleTabClick('discover')}
@@ -87,9 +84,7 @@ export default function Header({
             </div>
           </button>
 
-          {/* Center: Primary Navigation (Discover, Datasets, Library) */}
           <nav className="hidden lg:flex items-center bg-[#FAF9F5] dark:bg-[#1C1A18] p-1 rounded-sm border border-[#D5D1C7] dark:border-[#383530] text-xs font-mono-meta">
-            {/* 1. Discover */}
             <button
               type="button"
               onClick={() => handleTabClick('discover')}
@@ -103,7 +98,6 @@ export default function Header({
               <span>Discover</span>
             </button>
 
-            {/* 2. Datasets */}
             <button
               type="button"
               onClick={() => handleTabClick('datasets')}
@@ -117,7 +111,6 @@ export default function Header({
               <span>Datasets</span>
             </button>
 
-            {/* 3. Topic Check */}
             <button
               type="button"
               onClick={() => handleTabClick('topic')}
@@ -131,7 +124,6 @@ export default function Header({
               <span>Topic Check</span>
             </button>
 
-            {/* 4. Library */}
             <button
               type="button"
               onClick={() => handleTabClick('library')}
@@ -157,11 +149,9 @@ export default function Header({
             </button>
           </nav>
 
-          {/* Right: Tools & Profile */}
           <div className="flex items-center gap-2 font-mono-meta text-xs shrink-0">
             {isAuthenticated ? (
               <>
-                {/* Staff / Admin Desk Button */}
                 {isStaff && (hasPermission?.('students.view') || isAdmin) && (
                   <button
                     type="button"
@@ -228,7 +218,7 @@ export default function Header({
 
                   {/* Profile Dropdown Panel */}
                   {showProfileMenu && (
-                    <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-sm shadow-xl z-50 p-2 space-y-2 font-sans animate-fadeIn">
+                    <div className="absolute right-0 top-full mt-1.5 w-60 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-sm shadow-xl z-50 p-2 space-y-2 font-sans animate-fadeIn">
                       <div className="px-2 py-1.5 border-b border-[#F2EFE8] dark:border-[#2A2824]">
                         <div className="font-semibold text-xs text-[#1C1B18] dark:text-[#FAF9F5] truncate">
                           {user?.name || 'Signed in'}

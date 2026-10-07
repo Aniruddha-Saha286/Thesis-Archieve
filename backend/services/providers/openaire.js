@@ -13,10 +13,6 @@ function decodeHtmlEntities(str) {
     .replace(/&#x2F;/g, '/');
 }
 
-/**
- * OpenAIRE Graph API V3 Provider Adapter
- * Endpoint: https://api.openaire.eu/graph/v3/research-products
- */
 async function searchOpenAire({
   query = '',
   page = 1,
@@ -79,7 +75,6 @@ async function searchOpenAire({
     params.append('page', String(pageNum));
     params.append('pageSize', String(pageSize));
 
-    // OpenAIRE Graph V3 requires quoted value for accessRightLabel with spaces
     if (filters.isOpenAccess || filters.hasPdf) {
       params.append('accessRightLabel', '"Open Access"');
     }
@@ -161,7 +156,6 @@ async function searchOpenAire({
         const rawTitle = item.mainTitle || 'OpenAIRE Scholarly Publication';
         const title = decodeHtmlEntities(rawTitle.trim());
 
-        // Extract DOI from pids array
         let doi = null;
         if (Array.isArray(item.pids)) {
           const doiObj = item.pids.find(
@@ -172,7 +166,6 @@ async function searchOpenAire({
           }
         }
 
-        // Instances for URLs and direct PDFs
         let directPdfUrl = null;
         const fullTextLocations = [];
         const instanceTypes = [];
@@ -234,7 +227,6 @@ async function searchOpenAire({
           });
         }
 
-        // Authors
         const authors = (item.authors || [])
           .map((a) => {
             const name = (
@@ -244,19 +236,16 @@ async function searchOpenAire({
           })
           .filter((a) => a.name);
 
-        // Date / Published Year
         const publishedYear = item.publicationDate
           ? new Date(item.publicationDate).getFullYear() || null
           : null;
 
-        // Open Access
         const accessLabel = (item.bestAccessRight?.label || '').toUpperCase();
         const isOpenAccess =
           accessLabel === 'OPEN' ||
           accessLabel === 'OPEN ACCESS' ||
           Boolean(directPdfUrl);
 
-        // Publication Type
         const instTypeStr = instanceTypes.join(' ').toLowerCase();
         let pubType = 'journal-article';
         if (instTypeStr.includes('thesis') || instTypeStr.includes('dissertation')) {
@@ -275,7 +264,6 @@ async function searchOpenAire({
           pubType = 'book';
         }
 
-        // Abstract / Description
         let rawDesc = null;
         if (Array.isArray(item.descriptions) && item.descriptions.length > 0) {
           rawDesc = item.descriptions[0];

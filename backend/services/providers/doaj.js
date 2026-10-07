@@ -6,7 +6,6 @@ async function searchDoaj({ query = '', page = 1, limit = 20, filters = {}, sort
       return { records: [], totalCount: 0, hasMore: false, error: null };
     }
 
-    // DOAJ contains only peer-reviewed journals, not dissertations/theses
     if (filters.publicationType && (filters.publicationType === 'thesis' || filters.publicationType === 'preprint')) {
       return { records: [], totalCount: 0, hasMore: false, error: null };
     }
@@ -88,7 +87,7 @@ async function searchDoaj({ query = '', page = 1, limit = 20, filters = {}, sort
         abstract: bib.abstract || null,
         category: rawCategory,
         publicationType: 'journal-article',
-        isPeerReviewed: true, // All DOAJ articles are peer-reviewed
+        isPeerReviewed: true,
         publishedYear: pubYear,
         venue: journalTitle,
         publisher: publisher,

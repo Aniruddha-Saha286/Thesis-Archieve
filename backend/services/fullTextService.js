@@ -1,23 +1,3 @@
-/**
- * Full-Text Reader Service
- *
- * Downloads the free PDF of a paper and returns the authors' OWN words from the parts readers ask
- * about most: Limitations, Future work, Conclusion, Data availability and Code availability, plus
- * the code and dataset links the paper mentions.
- *
- * No AI is involved and nothing is written for the authors. Every piece of text returned here is
- * copied from the PDF. The only changes are to white space (lines are joined into paragraphs) and
- * to words that the PDF split with a hyphen at the end of a line. When a part cannot be found the
- * answer for it is null. It is never guessed.
- *
- * The work is done in six steps, each one exported so it can be tested by itself:
- *   1. fetchPdfBuffer      download, with protection against requests to internal addresses
- *   2. extractPdfText      turn the PDF into lines of text (needs the optional package pdfjs-dist)
- *   3. splitIntoSections   find the headings and cut the text into sections
- *   4. extractKeySections  pick the limitations / future work / conclusion / availability text
- *   5. findResourceLinks   pick the code and dataset links
- *   6. readPaperFullText   all of the above, with a cache and a small queue
- */
 
 const crypto = require('crypto');
 const dns = require('dns');
@@ -30,34 +10,20 @@ const { pathToFileURL } = require('url');
 const { Worker } = require('worker_threads');
 const { isValidHttpUrl, isPrivateIpOrHost, isPublicIpAddress } = require('../utils/urlValidator');
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_MB = 15;
 const DEFAULT_TIMEOUT_MS = 20000;
 const MAX_REDIRECTS = 4;
 
-// Theses are long, and the parts we want sit near the end. Reading the first 60 pages and the
-// last 15 covers almost every paper completely and keeps the work for a 300-page thesis bounded.
 const DEFAULT_MAX_PAGES = 75;
 const TAIL_PAGES = 15;
-// In a long thesis the conclusion chapter is often followed by more than 15 pages of references
-// and appendices. Up to this many extra pages may be read to reach it (see planExtraPages).
 const SEEK_PAGES = 30;
-// Reading runs on the main thread. This is the longest one PDF may keep it busy.
 const DEFAULT_PARSE_BUDGET_MS = 20000;
-// Limits against a PDF built to waste the server's time or memory. An honest page of a thesis
-// has a few thousand pieces of text and a few thousand characters; a printed line has a few hundred.
 const MAX_ITEMS_PER_PAGE = 25000;
 const MAX_CHARS_PER_PAGE = 60000;
 const MAX_LINE_CHARS = 1200;
-// The PDF is read in a separate thread. That thread is stopped when it passes these limits,
-// so one bad file cannot freeze the site or use up its memory.
 const WORKER_HARD_LIMIT_MS = DEFAULT_PARSE_BUDGET_MS + 10000;
 const WORKER_MAX_HEAP_MB = 384;
-// A small file can unpack into hundreds of megabytes. While a PDF is being read the server's
-// memory is watched; the reading is stopped when it has grown by more than this (FULLTEXT_MAX_MEMORY_MB).
 const DEFAULT_MEMORY_GROWTH_MB = 400;
 
 const KEY_TEXT_LIMIT = 1400;
@@ -68,8 +34,6 @@ const SUCCESS_TTL_MS = 24 * 60 * 60 * 1000;
 const FAILURE_TTL_MS = 30 * 60 * 1000;
 const MAX_WAITING = 3;
 
-// The same honest identification the search providers use, so a repository administrator who
-// sees these requests in a log can tell who made them and how to reach the site.
 const DEFAULT_USER_AGENT =
   'ThesisArchive/1.0 (https://projectpanther.org; reads open-access PDFs to show their limitations and conclusion sections; mailto:panther.thesis.vault@gmail.com)';
 
@@ -84,9 +48,6 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-// ===========================================================================
-// 1. Download
-// ===========================================================================
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -94,13 +55,6 @@ async function defaultLookup(hostname) {
   return dns.promises.lookup(hostname, { all: true, verbatim: true });
 }
 
-/**
- * Resolves a host name and returns its addresses, or null when the host, or ANY address it
- * resolves to, is not an ordinary public internet address.
- *
- * Checking the name alone is not enough: "papers.example.org" may be a DNS record that points at
- * 127.0.0.1, at 10.x.x.x or at the cloud metadata address 169.254.169.254.
- */
 async function resolvePublicAddresses(hostname, lookup) {
   const host = String(hostname || '')
     .replace(/^\[|\]$/g, '')
@@ -122,14 +76,6 @@ async function resolvePublicAddresses(hostname, lookup) {
   return list;
 }
 
-/**
- * The default way of making one HTTP request. It never follows redirects by itself, and it
- * connects only to the addresses that were checked a moment ago.
- *
- * Why not the built-in fetch(): fetch() looks the host name up a second time when it connects. A
- * hostile DNS server can answer the first lookup with a public address and the second with an
- * internal one ("DNS rebinding"). Handing the checked addresses to the socket closes that gap.
- */
 function pinnedHttpRequest(urlString, { headers, signal, addresses } = {}) {
   return new Promise((resolve, reject) => {
     const target = new URL(urlString);
@@ -161,7 +107,6 @@ function pinnedHttpRequest(urlString, { headers, signal, addresses } = {}) {
   });
 }
 
-/** Stops a response we are not going to read, so its socket is closed instead of left hanging. */
 function discardBody(response) {
   try {
     const body = response && response.body;
@@ -169,7 +114,6 @@ function discardBody(response) {
     if (typeof body.destroy === 'function') body.destroy();
     else if (typeof body.cancel === 'function') Promise.resolve(body.cancel()).catch(() => {});
   } catch {
-    // nothing useful can be done if closing fails
   }
 }
 
@@ -180,38 +124,14 @@ function toBuffer(chunk) {
   return Buffer.from(String(chunk));
 }
 
-/**
- * Looks at the first bytes of a download. Returns true when they are the start of a PDF, false
- * when they are something else, and null when too few bytes have arrived to tell.
- *
- * A URL that ends in ".pdf" proves nothing: publishers often answer it with an HTML sign-in page.
- */
 function startsLikePdf(buffer) {
   let i = 0;
-  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) i = 3; // byte-order mark
-  while (i < buffer.length && i < 64 && buffer[i] <= 0x20) i++; // stray blank lines before the header
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) i = 3;
+  while (i < buffer.length && i < 64 && buffer[i] <= 0x20) i++;
   if (buffer.length - i < 5) return i >= 64 ? false : null;
   return buffer.toString('latin1', i, i + 5) === '%PDF-';
 }
 
-/**
- * Downloads a PDF into memory.
- *
- * Safety rules, applied to the first address and again to every redirect:
- *   - only http and https, and no user name or password inside the URL
- *   - the host name is resolved here and refused when any of its addresses is private, loopback,
- *     link-local, carrier-grade NAT, multicast or a cloud metadata address (IPv4 and IPv6)
- *   - at most 4 redirects, one overall time limit, and a hard size limit while the body arrives
- *   - the body must really be a PDF
- *
- * opts: { lookup, fetchImpl, timeoutMs, maxBytes, maxRedirects, userAgent }
- *   lookup(hostname)        -> address list, as dns.promises.lookup(host, { all: true }) returns
- *   fetchImpl(url, options) -> { status, headers: { get(name) }, body }, where body can be read
- *                              with "for await". It receives redirect: 'manual' and must not
- *                              follow redirects itself. Tests pass stubs for both.
- *
- * Returns { ok: true, buffer, finalUrl, bytes } or { ok: false, reason }. It does not throw.
- */
 async function fetchPdfBuffer(url, opts = {}) {
   const timeoutMs = positiveNumber(opts.timeoutMs, positiveNumber(process.env.FULLTEXT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS));
   const maxBytes = positiveNumber(opts.maxBytes, maxBytesFromEnv());
@@ -221,7 +141,6 @@ async function fetchPdfBuffer(url, opts = {}) {
   const headers = {
     'User-Agent': opts.userAgent || process.env.FULLTEXT_USER_AGENT || DEFAULT_USER_AGENT,
     Accept: 'application/pdf,*/*;q=0.5',
-    // No compression: the size limit below must count the bytes that are really kept in memory.
     'Accept-Encoding': 'identity',
   };
 
@@ -233,14 +152,12 @@ async function fetchPdfBuffer(url, opts = {}) {
     return { ok: false, reason: 'invalid_url' };
   }
 
-  // One clock for the whole download: DNS, every redirect and the body together.
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, timeoutMs);
-  // A lookup or a stub may ignore the abort signal, so every wait also races against this promise.
   const whenAborted = new Promise((_, reject) => {
     controller.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
   });
@@ -272,7 +189,7 @@ async function fetchPdfBuffer(url, opts = {}) {
         } catch {
           return { ok: false, reason: 'invalid_url' };
         }
-        continue; // the new address goes through every check above again
+        continue;
       }
 
       if (!(status >= 200 && status < 300)) return { ok: false, reason: `http_${status || 0}` };
@@ -280,7 +197,6 @@ async function fetchPdfBuffer(url, opts = {}) {
       const declared = Number(response.headers && response.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > maxBytes) return { ok: false, reason: 'too_large' };
 
-      // Read the body piece by piece so that an oversized or endless download is cut off early.
       const chunks = [];
       let bytes = 0;
       let headChecked = false;
@@ -296,7 +212,6 @@ async function fetchPdfBuffer(url, opts = {}) {
             if (bytes > maxBytes) return { ok: false, reason: 'too_large' };
             chunks.push(chunk);
             if (!headChecked) {
-              // Decide from the first bytes, so a 10 MB web page is not downloaded for nothing.
               const verdict = startsLikePdf(chunks.length === 1 ? chunk : Buffer.concat(chunks));
               if (verdict === false) return { ok: false, reason: 'not_pdf' };
               if (verdict === true) headChecked = true;
@@ -321,25 +236,19 @@ async function fetchPdfBuffer(url, opts = {}) {
   } finally {
     clearTimeout(timer);
     discardBody(response);
-    controller.abort(); // closes the socket when we leave early; harmless after a full read
+    controller.abort();
   }
 }
 
-// ===========================================================================
-// 2. PDF -> lines of text
-// ===========================================================================
 
 let pdfjsPromise = null;
 let pdfjsFailedAt = 0;
 let pdfjsLoaderOverride = null;
 
 function resolvePdfjsEntry() {
-  // CommonJS resolution is used on purpose: it honours NODE_PATH and the normal node_modules
-  // folders, while import() of a bare package name does not look at NODE_PATH at all.
   return require.resolve('pdfjs-dist/legacy/build/pdf.mjs');
 }
 
-/** True when the optional package pdfjs-dist is installed. Cheap; safe to call on every request. */
 function isPdfReaderAvailable() {
   try {
     resolvePdfjsEntry();
@@ -349,18 +258,12 @@ function isPdfReaderAvailable() {
   }
 }
 
-/**
- * pdf.js is written for browsers. When its optional drawing package (@napi-rs/canvas) is missing
- * it stops while loading because the browser class DOMMatrix does not exist in Node. We never
- * draw a page, we only read its text, so empty stand-ins are enough to let it load.
- */
 function ensureBrowserStandIns(entryPath) {
   if (typeof globalThis.DOMMatrix !== 'undefined' && typeof globalThis.Path2D !== 'undefined') return;
   try {
     const canvas = createRequire(entryPath)('@napi-rs/canvas');
-    if (canvas && canvas.DOMMatrix && canvas.Path2D) return; // pdf.js will pick up the real classes itself
+    if (canvas && canvas.DOMMatrix && canvas.Path2D) return;
   } catch {
-    // not installed, or its native part does not load on this machine
   }
   if (typeof globalThis.DOMMatrix === 'undefined') {
     globalThis.DOMMatrix = class TextOnlyDOMMatrix {
@@ -375,7 +278,6 @@ function ensureBrowserStandIns(entryPath) {
   }
 }
 
-/** Runs fn while hiding the "Warning: ..." lines pdf.js prints when it starts under Node. */
 async function withoutPdfjsWarnings(fn) {
   const originalWarn = console.warn;
   const originalLog = console.log;
@@ -390,14 +292,9 @@ async function withoutPdfjsWarnings(fn) {
   }
 }
 
-/**
- * Loads pdf.js the first time it is needed. Resolves to null, and never throws, when the package
- * is not installed or does not run on this version of Node.
- */
 function loadPdfjs() {
   if (pdfjsLoaderOverride) return Promise.resolve().then(pdfjsLoaderOverride);
   if (pdfjsPromise) return pdfjsPromise;
-  // After a failure, do not search the disk again on every request.
   if (pdfjsFailedAt && Date.now() - pdfjsFailedAt < 60000) return Promise.resolve(null);
 
   let entry;
@@ -411,8 +308,6 @@ function loadPdfjs() {
   pdfjsPromise = withoutPdfjsWarnings(async () => {
     ensureBrowserStandIns(entry);
     const lib = await import(pathToFileURL(entry).href);
-    // Character maps (needed for Chinese, Japanese and Korean text) and the standard font
-    // metrics are shipped inside the package.
     const root = path.resolve(path.dirname(entry), '..', '..');
     return { lib, root };
   }).catch((err) => {
@@ -434,7 +329,6 @@ function round1(n) {
   return Math.round(n * 10) / 10;
 }
 
-/** The entry of a tally Map with the highest count. */
 function topOfTally(tally) {
   let best = null;
   let bestCount = -1;
@@ -447,10 +341,6 @@ function topOfTally(tally) {
   return best;
 }
 
-/**
- * Groups text pieces that sit on the same baseline into rows.
- * The tolerance lets a raised footnote mark or a lowered index stay on its line.
- */
 function clusterRows(items) {
   const sorted = items.slice().sort((a, b) => b.y - a.y || a.x - b.x);
   const rows = [];
@@ -461,7 +351,7 @@ function clusterRows(items) {
       row.items.push(item);
       if (item.size > row.size) {
         row.size = item.size;
-        row.y = item.y; // the largest letters decide where the baseline is
+        row.y = item.y;
       }
     } else {
       row = { y: item.y, size: item.size, items: [item] };
@@ -471,10 +361,6 @@ function clusterRows(items) {
   return rows;
 }
 
-/**
- * The unbroken stretches of text in a row (normal word gaps do not break a stretch), each as
- * [start, end, pieces].
- */
 function rowIntervals(row) {
   const items = row.items.slice().sort((a, b) => a.x - b.x);
   const intervals = [];
@@ -490,13 +376,6 @@ function rowIntervals(row) {
   return intervals;
 }
 
-/**
- * Finds the empty vertical strip between two text columns, or returns null for a one-column page.
- *
- * A strip counts as a column gap when it lies near the middle of the page, few rows cross it,
- * the text on its left reaches it on many rows (so the left side is a column of running text and
- * not a table of short labels) and there is text on its right.
- */
 function findColumnGutter(rows, pageWidth) {
   if (rows.length < 8 || !(pageWidth > 0)) return null;
   const BIN = 2;
@@ -516,7 +395,6 @@ function findColumnGutter(rows, pageWidth) {
   let least = Infinity;
   for (let b = from; b <= to; b++) least = Math.min(least, cover[b]);
   const allowed = least + Math.floor(rows.length * 0.03);
-  // The widest run of nearly empty bins is the gap.
   let best = null;
   let runStart = -1;
   for (let b = from; b <= to + 1; b++) {
@@ -560,7 +438,6 @@ function findColumnGutter(rows, pageWidth) {
   return { left, right, mid: (left + right) / 2 };
 }
 
-/** Turns rows of positioned pieces into lines of text, with the facts later steps need. */
 function rowsToLines(rows) {
   const lines = [];
   for (const row of rows) {
@@ -572,14 +449,11 @@ function rowsToLines(rows) {
     const sizeTally = new Map();
     const fontTally = new Map();
     for (const item of items) {
-      // Some PDFs fake bold type by printing the same words twice on the same spot.
       if (previous && item.str === previous.str && Math.abs(item.x - previous.x) < 1) continue;
       if (previous) {
         const gap = item.x - end;
         const unit = Math.min(previous.size, item.size);
-        if (gap > Math.max(2.2 * unit, 14)) wideGaps.push(gap); // a hole this wide may separate table cells
-        // A gap of an eighth of the letter height is already a word space: in a tightly set
-        // line the spaces are squeezed, and "available at" must not fuse with the link after it.
+        if (gap > Math.max(2.2 * unit, 14)) wideGaps.push(gap);
         if (gap > 0.12 * unit && !/\s$/.test(text) && !/^\s/.test(item.str)) text += ' ';
       }
       text += item.str;
@@ -593,14 +467,10 @@ function rowsToLines(rows) {
     text = text.replace(/\s+/g, ' ').trim();
     if (!text) continue;
 
-    // Size of the line: the size most letters have. Headings in small capitals mix a large first
-    // letter with smaller ones; the slightly larger size is then the real size of the heading.
     const common = topOfTally(sizeTally);
     let size = common;
     for (const key of sizeTally.keys()) if (key > size && key <= common * 1.3) size = key;
 
-    // Wide holes of exactly the same width are not a table: they are one justified line whose
-    // few words were pulled apart to fill the column (common just before a long web address).
     const evenlyStretched = wideGaps.length >= 2 && Math.max(...wideGaps) - Math.min(...wideGaps) <= 0.1 * Math.max(...wideGaps);
     const cells = evenlyStretched ? 1 : wideGaps.length + 1;
 
@@ -610,11 +480,6 @@ function rowsToLines(rows) {
   return lines;
 }
 
-/**
- * Marks where paragraphs start inside one column. A paragraph starts after a wider gap than
- * the usual line spacing, or with an indented first line. The first line of a column is left
- * unmarked unless it is indented, because the paragraph may continue from the previous column.
- */
 function markParagraphStarts(lines) {
   if (lines.length < 2) return;
   const leftTally = new Map();
@@ -640,12 +505,6 @@ function markParagraphStarts(lines) {
   }
 }
 
-/**
- * Manuscripts sent out for review, and many preprints, print a number beside every line. Those
- * numbers share a baseline with the text and would end up in front of every line ("118 The
- * main limitation ..."). A margin column of at least ten numbers that count up by one, from
- * the top of the page down, is removed here.
- */
 function withoutLineNumbers(items, pageWidth) {
   const columns = new Map();
   for (const item of items) {
@@ -653,7 +512,7 @@ function withoutLineNumbers(items, pageWidth) {
     if (!/^\d{1,4}$/.test(text)) continue;
     const inMargin = item.x + item.w < pageWidth * 0.16 || item.x > pageWidth * 0.88;
     if (!inMargin) continue;
-    const key = Math.round((item.x + item.w) / 4); // line numbers are aligned on their right edge
+    const key = Math.round((item.x + item.w) / 4);
     if (!columns.has(key)) columns.set(key, []);
     columns.get(key).push(item);
   }
@@ -668,15 +527,6 @@ function withoutLineNumbers(items, pageWidth) {
   return remove.size > 0 ? items.filter((item) => !remove.has(item)) : items;
 }
 
-/**
- * Rebuilds the lines of one page, in reading order, from the positioned text pieces pdf.js gives.
- *
- * rawItems: [{ str, transform: [a, b, c, d, x, y], width, fontName }]
- * view:     [x0, y0, x1, y1] of the page, in the same units
- *
- * On a two-column page the left column is read before the right one. Lines that run across both
- * columns (the title, a wide caption) keep their place: what is above them is read first.
- */
 function buildPageLines(rawItems, view) {
   const x0 = view ? view[0] : 0;
   const y0 = view ? view[1] : 0;
@@ -687,9 +537,9 @@ function buildPageLines(rawItems, view) {
   for (const raw of rawItems || []) {
     if (!raw || typeof raw.str !== 'string' || !raw.str.trim() || !Array.isArray(raw.transform)) continue;
     const t = raw.transform;
-    if (Math.abs(t[1]) > Math.abs(t[0])) continue; // text printed sideways, e.g. a stamp in the margin
+    if (Math.abs(t[1]) > Math.abs(t[0])) continue;
     const size = Math.hypot(t[2], t[3]) || raw.height || 0;
-    if (size < 2) continue; // too small to be meant for reading
+    if (size < 2) continue;
     items.push({ str: raw.str, x: t[4] - x0, y: t[5] - y0, w: Number(raw.width) || 0, size, font: raw.fontName || '' });
   }
   if (items.length === 0) return { lines: [], columns: 1, width, height };
@@ -697,7 +547,6 @@ function buildPageLines(rawItems, view) {
   const rows = clusterRows(withoutLineNumbers(items, width));
   const gutter = findColumnGutter(rows, width);
 
-  // The lines of each column (or of the whole page), top to bottom.
   const groups = [];
   let ordered;
   if (!gutter) {
@@ -708,10 +557,6 @@ function buildPageLines(rawItems, view) {
     const leftItems = [];
     const rightItems = [];
     for (const row of rows) {
-      // A row crosses the gap when one unbroken stretch of text covers it. It is a true
-      // full-width line only when that stretch reaches well into both columns, or is a short
-      // centred line such as a page number. A left-column line that merely pokes into the gap
-      // must stay in its column, or the whole page would be read in the wrong order.
       const stretches = rowIntervals(row);
       const crossingStretch = stretches.find(([start, end]) => start < gutter.left + 1 && end > gutter.right - 1);
       let isSpan = false;
@@ -726,9 +571,6 @@ function buildPageLines(rawItems, view) {
         spanning.push(row);
         continue;
       }
-      // Each unbroken stretch goes to one column as a whole. A line too long for its column (a
-      // web address that could not be broken) sticks out into the gap; its last letters and its
-      // full stop must stay with it and not be handed to the other column.
       for (const [start, end, pieces] of stretches) {
         const target = (start + end) / 2 < gutter.mid ? leftItems : rightItems;
         for (const item of pieces) target.push(item);
@@ -751,7 +593,6 @@ function buildPageLines(rawItems, view) {
     while (ri < rightLines.length) ordered.push(rightLines[ri++]);
   }
 
-  // What most of the page is printed in: used to notice small print and emphasised lines.
   const sizeTally = new Map();
   const fontTally = new Map();
   for (const line of ordered) {
@@ -761,10 +602,6 @@ function buildPageLines(rawItems, view) {
   const bodySize = topOfTally(sizeTally);
   const bodyFont = topOfTally(fontTally);
 
-  // Page furniture: running headers, footers, page numbers, the copyright line under the first
-  // column. Such a line sits in the outer strip of the page and is either small print or stands
-  // well apart from the text. It is never larger than the text, which keeps a chapter title at
-  // the top of a page from being mistaken for a header.
   for (const line of ordered) {
     const fromTop = (height - line.y) / height;
     const fromBottom = line.y / height;
@@ -777,23 +614,15 @@ function buildPageLines(rawItems, view) {
     }
     if (line.size < bodySize - 0.9 || nearest > 1.8 * bodySize) line.margin = side;
   }
-  // Footnotes: a block of small print at the foot of a column whose first line starts with a
-  // footnote mark ("1The protocol is described at ..."). They are kept apart from the running
-  // text, which they would otherwise interrupt in the middle of a sentence.
   for (const group of groups) {
     const body = group.filter((line) => !line.margin);
     let first = body.length;
     while (first > 0 && body[first - 1].size < bodySize - 0.9) first--;
-    // Footnotes are a few lines under normal text. A long run of small print, or small print
-    // under a "References" heading, is a reference list set in a smaller size and is left alone.
     if (first === 0 || body.length - first > 12) continue;
     if (body.slice(0, first).some((line) => /^(?:references?|bibliography|works cited|literature cited)$/i.test(line.text))) continue;
-    // Other small print may sit right above the footnotes (a table, a caption): start at the mark.
     while (first < body.length && !/^(?:\d{1,2}|[*†‡§¶])\s?[A-Z"“]/.test(body[first].text)) first++;
     for (let i = first; i < body.length; i++) body[i].note = true;
   }
-  // Paragraphs are marked after the furniture is known, so that the distance between a running
-  // header and the first line of the page is not read as the start of a new paragraph.
   for (const group of groups) markParagraphStarts(group.filter((line) => !line.margin && !line.note));
   const top = ordered.filter((line) => line.margin === 'top');
   const bottom = ordered.filter((line) => line.margin === 'bottom');
@@ -805,7 +634,7 @@ function buildPageLines(rawItems, view) {
     if (line.margin) out.margin = line.margin;
     if (line.note) out.note = true;
     if (line.cells > 1) out.cells = line.cells;
-    if (line.font !== bodyFont) out.emph = true; // printed in another typeface than the page's text: bold, italic...
+    if (line.font !== bodyFont) out.emph = true;
     return out;
   });
   return { lines, columns: gutter ? 2 : 1, width: round1(width), height: round1(height) };
@@ -819,18 +648,12 @@ async function outlinePageNumber(doc, dest) {
     if (Number.isInteger(ref)) return ref + 1;
     if (ref && typeof ref === 'object') return (await doc.getPageIndex(ref)) + 1;
   } catch {
-    // a broken bookmark is simply ignored
   }
   return null;
 }
 
 const SEEK_TYPES = new Set(['conclusion', 'discussion', 'limitations', 'future_work', 'data_availability', 'code_availability']);
 
-/**
- * For a document too long to read completely: which pages between the first block and the last
- * block should also be read because, according to the PDF's bookmarks, the conclusion,
- * limitations, future work or availability sections are there?
- */
 async function pagesFromOutline(doc, firstSkipped, lastSkipped, budget) {
   let outline;
   try {
@@ -856,7 +679,6 @@ async function pagesFromOutline(doc, firstSkipped, lastSkipped, budget) {
     if (!types.some((type) => SEEK_TYPES.has(type))) continue;
     const start = await outlinePageNumber(doc, flat[i].dest);
     if (!start) continue;
-    // The section runs to the next bookmark on the same or a higher level.
     let end = null;
     for (let j = i + 1; j < flat.length; j++) {
       if (flat[j].level <= flat[i].level) {
@@ -876,12 +698,6 @@ function titleKey(text) {
   return stripHeadingNumber(text).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/**
- * The same question answered from the table of contents, for a PDF without bookmarks. The
- * contents page says "6 Conclusions ........ 84". Printed page numbers are not PDF page numbers
- * (the front pages are often counted separately), so the difference is measured first, from
- * headings that the contents page lists and that we can see in the pages already read.
- */
 function pagesFromContents(headPages, firstSkipped, lastSkipped, budget) {
   const entries = [];
   let lastContentsPage = 0;
@@ -894,7 +710,6 @@ function pagesFromContents(headPages, firstSkipped, lastSkipped, budget) {
       if (!match || match[1].replace(/[^A-Za-z]/g, '').length < 3) continue;
       found.push({ title: match[1].replace(/[\s.]+$/, ''), printed: Number(match[2]) });
     }
-    // A contents page is a page on which most lines end in a page number.
     if (found.length >= 4 && found.length >= lines.length * 0.5) {
       entries.push(...found);
       lastContentsPage = page.page;
@@ -917,7 +732,6 @@ function pagesFromContents(headPages, firstSkipped, lastSkipped, budget) {
     if (actual !== undefined) differences.set(actual - entry.printed, (differences.get(actual - entry.printed) || 0) + 1);
   }
   const difference = topOfTally(differences);
-  // One lucky match is not enough to trust when other matches disagree with it.
   if (difference === null || (differences.get(difference) < 2 && differences.size > 1)) return [];
 
   const depthOf = (title) => {
@@ -943,7 +757,6 @@ function pagesFromContents(headPages, firstSkipped, lastSkipped, budget) {
   return [...wanted];
 }
 
-/** Which of the sections we look for have a heading on this page (used when there are no bookmarks). */
 function seekTypesOnPage(page) {
   const found = new Set();
   for (const line of page.lines) {
@@ -955,11 +768,6 @@ function seekTypesOnPage(page) {
   return found;
 }
 
-/**
- * The pieces of text on one page. They are taken as they arrive, and reading stops as soon as
- * the page holds more than any real page does: a file can pack many megabytes of text
- * instructions into a few kilobytes, and reading all of it would use up memory.
- */
 async function readTextItems(page) {
   const params = { includeMarkedContent: false, disableNormalization: false };
   if (typeof page.streamTextContent !== 'function') {
@@ -978,7 +786,6 @@ async function readTextItems(page) {
         if (item && typeof item.str === 'string') characters += item.str.length;
       }
       if (items.length >= MAX_ITEMS_PER_PAGE || characters >= MAX_CHARS_PER_PAGE) {
-        // pdf.js insists on a reason, and it must be an Error.
         await Promise.resolve(reader.cancel(new Error('page size limit reached'))).catch(() => {});
         break;
       }
@@ -987,25 +794,11 @@ async function readTextItems(page) {
     try {
       reader.releaseLock();
     } catch {
-      // already released by cancel()
     }
   }
   return items;
 }
 
-/**
- * Reads the text of a PDF held in memory.
- *
- * opts: { maxPages, tailPages, seekPages, useOutline, useContents, budgetMs }
- *   maxPages  how many pages to read at most before looking for end sections (default 75:
- *             the first 60 and, when the document is longer, the last 15)
- *
- * Returns { ok: true, pageCount, pagesRead, truncated, pages: [{ page, lines: [{ text, size }] }] }
- * (lines also carry position hints: x, y, para, margin, note, cells, emph; pages carry columns,
- * width and height) or { ok: false, reason } with reason 'reader_not_installed', 'encrypted',
- * 'unreadable', 'no_text_layer' or, when reading took longer than budgetMs and produced nothing
- * useful, 'timeout'. It does not throw.
- */
 async function extractPdfText(buffer, opts = {}) {
   if (!buffer || !buffer.length) return { ok: false, reason: 'unreadable' };
   const loaded = await loadPdfjs();
@@ -1019,8 +812,6 @@ async function extractPdfText(buffer, opts = {}) {
   const budgetMs = positiveNumber(opts.budgetMs, DEFAULT_PARSE_BUDGET_MS);
   const startedAt = Date.now();
 
-  // pdf.js takes the bytes over for itself, so it gets a private copy and the caller's buffer
-  // stays usable.
   const data = new Uint8Array(buffer.length);
   data.set(buffer);
 
@@ -1028,7 +819,7 @@ async function extractPdfText(buffer, opts = {}) {
   try {
     const params = {
       data,
-      verbosity: 0, // errors only: no font warnings in the server log
+      verbosity: 0,
       useSystemFonts: false,
       disableFontFace: true,
       isEvalSupported: false,
@@ -1067,11 +858,9 @@ async function extractPdfText(buffer, opts = {}) {
         result = { page: number, lines: built.lines, columns: built.columns, width: built.width, height: built.height };
         page.cleanup();
       } catch {
-        result = { page: number, lines: [], columns: 1 }; // one damaged page should not lose the document
+        result = { page: number, lines: [], columns: 1 };
       }
       read.set(number, result);
-      // Reading runs on the server's main thread. Stepping aside after every few pages lets
-      // other requests be answered while a long thesis is being read.
       if (read.size % 4 === 0) await new Promise((resolve) => setImmediate(resolve));
       return result;
     };
@@ -1088,11 +877,8 @@ async function extractPdfText(buffer, opts = {}) {
       for (let n = tailStart; n <= pageCount; n++) keep.add(n);
 
       if (seekBudget > 0 && tailStart - headCount > 1) {
-        // 1. Trust the bookmarks when the PDF has them.
         let extra = opts.useOutline === false ? [] : await pagesFromOutline(doc, headCount + 1, tailStart - 1, seekBudget);
-        // 2. Otherwise use the table of contents, which nearly every thesis has.
         if (extra.length === 0 && opts.useContents !== false) {
-          // The contents pages and the first chapters are enough to work out where things are.
           const head = [];
           for (let n = 1; n <= Math.min(headCount, 40); n++) {
             const page = await readPage(n);
@@ -1100,7 +886,6 @@ async function extractPdfText(buffer, opts = {}) {
           }
           extra = pagesFromContents(head, headCount + 1, tailStart - 1, seekBudget);
         }
-        // 3. Otherwise walk backwards from the last block until the conclusion heading turns up.
         if (extra.length === 0) {
           let earliest = null;
           for (let n = tailStart - 1, scanned = 0; n > headCount && scanned < seekBudget; n--, scanned++) {
@@ -1117,9 +902,6 @@ async function extractPdfText(buffer, opts = {}) {
       }
     }
 
-    // Read in order of usefulness, so that a PDF that is slow to read and runs out of time
-    // loses the middle of its first block rather than its conclusion: the opening pages first,
-    // then the end sections, then the last block, then everything else.
     const order = [];
     for (let n = 1; n <= Math.min(10, pageCount); n++) order.push(n);
     order.push(...extraPages);
@@ -1127,11 +909,8 @@ async function extractPdfText(buffer, opts = {}) {
     order.push(...[...keep].sort((a, b) => a - b));
     for (const number of order) if (keep.has(number)) await readPage(number);
     const pages = [...keep].sort((a, b) => a - b).map((number) => read.get(number)).filter(Boolean);
-    // Out of time before anything useful was read: say so, instead of blaming the document.
     if (pages.length === 0) return { ok: false, reason: outOfTime ? 'timeout' : 'no_text_layer' };
 
-    // A scanned document is a pile of pictures. Without a text layer there is nothing to read
-    // (a watermark or a stamp on each page does not count as text).
     let characters = 0;
     for (const page of pages) for (const line of page.lines) characters += line.text.length;
     if (characters < 200 || characters / pages.length < 40) return { ok: false, reason: outOfTime ? 'timeout' : 'no_text_layer' };
@@ -1140,22 +919,16 @@ async function extractPdfText(buffer, opts = {}) {
   } catch {
     return { ok: false, reason: 'unreadable' };
   } finally {
-    // Frees the document and stops pdf.js's helper, so nothing keeps the process alive.
     if (task) await Promise.resolve(task.destroy()).catch(() => {});
   }
 }
 
-// ===========================================================================
-// 3. Lines -> sections
-// ===========================================================================
 
 const SECTION_TYPES = [
   'abstract', 'introduction', 'related_work', 'method', 'results', 'discussion', 'limitations', 'future_work',
   'conclusion', 'data_availability', 'code_availability', 'acknowledgements', 'references', 'appendix', 'other',
 ];
 
-// What a heading is about, judged from its words. A heading can be about two things
-// ("Limitations and Future Work"); every match is kept, in the order the words appear.
 const TITLE_TYPE_RULES = [
   ['references', /^(?:references?(?: cited)?|bibliography|works cited|literature cited|reference list|references and notes)$/],
   ['appendix', /^(?:appendi(?:x|ces)|annex(?:es)?|supplementa(?:ry|l) (?:materials?|information|data|files?)|supporting information)\b/],
@@ -1175,7 +948,6 @@ const TITLE_TYPE_RULES = [
 
 const SUMMARY_TITLE_RE = /^(?:chapter )?summary(?: of (?:the )?(?:findings|results|contributions|thesis|work|study|chapter))?$/;
 
-/** Removes "5.2", "VI.", "Chapter 5:", "Appendix A" and similar from the front of a heading. */
 function stripHeadingNumber(title) {
   return String(title || '')
     .replace(/^\s*(?:chapter|part|section)\s+(?:\d{1,3}|[ivxlc]{1,7}|one|two|three|four|five|six|seven|eight|nine|ten)\b\s*[:.\-–—]?\s*/i, '')
@@ -1185,18 +957,11 @@ function stripHeadingNumber(title) {
     .trim();
 }
 
-/**
- * Says what kind of section a heading opens.
- * Returns { type, types }: type is the first kind named in the heading, types lists all of them.
- */
 function classifyHeadingTitle(title, context = {}) {
   const raw = String(title || '').trim();
   const bare = stripHeadingNumber(raw).toLowerCase().replace(/[:.]+$/, '').replace(/\s+/g, ' ').replace(/&/g, 'and').trim();
   if (!bare) return { type: 'other', types: ['other'] };
   if (/^appendi(?:x|ces)\b/i.test(raw)) return { type: 'appendix', types: ['appendix'] };
-  // "Summary" means different things in different places: the abstract on the opening pages,
-  // the conclusion when it is a main heading or sits inside the conclusion chapter, and merely
-  // the end of a chapter otherwise ("2.6 Summary"). The caller says where the heading stands.
   if (SUMMARY_TITLE_RE.test(bare)) {
     if (bare === 'summary' && context.page && context.page <= 3 && !context.sawAbstract) return { type: 'abstract', types: ['abstract'] };
     if (context.mainHeading || context.insideConclusion) return { type: 'conclusion', types: ['conclusion'] };
@@ -1217,9 +982,6 @@ function classifyHeadingTitle(title, context = {}) {
   return { type: types[0], types };
 }
 
-// Headings that are accepted even when they are printed no larger than the text and carry no
-// number. The whole line has to be one of these phrases; a sentence that merely contains the
-// word "limitations" must never be taken for a heading.
 const STRICT_HEADING_RE = new RegExp(
   '^(?:' +
     [
@@ -1258,30 +1020,25 @@ const STRICT_HEADING_RE = new RegExp(
 
 const TOC_TITLE_RE = /^(?:table of contents|contents|list of (?:figures|tables|abbreviations|symbols|acronyms|publications))$/i;
 
-// A heading that sits at the start of its paragraph: "Limitations. Our study ..." or
-// "Data availability: The data ...". Only these labels are accepted, with a capital first letter.
 const RUN_IN_RE =
   /^(Abstract|Index Terms|Keywords|Key words|Limitations?(?: and Future (?:Work|Directions|Research))?|Limitations? of (?:the|this) (?:Study|Work)|Threats to Validity|Future (?:Work|Directions|Research)|Data (?:and (?:Code|Materials) )?Availability(?: Statement)?|Code (?:and Data )?Availability(?: Statement)?|Availability of (?:Data|Code)(?: and (?:Materials?|Code|Data))?|Data Accessibility|Reproducibility(?: Statement)?|Acknowledge?ments?|Funding|Author Contributions?|Conflicts? of Interest|Competing Interests?)\s*(?:[.:—–]|\s-)\s*(\S.*)$/i;
 
 const CAPTION_RE =
   /^(?:fig(?:ure)?s?\.?|table|tab\.|algorithm|listing|scheme|chart|plate|exhibit|supplementary (?:figure|table))\s*(?:[0-9]+(?:\.[0-9]+)*[a-z]?|[IVXL]+|[A-Z]\.?[0-9]+)(?![A-Za-z0-9])\s*(.*)$/i;
 
-// Copyright and licence notes that appear once, in the margin of the first page.
 const NOTICE_RE = /©|\(c\)\s*(?:19|20)\d\d|copyright|all rights reserved|licen[cs]ed (?:use|under)|creative commons|\bISBN\b|\bISSN\b|\b97[89]-\d|\$\d+\.\d\d|downloaded (?:from|on)|arxiv:\d/i;
 
 const PAGE_NUMBER_RE = /^(?:(?:page|p\.)\s*)?\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?$|^[-–—]\s*\d{1,4}\s*[-–—]$|^(?=[ivx])x{0,3}(?:ix|iv|v?i{0,3})$|^\d{1,4}\s*\|\s*p\s*a\s*g\s*e$|^p\s*a\s*g\s*e\s*\|?\s*\d{1,4}$/i;
 
 function cleanLineText(text) {
-  // No printed line is this long. Cutting it here keeps every later check quick, whatever the file holds.
   return String(text == null ? '' : text)
     .slice(0, MAX_LINE_CHARS)
-    .replace(/\u00ad$/, '-') // a "soft hyphen" at the end of a line is a line-break hyphen
+    .replace(/\u00ad$/, '-')
     .replace(/\u00ad/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/** A contents line: a title, a row of dots, a page number. */
 function isTocEntry(text) {
   return /(?:\.[ \u00a0]?){5,}\s*(?:\d{1,4}|[ivxlcdm]{1,7})\s*$/i.test(text) || /[.·…_]{5,}\s*\S{1,6}$/.test(text);
 }
@@ -1298,7 +1055,6 @@ function isAllCaps(text) {
   return letters.length >= 2 && letters === letters.toUpperCase();
 }
 
-/** "Summary of Findings" and "RELATED WORK" look like titles; "Collect the data first" does not. */
 function isTitleLike(text) {
   if (isAllCaps(text)) return true;
   const words = text.split(/\s+/).filter((word) => /[A-Za-z]/.test(word));
@@ -1312,7 +1068,6 @@ function wordCount(text) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-/** Is `next` the number that may follow `last` in a numbered outline (5.1 -> 5.2, 5.1.1 or 6)? */
 function isNextSectionNumber(last, next) {
   if (!last) return next.length === 1 && next[0] <= 2;
   if (next.length > last.length + 1) return false;
@@ -1328,11 +1083,6 @@ function normaliseRepeatKey(text) {
   return text.toLowerCase().replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Words of the document that are written with a hyphen ("low-cost") and without one. They decide
- * whether "low-" at the end of a line followed by "cost" is one hyphenated word or a word that
- * was only split to fit the line ("general-" + "ization").
- */
 function buildVocabulary(records) {
   const hyphenated = new Set();
   const plain = new Set();
@@ -1353,7 +1103,6 @@ const URL_JOIN_STOPWORDS = new Set([
   'accessed', 'last', 'retrieved', 'but', 'so', 'while', 'when', 'also', 'both', 'these', 'those', 'their', 'its',
 ]);
 
-/** Does a web address at the end of one line carry on at the start of the next line? */
 function urlContinues(previousText, nextText) {
   const tail = previousText.match(/(?:https?:\/{0,2}|www\.)\S*$/i) || previousText.match(/(?:^|\s)((?:[a-z0-9-]+\.)+[a-z]{2,6}\/\S*)$/i);
   if (!tail) return false;
@@ -1361,23 +1110,15 @@ function urlContinues(previousText, nextText) {
   const nextToken = nextText.split(/\s/)[0] || '';
   const nextWord = nextToken.replace(/[^A-Za-z0-9]+$/, '').toLowerCase();
   if (!/^[A-Za-z0-9/?#&=._~%-]/.test(nextToken)) return false;
-  if (last === '-') return /^[A-Za-z0-9]/.test(nextToken); // an address never ends with a hyphen
+  if (last === '-') return /^[A-Za-z0-9]/.test(nextToken);
   if (/[/_=?&%~+#:]/.test(last)) return !URL_JOIN_STOPWORDS.has(nextWord);
   if (last === '.') {
-    // "…/record/1." at the end of a sentence must not swallow the first word of the next one.
     return /^[a-z0-9]/.test(nextToken) && (/[/_]/.test(nextToken) || /^(?:com|org|net|edu|io|gov|html?|pdf|git|zip|php)\b/.test(nextToken));
   }
   return /^[/?#&=]/.test(nextToken);
 }
 
-/**
- * Joins lines into running text. Returns the text and "marks" that remember on which page each
- * part of the text was printed.
- */
 function composeText(records, vocabulary, usualLength) {
-  // The text is collected as a list of pieces and joined once at the end. Only the last few
-  // hundred characters ("tail") are needed to decide how the next line is attached, so the work
-  // per line stays the same however long the section becomes.
   const pieces = [];
   let length = 0;
   let tail = '';
@@ -1400,7 +1141,6 @@ function composeText(records, vocabulary, usualLength) {
         const right = carries[1].toLowerCase();
         const keepHyphen = vocabulary.hyphenated.has(`${left}-${right}`) && !vocabulary.plain.has(left + right);
         if (!keepHyphen) {
-          // Drop the line-break hyphen from the end of the line before.
           pieces[pieces.length - 1] = pieces[pieces.length - 1].slice(0, -1);
           tail = tail.slice(0, -1);
           length--;
@@ -1425,11 +1165,6 @@ function composeText(records, vocabulary, usualLength) {
   return { text: pieces.join(''), marks };
 }
 
-/**
- * Reading may start in the middle of a reference list (the last pages of a long thesis), where
- * no "References" heading tells us what the lines are. Reference entries give themselves away:
- * most lines carry a year, and many carry "et al.", "pp.", "vol.", a journal or a DOI.
- */
 function looksLikeReferenceList(records) {
   if (records.length < 2) return false;
   let withYear = 0;
@@ -1443,16 +1178,10 @@ function looksLikeReferenceList(records) {
 
 const analysisCache = new WeakMap();
 
-/**
- * The shared work behind splitIntoSections and findResourceLinks: clean the lines, find the
- * headings and build the sections. The result is remembered per `pages` array, so asking for
- * the sections and then for the links does the work once.
- */
 function analysePages(pages) {
   if (!Array.isArray(pages)) return { sections: [], noteBlocks: [] };
   if (analysisCache.has(pages)) return analysisCache.get(pages);
 
-  // ---- 1. One flat list of lines ----------------------------------------------------------
   const sortedPages = pages
     .filter((page) => page && Array.isArray(page.lines))
     .slice()
@@ -1473,15 +1202,13 @@ function analysePages(pages) {
         para: typeof line.para === 'boolean' ? line.para : undefined,
         cells: Number(line.cells) || 1,
         emph: Boolean(line.emph),
-        edge: index < 2 || index >= lines.length - 2, // among the first or last two lines of its page
-        // Pages were skipped before this one (a long thesis is not read completely).
+        edge: index < 2 || index >= lines.length - 2,
         gapBefore: index === 0 && previousNumber !== null && pageNumber > previousNumber + 1,
       });
     });
   });
   const pageTotal = sortedPages.length;
 
-  // The size most of the text is printed in. Headings are measured against it.
   const sizeTally = new Map();
   for (const record of records) {
     if (record.size > 0) {
@@ -1492,9 +1219,6 @@ function analysePages(pages) {
   const bodySize = sizeTally.size > 0 ? topOfTally(sizeTally) : 0;
   const isLarger = (record) => bodySize > 0 && record.size >= bodySize + 0.8;
 
-  // ---- 2. Running headers, footers and page numbers -----------------------------------------
-  // (a) the same words on several pages; (b) small print at the same height on most pages, which
-  // also catches headers whose words change with the chapter; (c) bare page numbers.
   const textPages = new Map();
   const heightPages = new Map();
   for (const record of records) {
@@ -1512,7 +1236,7 @@ function analysePages(pages) {
   records = records.filter((record) => {
     if (!record.edge && !record.margin) return true;
     if (PAGE_NUMBER_RE.test(record.text)) return false;
-    if (isLarger(record)) return true; // a chapter title at the top of every chapter is not a header
+    if (isLarger(record)) return true;
     if (pageTotal >= 2 && record.text.length <= 150 && textPages.get(normaliseRepeatKey(record.text)).size >= repeatNeeded) return false;
     if (record.margin) {
       if (NOTICE_RE.test(record.text)) return false;
@@ -1528,12 +1252,9 @@ function analysePages(pages) {
     }
     return true;
   });
-  // What is left of the page margins and the footnotes is not running text. It is set aside and
-  // only searched for links ("1Code: https://github.com/...").
   const notes = records.filter((record) => record.margin || record.note);
   records = records.filter((record) => !record.margin && !record.note);
 
-  // A gap marker must survive when the first line of its page was removed just now.
   let lastPage = null;
   const pageOrder = sortedPages.map((page, index) => Number(page.page) || index + 1);
   for (const record of records) {
@@ -1547,12 +1268,9 @@ function analysePages(pages) {
   }
 
   const lengths = records.filter((record) => record.text.length > 20 && !isTocEntry(record.text)).map((record) => record.text.length);
-  // The usual length of a full line of text: the upper part of the spread, because paragraphs
-  // end in short lines.
   const usualLength = lengths.length > 0 ? lengths.slice().sort((a, b) => a - b)[Math.floor(lengths.length * 0.7)] : 80;
   const vocabulary = buildVocabulary(records);
 
-  // ---- 3. Headings --------------------------------------------------------------------------
   const state = {
     toc: false,
     tocMisses: 0,
@@ -1563,11 +1281,11 @@ function analysePages(pages) {
     lastNumber: null,
     rejectedNumber: null,
     caption: null,
-    topSize: 0, // size of the main section headings, to tell sub-headings apart
-    topType: 'other', // kind of the main section we are inside
-    sawTitle: false, // the paper's own title has been passed
-    sawKnown: false, // a heading of a known kind has been passed
-    plainLevel: 0, // level given to the latest heading printed as small as the text
+    topSize: 0,
+    topType: 'other',
+    sawTitle: false,
+    sawKnown: false,
+    plainLevel: 0,
     depth: 1,
     sawAbstract: false,
   };
@@ -1594,9 +1312,8 @@ function analysePages(pages) {
     const sentenceEnd = /[.;,]$/.test(text);
     const afterBreak = endsParagraph(index);
     const followed = nextIsBody(index);
-    const restricted = state.inReferences || state.toc; // inside a reference list or a contents page
+    const restricted = state.inReferences || state.toc;
 
-    // (a) "Chapter 5", "Chapter 5: Conclusion", "Appendix A", "Part II"
     const chapter = /^(chapter|appendix|part)\s+(\d{1,2}|[ivxlc]{1,6}|[a-z])(?![a-z0-9])\s*[:.\-–—]?\s*(.*)$/i.exec(text);
     if (chapter && (larger || (afterBreak && followed && !state.toc))) {
       const rest = chapter[3];
@@ -1605,7 +1322,6 @@ function analysePages(pages) {
         const fine = /^["“(]?[A-Z0-9]/.test(rest) && rest.length <= 90 && (larger || (!sentenceEnd && wordCount(rest) <= 10 && isTitleLike(rest)));
         if (fine) return { title: text, level: 1, kind: 'chapter', forcedType: type };
       } else {
-        // The title is often on the next line, in large type: "Chapter 5" / "Conclusion".
         let title = text;
         let extra = 0;
         for (let k = 1; k <= 2; k++) {
@@ -1621,7 +1337,6 @@ function analysePages(pages) {
       }
     }
 
-    // (b) "5. Limitations", "5.2 Limitations and Future Work", "5 Conclusion"
     const numbered = /^(\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+(.+)$/.exec(text);
     if (numbered) {
       const number = numbered[1].split('.').map(Number);
@@ -1632,8 +1347,6 @@ function analysePages(pages) {
       if (/^["“(]?[A-Z]/.test(title) && title.length <= 100 && wordCount(title) <= 14 && !/[;,]$/.test(title)) {
         if (larger) accept = !looksLikeReference || known;
         else if (!restricted && afterBreak && followed && !sentenceEnd && !looksLikeReference) {
-          // A numbered list ("1. Collect photographs", "2. Train the model") restarts at 1 in the
-          // middle of the document; real section numbers continue from the previous heading.
           const inSequence = isNextSectionNumber(state.lastNumber, number);
           const listItem = state.rejectedNumber !== null && number.length === 1 && number[0] === state.rejectedNumber + 1;
           const short = text.length <= usualLength * 0.8;
@@ -1645,7 +1358,6 @@ function analysePages(pages) {
       if (accept) return { title: text, level: Math.min(number.length, 4), kind: 'numbered', number };
     }
 
-    // (c) "VI. CONCLUSION" as in IEEE papers, and their lettered sub-headings "A. Data Collection"
     const roman = /^([IVX]{1,6})\.\s+(.+)$/.exec(text);
     if (roman && !restricted) {
       const value = romanToInt(roman[1]);
@@ -1667,7 +1379,6 @@ function analysePages(pages) {
       }
     }
 
-    // (d) A heading at the start of its paragraph: "Abstract—...", "Limitations. Our study ..."
     const runIn = RUN_IN_RE.exec(text);
     if (runIn && /^[A-Z]/.test(runIn[1]) && /^["“(]?[A-Z0-9]/.test(runIn[2]) && afterBreak && !state.toc) {
       const label = runIn[1];
@@ -1676,7 +1387,6 @@ function analysePages(pages) {
       if (allowed) return { title: label, level: front ? 1 : 3, kind: 'runin', bodyText: runIn[2] };
     }
 
-    // (e) A known heading without a number: "Limitations", "Threats to Validity", "REFERENCES"
     const bare = text.replace(/[:.]$/, '');
     if (/^[A-Z]/.test(text) && wordCount(bare) <= 8 && bare.length <= 70 && STRICT_HEADING_RE.test(bare)) {
       const { type } = classifyHeadingTitle(bare);
@@ -1689,8 +1399,6 @@ function analysePages(pages) {
       }
     }
 
-    // (f) Any short line printed larger than the text. On the opening pages the first such line
-    // is the paper's title; the large lines after it (authors, university) are not headings.
     if (larger && text.length <= 100 && wordCount(text) <= 14 && /^["“(]?[A-Z0-9]/.test(text) && !sentenceEnd) {
       const frontMatter = record.page <= 2 && state.sawTitle && !state.sawKnown && !(records[index - 1] && records[index - 1].heading && Math.abs(records[index - 1].size - record.size) <= 0.3);
       if (text.replace(/[^A-Za-z]/g, '').length >= 3 && !frontMatter) return { title: text, kind: 'large' };
@@ -1698,14 +1406,11 @@ function analysePages(pages) {
 
     if (restricted || !afterBreak || !followed || sentenceEnd || record.cells >= 2) return null;
 
-    // (g) A short line in capitals standing between two paragraphs: "EXPERIMENTAL SETUP"
     const next = records[index + 1];
     if (isAllCaps(text) && wordCount(text) <= 8 && text.replace(/[^A-Za-z]/g, '').length >= 8 && text.length <= usualLength * 0.8) {
       if (next && /^["“(]?[A-Z0-9]/.test(next.text) && !isAllCaps(next.text)) return { title: text, kind: 'caps', plain: true };
     }
 
-    // (h) A short line in bold or italic type, on its own, followed by a full line of normal
-    // text: the unnumbered sub-headings many journals use ("Implications for practice").
     if (record.emph && next && !next.emph && record.para !== false) {
       const letters = text.replace(/[^A-Za-z]/g, '').length;
       if (text.length <= 70 && wordCount(text) <= 9 && /^[A-Z]/.test(text) && letters >= text.length * 0.6 && letters >= 4) {
@@ -1722,8 +1427,6 @@ function analysePages(pages) {
       state.caption = null;
     }
 
-    // Contents pages: every entry is dropped, so that none of them is mistaken for a heading
-    // and none of them ends up inside the text of a section.
     if (isTocEntry(record.text)) {
       record.drop = 'toc';
       continue;
@@ -1740,8 +1443,6 @@ function analysePages(pages) {
       }
     }
 
-    // Captions of figures and tables. "Table 2 shows ..." is a sentence, not a caption: after
-    // the number a caption has punctuation, a capital letter, or nothing at all.
     if (state.caption) {
       const open = state.caption;
       const sameType = !(open.size > 0 && record.size > 0) || Math.abs(record.size - open.size) <= 0.3;
@@ -1765,8 +1466,6 @@ function analysePages(pages) {
       }
     }
 
-    // Rows of a table: several separated cells on one line, with another such row or the
-    // table's caption next to it. A single line like that is more likely stretched text.
     if (record.cells >= 2) {
       const before = records[i - 1];
       const after = records[i + 1];
@@ -1787,9 +1486,6 @@ function analysePages(pages) {
     heading.types = classified.types;
     heading.size = record.size;
 
-    // Levels for headings without a number come from their size. When unsure the heading is
-    // treated as a main heading: a section that stands by itself is never merged into the text
-    // of the section before it.
     const endMatter = ['abstract', 'references', 'acknowledgements', 'appendix', 'data_availability', 'code_availability'].includes(classified.type);
     const clearlySmaller = state.topSize > 0 && record.size > 0 && record.size < state.topSize * 0.85;
     if (heading.level === undefined) {
@@ -1808,7 +1504,6 @@ function analysePages(pages) {
       state.topSize = Math.max(state.topSize, record.size);
     }
     if (classified.type === 'other' && SUMMARY_TITLE_RE.test(stripHeadingNumber(heading.title).toLowerCase().replace(/[:.]+$/, ''))) {
-      // Now that the level is known, decide what this "Summary" is (see classifyHeadingTitle).
       const again = classifyHeadingTitle(heading.title, { mainHeading: heading.level === 1, insideConclusion: heading.level > 1 && state.topType === 'conclusion' });
       heading.type = again.type;
       heading.types = again.types;
@@ -1842,7 +1537,6 @@ function analysePages(pages) {
     i += heading.extra || 0;
   }
 
-  // A title that needs two lines: join a large line to the large line above it.
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
     if (!record.heading || record.heading.kind === 'runin' || !isLarger(record)) continue;
@@ -1863,17 +1557,12 @@ function analysePages(pages) {
     }
   }
 
-  // Four or more headings in a row with no text between them are not headings. Large lines are
-  // a title page (title, author, university, date) and stay as plain text; numbered ones are a
-  // contents list without dots and are dropped.
   for (let i = 0; i < records.length; i++) {
     if (!records[i].heading) continue;
     const run = [];
     let k = i;
     while (k < records.length && (records[k].heading || records[k].drop === 'heading')) {
       if (records[k].heading && records[k].heading.kind === 'runin') break;
-      // Chapter headings many pages apart are not a list, even when the pages between them
-      // were not read.
       if (k > i && (records[k].gapBefore || records[k].page - records[k - 1].page > 1)) break;
       if (records[k].heading) run.push(k);
       k++;
@@ -1889,7 +1578,6 @@ function analysePages(pages) {
     i = Math.max(i, k - 1);
   }
 
-  // ---- 4. Sections --------------------------------------------------------------------------
   const sections = [];
   let current = { title: '', type: 'other', types: ['other'], level: 0, startPage: records.length ? records[0].page : 1, records: [] };
   const close = () => {
@@ -1909,15 +1597,12 @@ function analysePages(pages) {
       endPage: Math.max(endPage, current.startPage),
       text: composed.text,
     };
-    // Kept out of sight so that JSON output and comparisons in tests show only the public fields.
     Object.defineProperty(section, '_marks', { value: composed.marks, enumerable: false });
     Object.defineProperty(section, '_runIn', { value: Boolean(current.runIn), enumerable: false });
     sections.push(section);
   };
   for (const record of records) {
     if (record.gapBefore) {
-      // Pages were skipped here, so whatever section was open does not continue. Its kind is
-      // decided once its lines are known (see looksLikeReferenceList).
       close();
       current = { title: '', type: 'other', types: ['other'], level: 0, startPage: record.page, records: [], afterGap: true };
     }
@@ -1941,7 +1626,6 @@ function analysePages(pages) {
   }
   close();
 
-  // Footnotes of each page as one small block of text, for the link finder.
   const noteBlocks = [];
   for (const note of notes) {
     const last = noteBlocks[noteBlocks.length - 1];
@@ -1955,24 +1639,10 @@ function analysePages(pages) {
   return result;
 }
 
-/**
- * Cuts the lines of a document into sections.
- *
- * pages: [{ page, lines: [{ text, size }] }] as returned by extractPdfText (hand-made input with
- * only text and size works too).
- *
- * Returns [{ title, type, types, level, startPage, endPage, text }]. `type` is one of
- * SECTION_TYPES. `types` lists every kind the heading names, so "Limitations and Future Work"
- * has type 'limitations' and types ['limitations', 'future_work']. Text before the first heading
- * is returned as a section with an empty title and level 0.
- */
 function splitIntoSections(pages) {
   return analysePages(pages).sections;
 }
 
-// ===========================================================================
-// 4. Sections -> the parts readers ask about
-// ===========================================================================
 
 const ABBREVIATIONS = new Set([
   'al', 'fig', 'figs', 'eq', 'eqs', 'eqn', 'tab', 'sec', 'sect', 'ref', 'refs', 'no', 'nos', 'vs', 'cf', 'e.g', 'i.e',
@@ -1980,10 +1650,6 @@ const ABBREVIATIONS = new Set([
   'ch', 'chap', 'app', 'def', 'thm', 'incl', 'est', 'dept', 'univ', 'ed', 'eds',
 ]);
 
-/**
- * Finds the sentences of a text. Returns [{ start, end, para }], positions into the SAME string,
- * so that a sentence can be cut out exactly as it was printed. `para` counts paragraphs.
- */
 function sentenceSpans(text) {
   const spans = [];
   let start = 0;
@@ -1994,7 +1660,7 @@ function sentenceSpans(text) {
     let end;
     let paragraphBreak = true;
     if (match[1] === undefined) {
-      end = match.index; // a paragraph that ends without a full stop
+      end = match.index;
     } else {
       end = match.index + match[1].length;
       paragraphBreak = /\n\s*\n/.test(match[2]);
@@ -2004,8 +1670,8 @@ function sentenceSpans(text) {
           const before = text.slice(Math.max(start, match.index - 14), match.index);
           const word = (/([A-Za-z.]+)$/.exec(before) || ['', ''])[1].toLowerCase();
           const lastPart = word.slice(word.lastIndexOf('.') + 1);
-          if (lastPart.length === 1) continue; // an initial: "J. Smith", "U.S. data"
-          if (ABBREVIATIONS.has(word) || ABBREVIATIONS.has(lastPart)) continue; // "et al. (2018)", "Fig. 3"
+          if (lastPart.length === 1) continue;
+          if (ABBREVIATIONS.has(word) || ABBREVIATIONS.has(lastPart)) continue;
         }
       }
     }
@@ -2018,10 +1684,6 @@ function sentenceSpans(text) {
   return spans;
 }
 
-/**
- * Shortens a text to about `limit` characters, always at the end of a sentence, never inside
- * one. Nothing is added: no "..." is appended, the `truncated` flag says the text was cut.
- */
 function capText(text, limit = KEY_TEXT_LIMIT) {
   const clean = String(text || '').trim();
   if (clean.length <= limit) return { text: clean, truncated: false };
@@ -2032,15 +1694,12 @@ function capText(text, limit = KEY_TEXT_LIMIT) {
     else break;
   }
   if (cut === 0) {
-    // The very first sentence is longer than the limit: let it finish if it is close, otherwise
-    // stop at a word.
     if (spans[0] && spans[0].end <= limit * 1.25) cut = spans[0].end;
     else cut = clean.lastIndexOf(' ', limit) > 0 ? clean.lastIndexOf(' ', limit) : limit;
   }
   return { text: clean.slice(0, cut).trim(), truncated: true };
 }
 
-// Words with which authors state a limitation. "Strong" ones are enough by themselves.
 const LIMITATION_STRONG = [
   /\blimitations?\b/i,
   /\b(?:drawbacks?|shortcomings?|caveats?)\b/i,
@@ -2051,8 +1710,6 @@ const LIMITATION_STRONG = [
   /\b(?:is|are|was|were|remains?)\s+(?:\w+\s+)?limited\s+(?:to|by|in)\b/i,
   /\b(?:interpreted|read|treated|viewed|taken|considered)\s+with\s+(?:care|caution)\b/i,
 ];
-// "Weak" ones count only next to a strong one, in the same paragraph: "we did not measure ..."
-// is a limitation after "The main limitation is ...", but not in the middle of a results section.
 const LIMITATION_WEAK = [
   /\bwe\s+(?:did|do|could|were)\s*(?:not|n't)\s+(?:able to\s+)?(?:measure|collect|consider|examine|evaluate|test|include|account|control|assess|investigate|have|explore|study|address|compare|verify|validate|analy[sz]e)/i,
   /\b(?:was|were|is|are)\s+not\s+(?:possible|measured|available|assessed|evaluated|tested|considered|collected|included|examined|controlled)\b/i,
@@ -2077,17 +1734,12 @@ const FUTURE_STRONG = [
   /\bwill be (?:explored|investigated|addressed|studied|extended|examined)\b/i,
   /\bfollow[- ]up (?:study|studies|work|research)\b/i,
 ];
-// A sentence that carries on from the one before it.
 const CONTINUES_RE = /^(?:first(?:ly)?|second(?:ly)?|third(?:ly)?|fourth|finally|lastly|also|additionally|moreover|furthermore|in addition|another|next|similarly|we also)\b/i;
 
 function matchesAny(rules, text) {
   return rules.some((rule) => rule.test(text));
 }
 
-/**
- * Picks the sentences in which the authors themselves say what the rules look for. Returns
- * groups of neighbouring sentences as { start, end } positions into `text`.
- */
 function pickCueSentences(text, strongRules, weakRules) {
   const spans = sentenceSpans(text);
   const strong = spans.map((span) => matchesAny(strongRules, text.slice(span.start, span.end)));
@@ -2119,7 +1771,6 @@ function pickCueSentences(text, strongRules, weakRules) {
 
 function typesOfSection(section) {
   const own = Array.isArray(section.types) && section.types.length ? section.types : [section.type || 'other'];
-  // Hand-made input may carry only one type; the title can still name a second purpose.
   const fromTitle = classifyHeadingTitle(section.title || '').types.filter((type) => type !== 'other');
   return [...new Set([...own, ...fromTitle])];
 }
@@ -2135,17 +1786,6 @@ function pageAtOffset(section, offset) {
 
 const NEVER_QUOTED = ['references', 'acknowledgements'];
 
-/**
- * Picks the limitations, future work, conclusion, data availability and code availability text.
- *
- * Each answer is null or { text, sectionTitle, page, source, truncated }:
- *   source 'own_section'     the paper has a section for it; text is that section
- *   source 'within_section'  no such section; text is the sentences, inside the section named in
- *                            sectionTitle, in which the authors state it
- * Text is copied from the paper (see the note at the top of this file) and capped at about
- * 1,400 characters at the end of a sentence. Nothing is taken from the reference list, the
- * acknowledgements, the contents pages or captions.
- */
 function extractKeySections(sections) {
   const result = { limitations: null, futureWork: null, conclusion: null, dataAvailability: null, codeAvailability: null };
   const list = (Array.isArray(sections) ? sections : []).filter((section) => section && typeof section.text === 'string');
@@ -2155,7 +1795,6 @@ function extractKeySections(sections) {
   const level = (i) => (Number(list[i].level) > 0 ? Number(list[i].level) : 1);
   const quotable = (i) => !types[i].some((type) => NEVER_QUOTED.includes(type));
 
-  // The sub-sections that belong to section i ("5.2.1 ..." under "5.2 Limitations").
   const childrenOf = (i) => {
     const children = [];
     if (!(Number(list[i].level) > 0)) return children;
@@ -2165,14 +1804,12 @@ function extractKeySections(sections) {
     }
     return children;
   };
-  // Text of a section together with its sub-sections, leaving out those that are about
-  // something else (the "Future Work" sub-section of a conclusion chapter, for instance).
   const gather = (i, skipTypes, alsoSkip = () => false) => {
     const parts = [];
     let own = list[i].text.trim();
-    if (list[i]._runIn) own = own.split(/\n\s*\n/)[0]; // a paragraph heading covers its paragraph only
+    if (list[i]._runIn) own = own.split(/\n\s*\n/)[0];
     if (own) parts.push(own);
-    let skippingBelow = Infinity; // a skipped sub-section takes its own sub-sections with it
+    let skippingBelow = Infinity;
     for (const j of childrenOf(i)) {
       if (level(j) > skippingBelow) continue;
       skippingBelow = Infinity;
@@ -2190,13 +1827,11 @@ function extractKeySections(sections) {
     return { text: capped.text, sectionTitle: list[i].title || '', page: pageAtOffset(list[i], offset), source, truncated: capped.truncated };
   };
   const indexesOfType = (type) => list.map((_, i) => i).filter((i) => types[i].includes(type) && quotable(i));
-  // Prefer a section that is only about the thing, then the last one in the document (a thesis
-  // may mention "scope and limitations" in chapter 1 and discuss them properly near the end).
   const best = (candidates, type, skipTypes) => {
     const withText = candidates.filter((i) => gather(i, skipTypes).length >= 40);
-    const only = withText.filter((i) => types[i].length === 1); // "Limitations"
-    const mainly = withText.filter((i) => list[i].type === type); // "Limitations and Future Work"
-    const pool = only.length ? only : mainly.length ? mainly : withText; // "Discussion and Limitations"
+    const only = withText.filter((i) => types[i].length === 1);
+    const mainly = withText.filter((i) => list[i].type === type);
+    const pool = only.length ? only : mainly.length ? mainly : withText;
     return pool.length ? pool[pool.length - 1] : -1;
   };
   const firstFutureCue = (text) => {
@@ -2204,8 +1839,6 @@ function extractKeySections(sections) {
     return -1;
   };
 
-  // Sections in which authors usually state limitations and plans when there is no heading
-  // for them: the discussion and the conclusion, with their sub-sections.
   const scope = [];
   list.forEach((_, i) => {
     if (!quotable(i) || !(types[i].includes('discussion') || types[i].includes('conclusion'))) return;
@@ -2225,14 +1858,11 @@ function extractKeySections(sections) {
     return answer(text, chosen.i, 'within_section', chosen.groups[0].start);
   };
 
-  // ---- Limitations ----
   const otherParts = ['future_work', 'data_availability', 'code_availability', 'conclusion'];
   const limitationsAt = best(indexesOfType('limitations'), 'limitations', otherParts);
   if (limitationsAt >= 0) {
     let text = gather(limitationsAt, otherParts);
     if (types[limitationsAt].includes('future_work')) {
-      // "Limitations and Future Work": the limitations are what comes before the first sentence
-      // about the future.
       const cut = firstFutureCue(text);
       if (cut >= 60) text = text.slice(0, cut);
     }
@@ -2241,13 +1871,11 @@ function extractKeySections(sections) {
     result.limitations = withinScope(LIMITATION_STRONG, LIMITATION_WEAK);
   }
 
-  // ---- Future work ----
   const futureAt = best(indexesOfType('future_work'), 'future_work', ['limitations', 'data_availability', 'code_availability']);
   if (futureAt >= 0) {
     let text = gather(futureAt, ['limitations', 'data_availability', 'code_availability']);
     let offset = 0;
     if (types[futureAt].length > 1) {
-      // "Conclusion and Future Work": start at the first sentence about the future.
       const cut = firstFutureCue(text);
       if (cut > 0) {
         text = text.slice(cut);
@@ -2259,11 +1887,7 @@ function extractKeySections(sections) {
     result.futureWork = withinScope(FUTURE_STRONG, []);
   }
 
-  // ---- Conclusion ----
   const conclusionSkip = ['limitations', 'data_availability', 'code_availability'];
-  // The conclusion of the whole work is a main section, or a sub-section of the discussion or
-  // conclusion. The "3.6 Conclusion" that closes a chapter about something else is not it, and
-  // saying nothing is better than presenting that as the paper's conclusion.
   const mainSectionTypes = (i) => {
     for (let j = i - 1; j >= 0; j--) if (Number(list[j].level) > 0 && level(j) < level(i)) return types[j];
     return null;
@@ -2273,12 +1897,10 @@ function extractKeySections(sections) {
     const parent = mainSectionTypes(i);
     return !parent || parent.includes('conclusion') || parent.includes('discussion');
   });
-  // A chapter-level conclusion wins over the sub-sections inside it.
   const topLevel = Math.min(...conclusionCandidates.map(level));
   conclusionCandidates = conclusionCandidates.filter((i) => level(i) === topLevel);
   const conclusionAt = best(conclusionCandidates, 'conclusion', [...conclusionSkip, 'future_work']);
   if (conclusionAt >= 0) {
-    // "6.3 Future Work" is left to the future-work answer; "6.4 Conclusion and Outlook" is kept.
     let text = gather(conclusionAt, conclusionSkip, (j) => list[j].type === 'future_work');
     if (types[conclusionAt].includes('future_work')) {
       const cut = firstFutureCue(text);
@@ -2287,7 +1909,6 @@ function extractKeySections(sections) {
     result.conclusion = answer(text, conclusionAt, 'own_section');
   }
 
-  // ---- Data and code availability ----
   const dataAt = best(indexesOfType('data_availability'), 'data_availability', []);
   if (dataAt >= 0) result.dataAvailability = answer(gather(dataAt, []), dataAt, 'own_section');
   const codeAt = best(indexesOfType('code_availability'), 'code_availability', []);
@@ -2304,7 +1925,6 @@ function extractKeySections(sections) {
         for (const kind of kinds) {
           const entry = found[kind];
           if (!entry) found[kind] = { i, start: span.start, end: span.end, lastEnd: span.end };
-          // Two availability sentences in a row belong together.
           else if (entry.i === i && lastKind === kind && entry.lastEnd <= span.start && span.start - entry.lastEnd < 4) {
             entry.end = span.end;
             entry.lastEnd = span.end;
@@ -2328,7 +1948,6 @@ function extractKeySections(sections) {
 const DATA_NOUN = '(?:data|datasets?|data sets?|corpus|corpora|recordings|photographs|images|annotations|labels|measurements|records|benchmarks?|materials)';
 const CODE_NOUN = '(?:source code|code|software|scripts?|implementations?|notebooks?|toolkit|toolbox|package|library|trained models?|model weights|checkpoints|applications?)';
 const SHARED = '(?:available|accessible|released|deposited|archived|hosted|open[- ]sourced|uploaded|shared|provided|published)';
-// "<the data> are (publicly) available ..." and "we release <the code> ..."
 const AVAILABILITY_RULES = [['data', DATA_NOUN], ['code', CODE_NOUN]].map(([kind, noun]) => [
   kind,
   [
@@ -2340,12 +1959,6 @@ const URL_IN_TEXT = /https?:\/\/|\bwww\.|\bdoi\.org\/|\b10\.\d{4,9}\//i;
 const AVAILABILITY_ANCHOR =
   /\b(?:up)?on (?:reasonable )?request\b|\b(?:this|our|the present|the current) (?:study|work|paper|article|thesis|research|project|manuscript)\b|\bcorresponding author\b|\bsupplementary (?:materials?|information|data|files?)\b|\b(?:publicly|openly|freely) (?:available|accessible)\b|\brepository\b/i;
 
-/**
- * Is this sentence the authors' statement about where their data or code can be obtained?
- * Returns [] or a list with 'data' and/or 'code'. The rules are strict on purpose: "we use the
- * publicly available ImageNet dataset [3]" describes somebody else's data and must not match
- * unless the sentence also points to a place (a link, a request, "this study").
- */
 function availabilityKinds(sentence) {
   if (sentence.length > 700) return [];
   const kinds = [];
@@ -2359,25 +1972,20 @@ function availabilityKinds(sentence) {
   return kinds;
 }
 
-// ===========================================================================
-// 5. Code and dataset links
-// ===========================================================================
 
 const CODE_HOSTS = ['github.com', 'gitlab.com', 'bitbucket.org', 'codeberg.org', 'sourceforge.net', 'gist.github.com'];
 const DATASET_HOSTS = [
   'zenodo.org', 'figshare.com', 'datadryad.org', 'dryad.org', 'osf.io', 'kaggle.com', 'data.mendeley.com',
   'physionet.org', 'archive.ics.uci.edu', 'ieee-dataport.org', 'dataverse.harvard.edu', 'dataverse.org', 'pangaea.de',
 ];
-// DOI prefixes that belong to data repositories: Zenodo, Figshare, Dryad, Dataverse, Mendeley
-// Data, OSF, IEEE DataPort, PhysioNet, UCI.
 const DATA_DOI_RE = /^\/?10\.(?:5281|6084|5061|7910|17632|17605|21227|13026|24432)\//;
 const IGNORED_LINK_HOSTS = ['creativecommons.org', 'orcid.org', 'crossmark.crossref.org', 'w3.org', 'adobe.com'];
 
 const BARE_HOSTS = 'github\\.com|gitlab\\.com|bitbucket\\.org|codeberg\\.org|zenodo\\.org|figshare\\.com|osf\\.io|doi\\.org|dx\\.doi\\.org|huggingface\\.co|kaggle\\.com|datadryad\\.org|physionet\\.org|data\\.mendeley\\.com|ieee-dataport\\.org';
 const LINK_RE = new RegExp(
-  `(?:https?:\\/\\/|www\\.)[^\\s<>"“”‘’{}|\\\\^\`]+` + // ordinary links
-    `|(?<![\\w./@-])(?:${BARE_HOSTS})\\/[^\\s<>"“”‘’{}|\\\\^\`]+` + // "github.com/user/repo" printed without https://
-    `|(?<![\\w./])(?:doi:\\s*)?10\\.(?:5281|6084|5061|7910|17632|17605|21227|13026|24432)\\/[^\\s<>"“”‘’{}|\\\\^\`]+`, // a bare data DOI
+  `(?:https?:\\/\\/|www\\.)[^\\s<>"“”‘’{}|\\\\^\`]+` +
+    `|(?<![\\w./@-])(?:${BARE_HOSTS})\\/[^\\s<>"“”‘’{}|\\\\^\`]+` +
+    `|(?<![\\w./])(?:doi:\\s*)?10\\.(?:5281|6084|5061|7910|17632|17605|21227|13026|24432)\\/[^\\s<>"“”‘’{}|\\\\^\`]+`,
   'gi'
 );
 
@@ -2388,16 +1996,13 @@ function hostMatches(host, domain) {
   return host === domain || host.endsWith(`.${domain}`);
 }
 
-/** Tidies a link found in running text, or returns null when it is not a usable public link. */
 function cleanLink(raw) {
   let text = raw.trim();
   const doi = /^(?:doi:\s*)?(10\.\d{4,9}\/.+)$/i.exec(text);
   if (doi) text = `https://doi.org/${doi[1]}`;
   else if (!/^https?:\/\//i.test(text)) text = `https://${text}`;
-  // Two links printed without a space between them: keep the first.
   const second = text.slice(8).search(/https?:\/\//i);
   if (second >= 0) text = text.slice(0, 8 + second);
-  // Full stops, commas and closing brackets after a link belong to the sentence, not to the link.
   for (;;) {
     const last = text[text.length - 1];
     if (/[.,;:!?'"”’*]/.test(last)) text = text.slice(0, -1);
@@ -2424,8 +2029,6 @@ function linkKind(host, pathname, lead) {
   else if (hostMatches(host, 'kaggle.com')) kind = /^\/code\//.test(pathname) ? 'code' : 'dataset';
   else if (DATASET_HOSTS.some((domain) => hostMatches(host, domain)) || /(^|\.)dataverse\./.test(host)) kind = 'dataset';
   else if ((host === 'doi.org' || host === 'dx.doi.org') && DATA_DOI_RE.test(pathname)) kind = 'dataset';
-  // Zenodo, Figshare and OSF also hold software. When the words that lead up to the link speak
-  // of code and not of data ("the code is archived at ..."), believe them.
   if (kind === 'dataset' && /zenodo|figshare|osf\.io|^doi\.org$|^dx\.doi\.org$/.test(host)) {
     const aboutCode = /\b(?:source code|code|software|scripts?|implementation)\b/i.test(lead);
     const aboutData = /\b(?:data|datasets?|photographs|recordings|readings|images|labels|records|files)\b/i.test(lead);
@@ -2438,7 +2041,6 @@ function shortContext(text, start, end, linkStart, linkEnd) {
   let from = start;
   let to = end;
   if (to - from > 200) {
-    // Keep the link in view: take the words that lead up to it.
     to = Math.min(end, Math.max(linkEnd, from + 200));
     from = Math.max(start, to - 200);
     if (from > start) {
@@ -2453,14 +2055,6 @@ function shortContext(text, start, end, linkStart, linkEnd) {
   return text.slice(from, to).replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
-/**
- * Lists the code and dataset links a paper mentions.
- *
- * Returns up to 15 of { url, kind: 'code' | 'dataset' | 'other', host, page, context }, code and
- * dataset links first. `context` is the sentence the link was printed in (200 characters at
- * most). Links that appear only in the reference list are other people's work and are left out,
- * unless the entry itself says that it holds the data or code of this work.
- */
 function findResourceLinks(pages) {
   const { sections, noteBlocks } = analysePages(pages);
   const seen = new Map();
@@ -2485,8 +2079,6 @@ function findResourceLinks(pages) {
       const span = spans.find((s) => position >= s.start && position < s.end) || { start: Math.max(0, position - 120), end: Math.min(text.length, linkEnd + 60) };
       const context = shortContext(text, span.start, span.end, position, linkEnd);
       if (inReferences) {
-        // In a reference list the "sentence" is often just the link, so look at the entry the
-        // link closes: back to the entry's number, the paragraph start or the previous link.
         const before = text.slice(0, position);
         const marker = [...before.matchAll(/(?:^|\s)\[\d{1,3}\]\s/g)].pop();
         const entryStart = Math.max(position - 300, afterPreviousLink, before.lastIndexOf('\n\n') + 1, marker ? marker.index : 0);
@@ -2494,7 +2086,6 @@ function findResourceLinks(pages) {
       }
       const key = `${link.host}${link.path.replace(/\.git$/, '').replace(/\/+$/, '')}`.toLowerCase();
       if (seen.has(key)) continue;
-      // The words of the same sentence just before the link, but not before an earlier link.
       let lead = text.slice(Math.max(span.start, position - 90), position);
       const earlierLink = lead.search(/(?:https?:\/\/|www\.)\S*\s(?!.*(?:https?:\/\/|www\.))/i);
       if (earlierLink >= 0) lead = lead.slice(earlierLink).replace(/^\S+\s/, '');
@@ -2513,22 +2104,14 @@ function findResourceLinks(pages) {
   return [...useful, ...rest].slice(0, MAX_LINKS);
 }
 
-// ===========================================================================
-// 6. Everything together, with a cache and a queue
-// ===========================================================================
 
-// Reading a PDF costs a download and up to a few seconds of processor time, and the same popular
-// paper is opened again and again. Results are therefore remembered for a while. The Map keeps
-// its entries in the order they were last used, so the first key is always the one to discard.
 const resultCache = new Map();
 const inFlight = new Map();
 let jobsInSystem = 0;
 let parseChain = Promise.resolve();
 
-// Failures that say nothing about the PDF itself are not remembered.
 const NOT_CACHED = new Set(['busy', 'reader_not_installed']);
 
-/** A failure that may well go away on the next try (the host was slow or down) is not remembered either. */
 function isPassingFailure(reason) {
   const key = String(reason || '');
   return NOT_CACHED.has(key) || key === 'timeout' || key === 'network' || key === 'http_429' || /^http_5\d\d$/.test(key);
@@ -2546,7 +2129,7 @@ function cacheGet(key, now) {
     return null;
   }
   resultCache.delete(key);
-  resultCache.set(key, entry); // most recently used goes to the end
+  resultCache.set(key, entry);
   return entry.value;
 }
 
@@ -2556,21 +2139,18 @@ function cacheSet(key, value, now) {
   while (resultCache.size > CACHE_MAX_ENTRIES) resultCache.delete(resultCache.keys().next().value);
 }
 
-/** Runs `job` after every job queued before it has finished: one PDF is parsed at a time. */
 function parseInTurn(job) {
   const run = parseChain.then(job, job);
   parseChain = run.catch(() => {});
   return run;
 }
 
-/** From the bytes of a PDF to the finished answer. Runs inside the reading thread. */
 async function parsePdfBuffer(buffer, opts = {}) {
   const extract = typeof opts.extractImpl === 'function' ? opts.extractImpl : extractPdfText;
   const extracted = await extract(buffer, { maxPages: opts.maxPages });
   if (!extracted || !extracted.ok) return { ok: false, reason: (extracted && extracted.reason) || 'unreadable' };
 
   const sections = splitIntoSections(extracted.pages);
-  // Only headers and page numbers were found: the pages themselves are pictures.
   const letters = sections.reduce((sum, section) => sum + section.text.length, 0);
   if (letters < 300) return { ok: false, reason: 'no_text_layer' };
 
@@ -2588,11 +2168,6 @@ async function parsePdfBuffer(buffer, opts = {}) {
   };
 }
 
-/**
- * Reads the PDF in a separate thread with a memory limit and a time limit. When either limit is
- * passed the thread is stopped and the request gets an ordinary "could not be read" answer; the
- * rest of the site keeps answering in the meantime.
- */
 function parseInWorker(buffer, opts = {}) {
   return new Promise((resolve) => {
     let worker = null;
@@ -2616,7 +2191,6 @@ function parseInWorker(buffer, opts = {}) {
         resourceLimits: { maxOldGenerationSizeMb: WORKER_MAX_HEAP_MB, maxYoungGenerationSizeMb: 48 },
       });
     } catch {
-      // Threads are not available on this host: read in the main process, with the other limits still on.
       parsePdfBuffer(buffer, opts).then(finish, () => finish(null));
       return;
     }
@@ -2637,7 +2211,6 @@ async function readUncached(pdfUrl, opts) {
   if (!fetched.ok) return { ok: false, reason: fetched.reason };
 
   return parseInTurn(async () => {
-    // Tests hand in their own reader; that one runs here. The real reader runs in its own thread.
     const inProcess = typeof opts.extractImpl === 'function' || Boolean(pdfjsLoaderOverride) || opts.inProcess === true;
     let result;
     if (inProcess) result = await parsePdfBuffer(fetched.buffer, opts);
@@ -2648,19 +2221,6 @@ async function readUncached(pdfUrl, opts) {
   });
 }
 
-/**
- * Reads the PDF at `pdfUrl` and returns the authors' own key sections and links.
- *
- * Returns { ok: true, pageCount, pagesRead, truncated, keySections, links, sectionTitles, finalUrl }
- * or { ok: false, reason }. It never throws.
- *
- * Results are remembered for 24 hours (failures for 30 minutes). One PDF is parsed at a time and
- * three more may wait; a request beyond that is answered at once with reason 'busy', which the
- * caller should present as "try again in a moment".
- *
- * opts (all optional, mainly for tests): { lookup, fetchImpl, extractImpl, now, maxPages,
- * timeoutMs, maxBytes, skipCache }
- */
 async function readPaperFullText(input, opts = {}) {
   try {
     const pdfUrl = input && typeof input.pdfUrl === 'string' ? input.pdfUrl.trim() : '';
@@ -2673,7 +2233,6 @@ async function readPaperFullText(input, opts = {}) {
       const cached = cacheGet(key, clock());
       if (cached) return structuredClone(cached);
     }
-    // Two people opening the same paper at the same moment share one download.
     if (inFlight.has(key)) return structuredClone(await inFlight.get(key));
 
     if (jobsInSystem >= 1 + MAX_WAITING) return { ok: false, reason: 'busy' };
@@ -2695,7 +2254,6 @@ async function readPaperFullText(input, opts = {}) {
   }
 }
 
-/** Empties the cache and the queue counters. For tests only. */
 function resetFullTextStateForTests() {
   resultCache.clear();
   inFlight.clear();
@@ -2716,7 +2274,6 @@ module.exports = {
   isPdfReaderAvailable,
   classifyHeadingTitle,
   SECTION_TYPES,
-  // Small building blocks, exported so the tests can check them one by one.
   _internals: {
     buildPageLines,
     pinnedHttpRequest,

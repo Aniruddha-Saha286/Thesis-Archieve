@@ -29,7 +29,6 @@ async function runPaperSummaryTests() {
     }
   }
 
-  // 1. Feature Flag Tests
   await test('Feature flag disabled: returns enabled: false without executing generation', async () => {
     const orig = process.env.PAPER_SUMMARIZER_ENABLED;
     process.env.PAPER_SUMMARIZER_ENABLED = 'false';
@@ -46,7 +45,6 @@ async function runPaperSummaryTests() {
     process.env.PAPER_SUMMARIZER_ENABLED = orig;
   });
 
-  // 2. Honesty and Source Tiers
   await test('Honesty guard: returns unavailable if abstract is missing or too short, never hallucinates', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -64,7 +62,6 @@ async function runPaperSummaryTests() {
     assert.ok(res.message.includes('no abstract long enough'));
   });
 
-  // 3. Grounded Component Extraction
   await test('Abstract-only grounding: parses objective, methodology, dataset, and findings directly from text', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -110,20 +107,16 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary.limitations.toLowerCase().includes('limitation'));
     assert.ok(Array.isArray(res.summary.keyTerms));
     assert.ok(res.summary.keyTerms.length >= 3);
-    // The extractor uses keyword rules, so the label must say it is not AI-written
     assert.ok(res.summary.disclaimer.includes('Not written by AI'));
     assert.strictEqual(res.summary.isAiGenerated, false);
-    // Headings must not borrow sentences that belong elsewhere
     assert.ok(!res.summary.methodology.toLowerCase().includes('outperforms'));
     assert.ok(!res.summary.mainFindings.toLowerCase().includes('limitation'));
     assert.strictEqual(res.summary.relevanceForThesisResearch, '');
     assert.strictEqual(res.summary.plainLanguageOverview, '');
-    // The page is told which headings were really found in the text
     assert.strictEqual(typeof res.summary.found, 'object');
     assert.strictEqual(res.summary.found.findings, true);
   });
 
-  // 4. Bengali / Bangla Language Support
   await test('Bengali language output: formats grounded sections with Bangla localization', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -160,11 +153,9 @@ async function runPaperSummaryTests() {
     assert.strictEqual(res.enabled, true);
     assert.strictEqual(res.language, 'bn');
     assert.ok(res.summary.tldr.includes('[সারাংশ]'));
-    // Bangla label must also say it is not written by AI
     assert.ok(res.summary.disclaimer.includes('কৃত্রিম বুদ্ধিমত্তার লেখা নয়'));
   });
 
-  // 5. Caching & Quota Idempotency
   await test('Cache deduplication: subsequent identical request returns cached result with cached: true', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -205,13 +196,12 @@ async function runPaperSummaryTests() {
     assert.strictEqual(secondRun.coverage, 'abstract_only');
   });
 
-  // 6. Quota Enforcement
   await test('Quota enforcement: blocks generation when daily limit is reached and returns 429 quota payload', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
     const dummyUser = {
       _id: 'usr_mock_quota',
-      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 3 }, // Already at limit of 3
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 3 },
       save: async () => {},
     };
 
@@ -237,7 +227,6 @@ async function runPaperSummaryTests() {
     assert.strictEqual(blocked.code, 'DAILY_SUMMARY_LIMIT_REACHED');
   });
 
-  // 7. Security Guard: Free Plan Block & Zero Cached Summaries
   await test('Security guard: Free plan user receives FEATURE_LOCKED (403) and cannot read cached summary', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -255,7 +244,6 @@ async function runPaperSummaryTests() {
       },
     };
 
-    // Even on paper_solar_99 which is already cached in memorySummaryCache!
     const res = await getOrGeneratePaperSummary({
       paper: {
         id: 'paper_solar_99',
@@ -272,7 +260,6 @@ async function runPaperSummaryTests() {
     assert.strictEqual(res.feature, 'paper_summary');
   });
 
-  // 8. Security Guard: Guest / Unauthenticated Rejection
   await test('Security guard: Unauthenticated guest receives FEATURE_LOCKED (403)', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -297,13 +284,12 @@ async function runPaperSummaryTests() {
     assert.strictEqual(res.code, 'FEATURE_LOCKED');
   });
 
-  // 9. Paid Tier Entitlement: Unlimited Daily Summaries
   await test('Paid tier entitlement: Premium and Pro Max have unlimited daily summaries', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
     const dummyUser = {
       _id: 'usr_mock_premium',
-      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 42 }, // High usage
+      dailySummaryUsage: { date: getDhakaDateString(new Date()), count: 42 },
       save: async () => {},
     };
 
@@ -311,7 +297,7 @@ async function runPaperSummaryTests() {
       plan: 'premium_6m',
       quotas: {
         canUsePaperSummarizer: true,
-        dailySummaryGenerationLimit: null, // Unlimited!
+        dailySummaryGenerationLimit: null,
       },
     };
 
@@ -330,7 +316,6 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary);
   });
 
-  // 10. Contrastive Author-Stated Limitation Extraction
   await test('Author limitation extraction: detects contrastive "however" and "challenges remain" markers accurately', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -365,7 +350,6 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary.cautiousInferredLimitations.length > 20);
   });
 
-  // 11. Contextual Inferred Scope when Unstated in Abstract
   await test('Contextual inferred limitations: generates substantive domain and sample bounds when author unstated in abstract', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -400,7 +384,6 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary.cautiousInferredLimitations.toLowerCase().includes('computational complexity'));
   });
 
-  // 12. Full-Text Limitation Section Extraction
   await test('Full-text limitation section extraction: pulls directly from verified fullTextSections', async () => {
     process.env.PAPER_SUMMARIZER_ENABLED = 'true';
 
@@ -436,7 +419,6 @@ async function runPaperSummaryTests() {
     assert.ok(res.summary.authorStatedLimitations.toLowerCase().includes('latency degradation'));
   });
 
-  // 13. SSRF Protection & URL Validation
   await test('SSRF protection: rejects loopback, RFC1918 private IPs, AWS/GCP metadata, and invalid protocols', () => {
     assert.strictEqual(isPrivateIpOrHost('localhost'), true);
     assert.strictEqual(isPrivateIpOrHost('127.0.0.1'), true);
@@ -453,7 +435,6 @@ async function runPaperSummaryTests() {
     assert.strictEqual(isValidHttpUrl('https://arxiv.org/pdf/2301.12345.pdf'), true);
   });
 
-  // 8. Dataset Repository URL Validation
   await test('Dataset repository URL validation: accepts trusted repositories, rejects malicious protocols', () => {
     assert.strictEqual(isValidDatasetRepositoryUrl('https://zenodo.org/records/12345'), true);
     assert.strictEqual(isValidDatasetRepositoryUrl('https://doi.org/10.5281/zenodo.123'), true);

@@ -1,5 +1,3 @@
-// Small pure helpers added with the defect fixes: report categories, safe search text,
-// the proxy setting, and the Report model accepting every category the form can send.
 const assert = require('assert');
 const { REPORT_ISSUE_TYPES, REPORT_ISSUE_LABELS, normalizeReportIssueType } = require('../utils/reportIssueType');
 const { escapeRegex } = require('../utils/escapeRegex');

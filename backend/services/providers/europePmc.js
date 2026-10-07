@@ -1,6 +1,5 @@
 const { createNormalizedRecord } = require('../scholarlyRecord');
 
-// In-memory cursor cache for Europe PMC deep pagination
 const cursorCache = new Map();
 
 async function searchEuropePmc({ query = '', page = 1, limit = 20, filters = {}, sort = 'relevance' }) {
@@ -11,7 +10,6 @@ async function searchEuropePmc({ query = '', page = 1, limit = 20, filters = {},
 
     let cleanQ = (query || 'research').trim();
 
-    // Query builder
     const queryParts = [cleanQ];
     if (filters.hasPdf || filters.isOpenAccess) {
       queryParts.push('OPEN_ACCESS:y');
@@ -33,7 +31,6 @@ async function searchEuropePmc({ query = '', page = 1, limit = 20, filters = {},
     const targetPage = Math.max(1, parseInt(page) || 1);
     let currentCursor = cursors[targetPage];
 
-    // If cursor for this page isn't cached yet, walk forward from the nearest known cursor
     if (!currentCursor) {
       const knownPages = Object.keys(cursors).map(Number).filter((p) => p <= targetPage).sort((a, b) => a - b);
       let curPage = knownPages[knownPages.length - 1] || 1;
@@ -72,7 +69,6 @@ async function searchEuropePmc({ query = '', page = 1, limit = 20, filters = {},
     const totalCount = data.hitCount || items.length;
     const hasMore = Boolean(data.nextCursorMark && data.nextCursorMark !== currentCursor);
 
-    // Cache the next cursor mark for the subsequent page
     if (data.nextCursorMark && data.nextCursorMark !== currentCursor) {
       cursors[targetPage + 1] = data.nextCursorMark;
     }
@@ -81,13 +77,11 @@ async function searchEuropePmc({ query = '', page = 1, limit = 20, filters = {},
       const doi = it.doi ? it.doi.toLowerCase() : null;
       const cleanTitle = (it.title || 'Biomedical & Life Sciences Investigation').replace(/\s+/g, ' ').replace(/\.$/, '').trim();
 
-      // Extract authors
       let authors = [];
       if (it.authorString) {
         authors = it.authorString.split(/,| and /i).map((n) => ({ name: n.trim(), affiliation: null })).filter((a) => a.name);
       }
 
-      // Authentic direct PDF handling via NCBI PubMed Central
       let directPdfUrl = null;
       const fullTextLocations = [];
 

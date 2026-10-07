@@ -1,8 +1,3 @@
-/**
- * Author Discovery and Profile Service
- * Queries OpenAlex Authors API with in-memory caching and offline resilience.
- * Does NOT bill search quota.
- */
 
 const { searchOpenAlex } = require('./providers/openalex');
 
@@ -10,7 +5,6 @@ const authorCache = new Map();
 const authorProfileCache = new Map();
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-// Curated fallback authors for offline verification and resilience
 const CURATED_AUTHORS = [
   {
     id: 'A5023888391',
@@ -180,7 +174,6 @@ async function searchAuthors(queryOrOptions = '', maybeOptions = {}) {
     console.warn('OpenAlex author search fallback:', err.message);
   }
 
-  // Fallback matching against curated records
   const lowerQ = q.toLowerCase();
   const matched = CURATED_AUTHORS.filter((a) =>
     a.name.toLowerCase().includes(lowerQ) ||
@@ -261,18 +254,15 @@ async function getAuthorProfile(authorId) {
     console.warn('OpenAlex author profile fetch error:', err.message);
   }
 
-  // Fallback to curated if matching; otherwise return null (typed not-found)
   if (!authorDetails) {
     const found = CURATED_AUTHORS.find((a) => a.id === cleanId);
     if (found) {
       authorDetails = { ...found, affiliationsHistory: [] };
     } else {
-      // Truthful: never fabricate fake 0-metric author records for unknown IDs
       return null;
     }
   }
 
-  // Fetch top works preview for this author using OpenAlex search
   let works = [];
   let worksStatus = 'fulfilled';
   let worksError = null;
@@ -305,16 +295,12 @@ async function getAuthorProfile(authorId) {
     retrievedAt: new Date().toISOString(),
   };
 
-  // Only cache profile if works retrieval did not fail with technical error
   if (worksStatus !== 'error') {
     authorProfileCache.set(cleanId, { data: profile, timestamp: Date.now() });
   }
   return profile;
 }
 
-/**
- * Retrieves paginated works for an author with cursor/page continuation.
- */
 async function getAuthorWorks(authorId, { page = 1, limit = 20, sort = 'citations' } = {}) {
   if (!authorId) {
     return { records: [], totalCount: 0, hasMore: false, error: 'Author ID is required' };

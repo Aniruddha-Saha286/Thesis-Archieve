@@ -1,7 +1,3 @@
-// Single place that understands membership plan codes sent by the backend
-// (entitlementService returns: 'free', 'trial', 'premium_6m', 'pro_max_12m', 'admin').
-// Older code compared against 'premium' / 'trial' only, so paid members saw
-// "Plan" / "Standard" instead of their real tier.
 
 export function getPlanInfo(plan) {
   const code = String(plan || 'free').toLowerCase();

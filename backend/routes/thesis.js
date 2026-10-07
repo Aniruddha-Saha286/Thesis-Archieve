@@ -45,16 +45,6 @@ const {
   isValidDocumentUrl,
 } = require('../utils/urlValidator');
 
-// GET /api/thesis
-// Public discovery search endpoint with daily search quotas:
-// GET /api/thesis
-// Public discovery search endpoint with daily search quotas:
-// - Free tier: 10 committed searches per Asia/Dhaka day
-// - Trial v2: 20 committed searches per Asia/Dhaka day
-// - Premium / Pro Max: unlimited searches
-// - Guest: 10 committed searches per Asia/Dhaka day
-// Bills credits ONLY on explicit committed search/filter submissions (page 1, new query session).
-// Pagination (page > 1), back navigation, details, and retries on total technical failure do NOT bill credits.
 router.get('/', optionalAuth, async (req, res) => {
   let reservedUserCredit = false;
   let reservedGuestCredit = false;
@@ -94,13 +84,8 @@ router.get('/', optionalAuth, async (req, res) => {
       searchLimit = entitlements.quotas.dailySearchLimit;
     }
 
-    // Context tracking for instant filter refinements
     const effectiveContextId = cleanContextId || (hasValidSession ? cleanSessionId : createSearchContextId());
 
-    // Billable Action Rule:
-    // 1. Must be an active search inquiry on page 1.
-    // 2. Must not be a cached session page replay.
-    // 3. Must not have already been billed under this searchContextId today (instant filter refinements within the active inquiry do NOT consume quota).
     const alreadyBilledForContext = isAlreadyBilled(scope, 'search', effectiveContextId, todayDhaka);
     const isBillableAction = Boolean(isSearchInquiry && !hasValidSession && cleanPage === 1 && !alreadyBilledForContext);
 
@@ -187,7 +172,6 @@ router.get('/', optionalAuth, async (req, res) => {
       throw searchErr;
     }
 
-    // Auto-release reserved credit on total technical failure
     if (searchResult && searchResult.totalTechnicalFailure && (reservedUserCredit || reservedGuestCredit)) {
       await releaseReservedCredit({
         user: req.user,
@@ -204,7 +188,6 @@ router.get('/', optionalAuth, async (req, res) => {
       }
     }
 
-    // Enforce dataset access rule: Free tier cannot access datasets of each file
     if (Array.isArray(searchResult.records)) {
       searchResult.records = searchResult.records.map((r) => {
         const hasDataset = Boolean(r.datasetUrl);
@@ -212,12 +195,10 @@ router.get('/', optionalAuth, async (req, res) => {
           ...r,
           hasDataset,
           isDatasetLocked: !canAccessDataset && hasDataset,
-          // Hide direct URL for free tier to prevent unauthorized bypass
           datasetUrl: canAccessDataset ? r.datasetUrl : null,
         };
       });
 
-      // Strict PDF-only enforcement if requested
       if (filters.hasPdf) {
         searchResult.records = searchResult.records.filter((r) =>
           Boolean(r.isDirectPdf || (r.pdfUrl && (r.pdfUrl.endsWith('.pdf') || r.pdfUrl.includes('/pdf/') || r.pdfUrl.includes('pmc.ncbi.nlm.nih.gov') || r.pdfUrl.includes('/servlets/purl'))))
@@ -229,7 +210,6 @@ router.get('/', optionalAuth, async (req, res) => {
       }
     }
 
-    // Attach search quota telemetry and active inquiry context ID
     searchResult.searchQuota = searchQuota;
     searchResult.searchContextId = effectiveContextId;
 
@@ -240,7 +220,6 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/thesis/publishers/list
 router.get('/publishers/list', async (req, res) => {
   try {
     const publishersFromDb = await Thesis.aggregate([
@@ -279,8 +258,6 @@ router.get('/publishers/list', async (req, res) => {
   }
 });
 
-// GET /api/thesis/:id
-// Retrieve individual paper details by ID
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -307,7 +284,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
         }
       }
 
-      // Convert to normalized record
       const directPdf = doc.pdfUrl && doc.pdfUrl.trim() ? doc.pdfUrl.trim() : null;
       const isDirectPdf = Boolean(directPdf && (doc.isDirectPdf || directPdf.includes('/pdf') || directPdf.endsWith('.pdf')));
 
@@ -348,7 +324,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
         source: doc.origin === 'harvest' && doc.sourceRepositoryName ? doc.sourceRepositoryName : (doc.source || 'Local Archive'),
       });
 
-      // Dataset locking for individual record
       let canAccessDataset = false;
       if (req.user) {
         const entitlements = await getEffectiveEntitlements(req.user._id);
@@ -363,7 +338,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
       return res.json(record);
     }
 
-    // For external IDs, return 404 with guidance to use client-held metadata
     return res.status(404).json({ message: 'External provider record. Details provided via search index.' });
   } catch (err) {
     console.error('[routes/thesis.js] Error retrieving record:', err);
@@ -371,10 +345,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/thesis/:id/datasets
-// Asynchronously enriches a paper with authentic Linked Datasets (explicit DOI relations)
-// and Related Datasets (topic similarity discovery).
-// Business Rule: Free tier cannot access datasets of each file; Premium/trial has unlimited access.
 router.get('/:id/datasets', optionalAuth, async (req, res) => {
   try {
     if (!req.user) {
@@ -396,7 +366,6 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
       });
     }
 
-    // Check trial daily lookup limit if applicable (e.g. trial_v2 limit: 5)
     if (entitlements.trialId && entitlements.quotas.dailyDatasetLookupLimit !== null) {
       const limit = entitlements.quotas.dailyDatasetLookupLimit;
       const used = entitlements.usage.dailyDatasetLookupsUsed || 0;
@@ -450,7 +419,6 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
         title = req.query.title || '';
       }
     } else {
-      // External paper: allow DOI and title search, reject spoofed external author deposits
       doi = req.query.doi || null;
       title = req.query.title || '';
       explicitDatasetUrl = null;
@@ -467,8 +435,6 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
       explicitDatasetSize,
     });
 
-    // If both DataCite & Zenodo failed and returned 0 datasets, return typed 503
-    // without consuming trial quota
     if (enrichment.hasOutage && enrichment.totalCount === 0) {
       return res.status(503).json({
         message: 'The dataset sources could not be reached just now. Please try again in a few moments.',
@@ -514,8 +480,6 @@ router.get('/:id/datasets', optionalAuth, async (req, res) => {
   }
 });
 
-// An approved paper is visible to everyone. A paper still waiting for review (or rejected)
-// is visible only to staff who moderate publications and to the person who deposited it.
 function canSeeUnapprovedPaper(user, doc) {
   if (!doc) return false;
   if (doc.status === 'approved' || doc.isApproved === true) return true;
@@ -531,9 +495,6 @@ function canSeeUnapprovedPaper(user, doc) {
   return Boolean(doc.submittedBy && String(doc.submittedBy) === String(user._id));
 }
 
-// POST /api/thesis/:id/summary
-// Grounded Quick Summary endpoint (feature flagged under PAPER_SUMMARIZER_ENABLED).
-// Extracts grounded research components from authorized abstract or full text.
 router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, res) => {
   try {
     const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED !== 'false';
@@ -572,12 +533,9 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
     if (mongoose.Types.ObjectId.isValid(id)) {
       const localDoc = await Thesis.findById(id).lean();
       if (localDoc) {
-        // Same visibility rule as the GET route: a paper still waiting for review is only
-        // summarised for staff and for the person who deposited it.
         if (!canSeeUnapprovedPaper(req.user, localDoc)) {
           return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
         }
-        // The archive's own record wins over anything the browser sends
         paper = {
           ...(paper || {}),
           ...localDoc,
@@ -624,7 +582,6 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
   }
 });
 
-// GET /api/thesis/:id/summary
 router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, res) => {
   try {
     const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED !== 'false';
@@ -710,9 +667,6 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
   }
 });
 
-// GET /api/thesis/open-access/find?doi=...
-// "Find a free PDF": asks Unpaywall whether a legal free copy of a paper exists.
-// Open to every signed-in member, because sending a student elsewhere to look is how they leave.
 router.get('/open-access/find', openAccessFinderLimiter, optionalAuth, async (req, res) => {
   try {
     if (!req.user) {
@@ -743,10 +697,6 @@ router.get('/open-access/find', openAccessFinderLimiter, optionalAuth, async (re
   }
 });
 
-// POST /api/thesis/:id/full-text
-// Reads the paper's free PDF and returns the authors' own Limitations, Future work, Conclusion
-// and Data/Code availability text, plus dataset and code links found in the paper.
-// No AI: only text that is in the PDF is returned. Same members as Quick Summary.
 router.post('/:id/full-text', fullTextLimiter, optionalAuth, async (req, res) => {
   try {
     if (!req.user) {
@@ -778,7 +728,6 @@ router.post('/:id/full-text', fullTextLimiter, optionalAuth, async (req, res) =>
         if (!canSeeUnapprovedPaper(req.user, localDoc)) {
           return res.status(404).json({ message: 'Scholarly publication not found in archive.' });
         }
-        // The archive's own record wins over anything the browser sends
         pdfUrl = localDoc.pdfUrl && String(localDoc.pdfUrl).trim() ? String(localDoc.pdfUrl).trim() : '';
         doi = localDoc.doi || '';
       }
@@ -789,7 +738,6 @@ router.post('/:id/full-text', fullTextLimiter, optionalAuth, async (req, res) =>
       pdfUrl = '';
     }
     if (!pdfUrl && doi) {
-      // No PDF on the record: see whether a free legal copy exists and read that one
       const openCopy = await findOpenAccessPdf({ doi });
       if (openCopy.found && openCopy.pdfUrl) {
         pdfUrl = openCopy.pdfUrl;
@@ -828,8 +776,6 @@ router.post('/:id/full-text', fullTextLimiter, optionalAuth, async (req, res) =>
   }
 });
 
-// GET /api/thesis/datasets/discover
-// Global dataset search across the dataset sources (DataCite, Zenodo, Figshare, Dryad, Harvard Dataverse, Hugging Face)
 router.get('/datasets/discover', optionalAuth, async (req, res) => {
   try {
     const { q, query, page = 1, limit = 15 } = req.query;
@@ -842,8 +788,6 @@ router.get('/datasets/discover', optionalAuth, async (req, res) => {
   }
 });
 
-// POST /api/thesis/cite
-// Generates BibTeX, RIS, and APA citations for any passed record metadata
 router.post('/cite', (req, res) => {
   try {
     const record = (req.body && req.body.record) ? req.body.record : req.body;
@@ -867,8 +811,6 @@ router.post('/cite', (req, res) => {
   }
 });
 
-// POST /api/thesis/:id/report
-// Dead link / metadata inaccuracy report
 router.post('/:id/report', optionalAuth, async (req, res) => {
   try {
     const { issueType, description, userEmail, title } = req.body || {};
@@ -930,8 +872,6 @@ router.post('/:id/report', optionalAuth, async (req, res) => {
   }
 });
 
-// POST /api/thesis/:id/upvote
-// Endorse a research publication (atomic toggle for local repository records)
 router.post('/:id/upvote', authenticateToken, async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -1006,9 +946,6 @@ router.post('/:id/upvote', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/thesis
-// Submits a user-contributed thesis.
-// Authenticated user required. Status defaults strictly to 'pending' until admin moderation.
 router.post('/', authenticateToken, async (req, res) => {
   try {
     if (req.user.role === 'student' && req.user.status !== 'approved') {
@@ -1067,12 +1004,8 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
-    // A PDF uploaded through the deposit form: accepted only when the address really is this
-    // site's stored copy of that file, so a form cannot claim somebody else's upload.
     const isUploadedPdf = Boolean(pdfStorageRef) && thesisFileStorage.isOwnStorageUrl(cleanPdfUrl, pdfStorageRef);
     if (isUploadedPdf) {
-      // The file must be one this member uploaded, and each upload belongs to one thesis only.
-      // Otherwise deleting one record could remove a file another record still needs.
       if (!thesisFileStorage.isUploadedBy(pdfStorageRef, req.user._id)) {
         return res.status(400).json({ message: 'That uploaded file cannot be used here. Please upload your PDF again.' });
       }
@@ -1106,14 +1039,13 @@ router.post('/', authenticateToken, async (req, res) => {
       codeUrl: codeUrl ? codeUrl.trim() : '',
       bibtex: bibtex ? bibtex.trim() : '',
       submittedBy: req.user._id,
-      status: req.user.role === 'admin' ? 'approved' : 'pending', // Submissions require moderation unless admin
+      status: req.user.role === 'admin' ? 'approved' : 'pending',
       approvedAt: req.user.role === 'admin' ? new Date() : null,
       updatedAt: new Date(),
     });
 
     await newThesis.save();
 
-    // Broadcast newly deposited publication in real-time
     emitThesisCreated(newThesis);
 
     return res.status(201).json({
@@ -1128,7 +1060,6 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin / Staff Moderation Endpoints
 router.put('/:id/approve', authenticateToken, requirePermission(PERMISSIONS.PUBLICATIONS_MODERATE), async (req, res) => {
   try {
     const now = new Date();
@@ -1139,7 +1070,6 @@ router.put('/:id/approve', authenticateToken, requirePermission(PERMISSIONS.PUBL
     );
     if (!thesis) return res.status(404).json({ message: 'Thesis not found.' });
 
-    // Broadcast publication approved in real-time
     emitThesisUpdated(thesis);
 
     return res.json({ message: 'Thesis approved for public discovery.', thesis });
@@ -1170,7 +1100,6 @@ router.put('/:id/reject', authenticateToken, requirePermission(PERMISSIONS.PUBLI
     );
     if (!thesis) return res.status(404).json({ message: 'Thesis not found.' });
 
-    // Broadcast publication updated in real-time
     emitThesisUpdated(thesis);
 
     return res.json({ message: 'Thesis rejected.', thesis });
@@ -1208,7 +1137,6 @@ router.put('/:id/pin', authenticateToken, requireAdmin, async (req, res) => {
     }
 
     if (!thesis) {
-      // If unpinning a paper that does not exist in local MongoDB, it is already unpinned
       if (requestedPinned === false) {
         emitThesisPinned(rawId, false);
         return res.json({
@@ -1218,7 +1146,6 @@ router.put('/:id/pin', authenticateToken, requireAdmin, async (req, res) => {
         });
       }
 
-      // If pinning an external discovery paper, import and pin it
       const authorList = Array.isArray(paperData.authors)
         ? paperData.authors
         : (paperData.author ? [{ name: paperData.author }] : [{ name: 'Academic Researcher' }]);
@@ -1260,7 +1187,6 @@ router.put('/:id/pin', authenticateToken, requireAdmin, async (req, res) => {
     thesis.isPinned = requestedPinned !== undefined ? Boolean(requestedPinned) : !thesis.isPinned;
     await thesis.save();
 
-    // Broadcast pinned state change in real-time
     emitThesisPinned(thesis._id, thesis.isPinned);
 
     return res.json({
@@ -1291,10 +1217,8 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    // Broadcast deletion in real-time
     emitThesisDeleted(thesis._id);
 
-    // Remove the uploaded PDF with the record (does nothing for linked PDFs; never blocks the delete)
     if (thesis.pdfStorageRef) {
       await thesisFileStorage.destroyThesisPdfIfUnused(thesis.pdfStorageRef, Thesis);
     }

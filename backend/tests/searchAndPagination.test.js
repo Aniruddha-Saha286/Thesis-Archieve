@@ -5,8 +5,6 @@ const { deduplicateRecords } = require('../services/deduplicator');
 function runSearchAndPaginationTests() {
   console.log('Testing: Search Orchestration, Pagination & Provider Resilience...');
 
-  // Test 1: Simulating Provider Failure Resilience
-  // If provider A succeeds with 3 records and provider B fails with timeout/503:
   const providerResults = [
     {
       name: 'OpenAlex',
@@ -51,13 +49,11 @@ function runSearchAndPaginationTests() {
 
   const deduped = deduplicateRecords(rawRecords);
 
-  // Assertions
   assert.strictEqual(deduped.length, 3, 'Must return records from healthy providers despite Europe PMC failure');
   assert.strictEqual(providerStatus['Europe PMC'].status, 'degraded', 'Failed provider clearly marked degraded');
   assert.strictEqual(providerStatus['Europe PMC'].error, 'Europe PMC API timeout after 6500ms', 'Error message preserved');
   assert.strictEqual(providerStatus['OpenAlex'].status, 'ok', 'Healthy provider marked ok');
 
-  // Test 2: Pagination windowing
   const limit = 2;
   const page1 = deduped.slice(0, limit);
   const page2 = deduped.slice(limit, limit * 2);

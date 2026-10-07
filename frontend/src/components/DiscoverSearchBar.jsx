@@ -17,7 +17,7 @@ export default function DiscoverSearchBar({
   searchQuery = '',
   onSearch,
   loadingTheses = false,
-  searchMode = 'publications', // 'publications' | 'authors'
+  searchMode = 'publications',
   onChangeSearchMode,
   onSelectAuthor,
   selectedPublicationType = 'all',
@@ -34,7 +34,6 @@ export default function DiscoverSearchBar({
   const [inputValue, setInputValue] = useState(searchQuery);
   const debounceTimerRef = useRef(null);
 
-  // Author candidates autocomplete
   const [authorCandidates, setAuthorCandidates] = useState([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
@@ -43,7 +42,6 @@ export default function DiscoverSearchBar({
   const authorRequestIdRef = useRef(0);
   const candidateQueryRef = useRef('');
 
-  // Stop pending timers when the search bar unmounts (e.g. user switches tab)
   useEffect(() => {
     return () => {
       if (authorSearchTimerRef.current) clearTimeout(authorSearchTimerRef.current);
@@ -51,7 +49,6 @@ export default function DiscoverSearchBar({
     };
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (authorDropdownRef.current && !authorDropdownRef.current.contains(e.target)) {
@@ -62,7 +59,6 @@ export default function DiscoverSearchBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Sync internal search input with external searchQuery
   useEffect(() => {
     setInputValue(searchQuery);
   }, [searchQuery]);
@@ -89,7 +85,6 @@ export default function DiscoverSearchBar({
           try {
             setLoadingCandidates(true);
             const res = await axios.get('/api/authors/search', { params: { q: queryUsed, limit: 6 } });
-            // Ignore answers to older keystrokes so suggestions always match what is typed
             if (requestId !== authorRequestIdRef.current) return;
             candidateQueryRef.current = queryUsed;
             setAuthorCandidates(Array.isArray(res.data) ? res.data : []);
@@ -118,7 +113,6 @@ export default function DiscoverSearchBar({
     if (searchMode === 'authors') {
       const q = inputValue.trim();
       if (!q) return;
-      // Only trust the suggestion list if it was produced for exactly what is typed now
       if (authorCandidates.length > 0 && candidateQueryRef.current === q) {
         if (onSelectAuthor) onSelectAuthor(authorCandidates[0]);
         return;
@@ -167,7 +161,6 @@ export default function DiscoverSearchBar({
 
   return (
     <div className="border-b border-[#E2DFD8] dark:border-[#2A2824] shadow-xs">
-      {/* Ink band: the search box. Kept short so results start high on the page. */}
       <div className="bg-[#1C1B18] dark:bg-[#151413] transition-colors py-3.5 md:py-4">
       <div className="max-w-7xl mx-auto px-4 md:px-6 space-y-2">
         <h1 className="sr-only">Search theses and research papers</h1>
@@ -193,7 +186,6 @@ export default function DiscoverSearchBar({
                 className="w-full bg-[#FAF9F5] dark:bg-[#1C1A18] border-2 border-[#FAF9F5] dark:border-[#383530] hover:border-amber-300 dark:hover:border-[#FAF9F5] focus:border-amber-400 dark:focus:border-amber-400 px-4 py-2.5 pl-11 pr-28 text-sm md:text-base text-[#1C1B18] dark:text-[#FAF9F5] placeholder-[#8C887E] dark:placeholder-[#736E66] focus:outline-none rounded-sm transition font-sans"
               />
 
-              {/* Left Search Icon or Loading Spinner */}
               <div className="absolute left-3.5 top-3 pointer-events-none">
                 {loadingTheses || loadingCandidates ? (
                   <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
@@ -405,7 +397,6 @@ export default function DiscoverSearchBar({
               <span>Open access</span>
             </label>
 
-            {/* Only needed on phones/tablets – on desktop the filters are always visible in the sidebar */}
             <button
               type="button"
               onClick={onToggleFilterDrawer}

@@ -1,14 +1,3 @@
-/**
- * Tests for:
- *   - the three newer dataset sources in services/datasetDiscoveryService.js
- *     (Hugging Face, Harvard Dataverse, OpenAIRE ScholeXplorer)
- *   - services/openAccessFinder.js (free legal PDF lookup through Unpaywall)
- *
- * Nothing here touches the network. global.fetch is replaced with a stand-in that answers
- * from the fixtures, and is put back at the end whatever happens.
- *
- * Run on its own with:  node tests/datasetSourcesAndOaFinder.test.js
- */
 
 const assert = require('assert');
 const {
@@ -33,8 +22,6 @@ const {
   unpaywallNotFoundBody,
 } = require('./fixtures/unpaywallFixtures');
 
-// The fields every dataset record must carry, whichever source it came from. The pages
-// that show datasets read these names, so a new source must not leave any of them out.
 const BASE_FIELDS = [
   'id',
   'title',
@@ -54,7 +41,6 @@ const BASE_FIELDS = [
   'sourceUrl',
 ];
 
-// Builds the small part of a fetch Response that the services use.
 function jsonResponse(body, status = 200, headers = {}) {
   return {
     ok: status >= 200 && status < 300,
@@ -64,9 +50,6 @@ function jsonResponse(body, status = 200, headers = {}) {
   };
 }
 
-// Replaces global.fetch. "routes" is a list of [text found in the address, answer].
-// The answer is a function, so a test can also throw to imitate a network failure.
-// Any address that no route covers fails loudly: a test must never call out by accident.
 function installFetch(routes) {
   const calls = [];
   global.fetch = async (url, options) => {
@@ -88,7 +71,6 @@ const HUGGING_FACE = 'huggingface.co/api/datasets';
 const DATAVERSE = 'dataverse.harvard.edu/api/search';
 const SCHOLEXPLORER = 'scholexplorer';
 
-// "Nothing found" answers, in each service's own shape.
 const EMPTY = {
   [DATACITE]: () => jsonResponse({ data: [], meta: { total: 0 } }),
   [ZENODO]: () => jsonResponse({ hits: { total: 0, hits: [] } }),
@@ -99,7 +81,6 @@ const EMPTY = {
   [SCHOLEXPLORER]: () => jsonResponse({ currentPage: 0, totalLinks: 0, totalPages: 0, result: [] }),
 };
 
-// Every service answers "nothing found" unless the test says otherwise.
 function routesWith(overrides = {}) {
   return Object.keys(EMPTY).map((needle) => [needle, overrides[needle] || EMPTY[needle]]);
 }
@@ -114,8 +95,6 @@ function assertBaseShape(record, label) {
   assert.strictEqual(record.sourceUrl, record.url, `${label}: sourceUrl must match url`);
 }
 
-// One realistic answer from each of the four original sources, used to prove that adding
-// sources did not change what they return.
 const ORIGINAL_SOURCE_PAYLOADS = {
   [DATACITE]: () =>
     jsonResponse({
@@ -277,16 +256,11 @@ async function runDatasetSourcesAndOaFinderTests() {
   };
 
   try {
-    // Most tests imitate the live services, so offline mode is switched off for now.
     process.env.OFFLINE_MODE = 'false';
     delete process.env.SCHOLEXPLORER_API_URL;
 
-    // =======================================================================
-    // PART A: HUGGING FACE
-    // =======================================================================
     console.log('--- 1. Hugging Face datasets ---');
 
-    // A1: request parameters and field mapping
     {
       const calls = installFetch([[HUGGING_FACE, () => jsonResponse(huggingFaceDatasetsResponse)]]);
       const res = await queryHuggingFace({ query: 'bangla sentiment', page: 1, size: 5 });
@@ -302,7 +276,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.ok(calls[0].options.signal, 'The request must carry a time limit');
 
       assert.strictEqual(res.error, null);
-      // 5 raw items: one is disabled and one has no id, so 3 remain
       assert.strictEqual(res.records.length, 3, 'Disabled and id-less datasets must be skipped');
       res.records.forEach((r) => assertBaseShape(r, 'Hugging Face'));
 
@@ -335,7 +308,6 @@ async function runDatasetSourcesAndOaFinderTests() {
         gated: false,
       });
 
-      // A bare repository: honest blanks, nothing invented
       const bare = res.records[1];
       assert.strictEqual(bare.title, 'panther-fixtures/untitled-upload');
       assert.strictEqual(bare.description, null);
@@ -345,7 +317,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(bare.doi, null);
       assert.strictEqual(bare.publicationYear, 2024);
 
-      // Licence written as a list in the card, and a gated dataset
       const gated = res.records[2];
       assert.strictEqual(gated.license, 'other');
       assert.strictEqual(gated.gated, true);
@@ -355,7 +326,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Hugging Face: sends search/limit/full/sort/direction and maps id, card data, tags, downloads, likes and dates');
     }
 
-    // A2: paging, keyword-only behaviour and unsafe ids
     {
       const manyItems = Array.from({ length: 6 }, (_, i) => ({
         id: `panther-fixtures/page-item-${i + 1}`,
@@ -375,19 +345,16 @@ async function runDatasetSourcesAndOaFinderTests() {
       );
       assert.strictEqual(page2.hasMore, true, 'A full answer means there may be more');
 
-      // A DOI is not something the Hub can be searched for: no request at all
       calls = installFetch([]);
       const doiOnly = await queryHuggingFace({ doi: '10.5555/some.paper', isLinked: true });
       assert.deepStrictEqual(doiOnly, { records: [], totalCount: 0, hasMore: false, error: null });
       assert.strictEqual(calls.length, 0, 'A DOI-only call must not contact Hugging Face');
 
-      // A page so deep it would mean a huge download is refused without calling out
       const tooDeep = await queryHuggingFace({ query: 'paging', page: 50, size: 20 });
       assert.strictEqual(tooDeep.records.length, 0);
       assert.strictEqual(tooDeep.hasMore, false);
       assert.strictEqual(calls.length, 0);
 
-      // The link is built from the id, so an id that is not a plain "owner/name" is refused
       installFetch([
         [
           HUGGING_FACE,
@@ -407,12 +374,8 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Hugging Face: pages by slicing, ignores DOI-only calls, and refuses unsafe ids and private datasets');
     }
 
-    // =======================================================================
-    // PART B: HARVARD DATAVERSE
-    // =======================================================================
     console.log('--- 2. Harvard Dataverse ---');
 
-    // B1: request parameters and field mapping
     {
       const calls = installFetch([[DATAVERSE, () => jsonResponse(dataverseSearchResponse)]]);
       const res = await queryDataverse({ query: 'household survey', page: 3, size: 5 });
@@ -427,7 +390,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(res.error, null);
       assert.strictEqual(res.totalCount, 37);
       assert.strictEqual(res.hasMore, true);
-      // 5 raw items, one of them is a file and not a dataset
       assert.strictEqual(res.records.length, 4, 'Items that are not datasets must be skipped');
       res.records.forEach((r) => assertBaseShape(r, 'Harvard Dataverse'));
 
@@ -458,12 +420,10 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(res.records[1].size, '1 file');
       assert.deepStrictEqual(res.records[1].keywords, ['microcredit', 'education']);
 
-      // A Handle link is not on the approved list, so the dataset's own Harvard page is used
       const handle = res.records[2];
       assert.strictEqual(handle.doi, null);
       assert.strictEqual(handle.url, 'https://dataverse.harvard.edu/dataset.xhtml?persistentId=hdl%3A1902.1%2FPANTH3');
 
-      // A nearly empty deposit: honest blanks
       const sparse = res.records[3];
       assert.strictEqual(sparse.description, null);
       assert.strictEqual(sparse.publicationYear, null);
@@ -473,9 +433,7 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Harvard Dataverse: sends q/type/per_page/start and maps name, description, DOI, publisher, date, authors, subjects, file count');
     }
 
-    // B2: DOI lookups, query clean-up, unsafe links, bot challenge
     {
-      // With a paper DOI: exact-phrase search, and only a matching "Related Publication" counts
       let calls = installFetch([[DATAVERSE, () => jsonResponse(dataverseSearchResponse)]]);
       const byDoi = await queryDataverse({ doi: 'https://doi.org/10.5555/JFE.2021.0042', isLinked: true, page: 1, size: 5 });
       assert.strictEqual(new URL(calls[0].url).searchParams.get('q'), '"10.5555/jfe.2021.0042"');
@@ -489,18 +447,15 @@ async function runDatasetSourcesAndOaFinderTests() {
         'Datasets that merely matched the search stay unverified'
       );
 
-      // Characters that would break the search engine are removed from what a visitor typed
       calls = installFetch([[DATAVERSE, EMPTY[DATAVERSE]]]);
       await queryDataverse({ query: 'title:"climate (change)" AND/OR -rain [2020]', page: 1, size: 5 });
       assert.strictEqual(new URL(calls[0].url).searchParams.get('q'), 'title climate change AND OR rain 2020');
 
-      // Nothing left to search for: no request
       calls = installFetch([]);
       const blank = await queryDataverse({ query: ' ":()" ', page: 1, size: 5 });
       assert.strictEqual(blank.records.length, 0);
       assert.strictEqual(calls.length, 0);
 
-      // Unsafe links
       installFetch([
         [
           DATAVERSE,
@@ -524,25 +479,19 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(unsafe.records[0].title, 'Script link');
       assert.strictEqual(unsafe.records[0].url, 'https://doi.org/10.5072/fk2/safe1', 'A bad link is replaced by the DOI link we build ourselves');
 
-      // The bot filter answers 202 with a challenge page: that is a failure, not "no results"
       installFetch([[DATAVERSE, () => ({ ok: true, status: 202, headers: new Map(), json: async () => { throw new Error('not json'); } })]]);
       const challenged = await queryDataverse({ query: 'challenge', page: 1, size: 5 });
       assert.strictEqual(challenged.error, 'Harvard Dataverse HTTP 202');
       assert.deepStrictEqual(challenged.records, []);
 
-      // An error envelope is reported as an error too
       installFetch([[DATAVERSE, () => jsonResponse({ status: 'ERROR', message: 'Something went wrong' })]]);
       const envelope = await queryDataverse({ query: 'envelope', page: 1, size: 5 });
       assert.strictEqual(envelope.error, 'Harvard Dataverse error: Something went wrong');
       pass('Harvard Dataverse: verifies links by related-publication DOI, cleans the query, drops unsafe links, treats a bot challenge as a failure');
     }
 
-    // =======================================================================
-    // PART C: OPENAIRE SCHOLEXPLORER
-    // =======================================================================
     console.log('--- 3. OpenAIRE ScholeXplorer ---');
 
-    // C1: request parameters and field mapping
     {
       const calls = installFetch([[SCHOLEXPLORER, () => jsonResponse(scholexplorerLinksResponse)]]);
       const res = await queryScholexplorer({ doi: 'doi:10.5555/JFE.2021.0042', page: 1, size: 5 });
@@ -556,14 +505,11 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(res.error, null);
       assert.strictEqual(res.totalCount, 6);
       assert.strictEqual(res.hasMore, false);
-      // 6 raw links: one targets a paper, one targets a host that is not approved, and two
-      // describe the same dataset. That leaves 3.
       assert.strictEqual(res.records.length, 3);
       res.records.forEach((r) => assertBaseShape(r, 'ScholeXplorer'));
       assert.ok(res.records.every((r) => r.isLinked === true), 'Every ScholeXplorer record is a declared link');
       assert.ok(res.records.every((r) => !('relationRank' in r)), 'The internal sorting field must not leak out');
 
-      // Strongest relation first
       assert.deepStrictEqual(res.records.map((r) => r.relationshipDirection), ['supplemental', 'reference', 'associated']);
 
       assert.deepStrictEqual(res.records[0], {
@@ -592,7 +538,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(res.records[1].publisher, 'Example Data Archive');
       assert.strictEqual(res.records[1].publicationYear, 2013);
 
-      // A dataset with no title still gets a usable label
       assert.strictEqual(res.records[2].relationType, 'Associated Resource');
       assert.strictEqual(res.records[2].title, 'Dataset 10.5555/dryad.fixture77');
       assert.strictEqual(res.records[2].publisher, 'Not specified');
@@ -600,19 +545,16 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('ScholeXplorer: asks for dataset links of the paper DOI, keeps datasets only, merges repeats, strongest relation first');
     }
 
-    // C2: invalid DOI, later pages, address override, unsafe links, newer schema
     {
       let calls = installFetch([]);
       for (const bad of [undefined, null, '', 'not a doi', 'climate change', 12345]) {
         const res = await queryScholexplorer({ doi: bad });
         assert.deepStrictEqual(res, { records: [], totalCount: 0, hasMore: false, error: null });
       }
-      // It is not a keyword search either
       const keyword = await queryScholexplorer({ query: 'climate change' });
       assert.strictEqual(keyword.records.length, 0);
       assert.strictEqual(calls.length, 0, 'Without a real DOI ScholeXplorer must not be contacted');
 
-      // Later pages count from 0 on their side; the address can be changed in the settings
       process.env.SCHOLEXPLORER_API_URL = 'https://api-beta.scholexplorer.openaire.eu/v3/Links';
       calls = installFetch([[SCHOLEXPLORER, () => jsonResponse({ currentPage: 2, totalLinks: 450, totalPages: 5, result: [] })]]);
       const page3 = await queryScholexplorer({ doi: '10.5555/paged.paper', page: 3, size: 5 });
@@ -621,14 +563,12 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(asked.searchParams.get('page'), '2');
       assert.strictEqual(page3.hasMore, true);
 
-      // A setting that is not an https address is ignored
       process.env.SCHOLEXPLORER_API_URL = 'http://127.0.0.1:9000/scholexplorer';
       calls = installFetch([[SCHOLEXPLORER, EMPTY[SCHOLEXPLORER]]]);
       await queryScholexplorer({ doi: '10.5555/override.paper' });
       assert.ok(calls[0].url.startsWith('https://api.scholexplorer.openaire.eu/v2/Links?'));
       delete process.env.SCHOLEXPLORER_API_URL;
 
-      // Unsafe links, and the newer schema that writes "Target" and "Name" with capitals
       installFetch([
         [
           SCHOLEXPLORER,
@@ -644,7 +584,6 @@ async function runDatasetSourcesAndOaFinderTests() {
                 },
                 {
                   RelationshipType: { Name: 'Cites' },
-                  // The link that came with the DOI is ignored: we always build the doi.org link
                   Target: {
                     Type: 'Dataset',
                     Title: 'Capitalised schema',
@@ -670,12 +609,8 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('ScholeXplorer: skips invalid DOIs and keyword calls, pages from 0, honours SCHOLEXPLORER_API_URL, drops unsafe links');
     }
 
-    // =======================================================================
-    // PART D: SEARCH ACROSS ALL SOURCES
-    // =======================================================================
     console.log('--- 4. Global search and paper enrichment ---');
 
-    // D1: all six sources, order, shape, the original four unchanged
     {
       const calls = installFetch(
         routesWith({
@@ -692,20 +627,17 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(res.hasOutage, false);
       assert.strictEqual(res.pagination.returnedCount, res.datasets.length);
 
-      // Fixed order: the four original sources first, then Dataverse, then Hugging Face
       const order = [];
       for (const d of res.datasets) if (order[order.length - 1] !== d.source) order.push(d.source);
       assert.deepStrictEqual(order, ['DataCite', 'Zenodo', 'Figshare', 'Dryad', 'Harvard Dataverse', 'Hugging Face']);
       res.datasets.forEach((d) => assertBaseShape(d, `Global search (${d.source})`));
 
-      // The original sources return exactly what they returned before
       for (const [source, expected] of Object.entries(EXPECTED_ORIGINAL_RECORDS)) {
         const got = res.datasets.filter((d) => d.source === source);
         assert.strictEqual(got.length, 1, `${source} must still contribute its record`);
         assert.deepStrictEqual(got[0], expected, `${source} record must be unchanged`);
       }
 
-      // For a page of 15 each source is asked for 4, the same as before the new sources
       assert.ok(calls.find((c) => c.url.includes(DATACITE)).url.includes('page[size]=4'));
       assert.ok(calls.find((c) => c.url.includes(ZENODO)).url.includes('&size=4'));
       assert.strictEqual(JSON.parse(calls.find((c) => c.url.includes(FIGSHARE)).options.body).page_size, 4);
@@ -713,16 +645,13 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(new URL(calls.find((c) => c.url.includes(DATAVERSE)).url).searchParams.get('per_page'), '4');
       assert.strictEqual(new URL(calls.find((c) => c.url.includes(HUGGING_FACE)).url).searchParams.get('limit'), '4');
       assert.strictEqual(res.datasets.filter((d) => d.source === 'Harvard Dataverse').length, 4);
-      // 4 raw Hugging Face items were kept, one of them is disabled
       assert.strictEqual(res.datasets.filter((d) => d.source === 'Hugging Face').length, 3);
 
-      // ScholeXplorer is not a keyword search and must not be asked
       assert.strictEqual(calls.filter((c) => c.url.includes(SCHOLEXPLORER)).length, 0);
       assert.strictEqual(calls.length, 6, 'Exactly one request per source');
       pass('Global search: six sources in a fixed order, same record fields, original four sources unchanged');
     }
 
-    // D2: the same dataset from two sources appears once
     {
       installFetch(
         routesWith({
@@ -750,14 +679,12 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(new Set(dois).size, dois.length, 'No DOI may appear twice');
       const urls = res.datasets.map((d) => d.url.toLowerCase());
       assert.strictEqual(new Set(urls).size, urls.length, 'No link may appear twice');
-      // The source that comes first in the fixed order keeps the record
       assert.strictEqual(res.datasets.find((d) => d.doi === '10.57967/HF/9990001' || d.doi === '10.57967/hf/9990001').source, 'DataCite');
       assert.strictEqual(res.datasets.find((d) => d.doi === '10.5072/fk2/panth1').source, 'Dryad');
       assert.ok(!res.datasets.some((d) => d.title === 'panther-fixtures/bangla-news-sentiment'));
       pass('Global search: a dataset returned by two sources is listed once');
     }
 
-    // D3: one source failing never breaks the others; 429 is reported, not thrown
     {
       installFetch(
         routesWith({
@@ -776,7 +703,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(res.hasOutage, false, 'Four working sources are not an outage');
       assert.deepStrictEqual(res.datasets.map((d) => d.source), ['DataCite', 'Zenodo', 'Figshare', 'Dryad']);
 
-      // The other way round: all four original sources down, the two new ones still answer
       installFetch(
         routesWith({
           [DATACITE]: () => jsonResponse({}, 503),
@@ -796,7 +722,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.ok(res2.datasets.length > 0);
       assert.ok(res2.datasets.every((d) => ['Harvard Dataverse', 'Hugging Face'].includes(d.source)));
 
-      // A timeout inside one source is contained in the same way
       installFetch([
         [
           HUGGING_FACE,
@@ -819,7 +744,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Failure isolation: HTTP 429, 5xx, bad JSON, network errors and timeouts in one source leave the others working');
     }
 
-    // D4: cache behaviour and total outage
     {
       let calls = installFetch(
         routesWith({
@@ -834,16 +758,13 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(calls.length, callsAfterFirst, 'A repeated search must be answered from the cache');
       assert.deepStrictEqual(second, first);
 
-      // Changing a cached answer must not change what the next visitor gets
       second.datasets.length = 0;
       const third = await searchGlobalDatasets({ query: 'd4 cached search', page: 1, limit: 15 });
       assert.strictEqual(third.datasets.length, first.datasets.length);
 
-      // Another page is a different question
       await searchGlobalDatasets({ query: 'd4 cached search', page: 2, limit: 15 });
       assert.strictEqual(calls.length, callsAfterFirst + 6);
 
-      // Every source down: reported as an outage and NOT remembered
       const allDown = Object.fromEntries(Object.keys(EMPTY).map((needle) => [needle, () => jsonResponse({}, 503)]));
       calls = installFetch(routesWith(allDown));
       const outage = await searchGlobalDatasets({ query: 'd4 total outage', page: 1, limit: 15 });
@@ -856,7 +777,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Caching: repeated searches are served from memory as safe copies, a total outage is never cached');
     }
 
-    // D5: paper enrichment
     {
       const PAPER = '10.5555/jfe.2021.0042';
       const calls = installFetch(
@@ -908,14 +828,10 @@ async function runDatasetSourcesAndOaFinderTests() {
 
       const linked = res.linkedDatasets.map((d) => `${d.source} | ${d.doi} | ${d.relationshipDirection}`);
       assert.deepStrictEqual(linked, [
-        // Found by the original sources and Dataverse, in their usual order
         'DataCite | 10.5555/dc.supplement | supplemental',
         'Harvard Dataverse | 10.5072/fk2/panth2 | supplemental',
-        // New from ScholeXplorer
         'OpenAIRE ScholeXplorer | 10.5555/zenodo.9900042 | supplemental',
-        // Already returned by DataCite as "related": moved up, DataCite's richer record kept
         'DataCite | 10.5555/census.2011.micro | reference',
-        // Already returned by Figshare as a keyword match: moved up with the declared relation
         'Figshare | 10.5555/dryad.fixture77 | associated',
       ]);
 
@@ -930,13 +846,10 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(new Set(allDois).size, allDois.length, 'A dataset must not be listed under both headings');
       assert.ok(res.relatedDatasets.some((d) => d.source === 'Harvard Dataverse'), 'Unverified Dataverse hits stay under "related"');
 
-      // Hugging Face is never asked about a single paper; ScholeXplorer is asked once
       assert.strictEqual(calls.filter((c) => c.url.includes(HUGGING_FACE)).length, 0);
       assert.strictEqual(calls.filter((c) => c.url.includes(SCHOLEXPLORER)).length, 1);
-      // Dataverse is asked twice: once for the DOI, once for words from the title
       assert.strictEqual(calls.filter((c) => c.url.includes(DATAVERSE)).length, 2);
 
-      // The answer is cached
       const callsBefore = calls.length;
       const again = await enrichPaperDatasets({ paperId: 'd5-paper', doi: PAPER, title: 'Microcredit and School Enrolment in Rural Districts' });
       assert.strictEqual(calls.length, callsBefore);
@@ -944,7 +857,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Paper enrichment: ScholeXplorer links are filed as linked, duplicates are merged and promoted, Hugging Face is not asked');
     }
 
-    // D6: enrichment when sources fail, and the original behaviour without the new sources
     {
       const PAPER = '10.5555/d6.paper';
       installFetch(
@@ -977,18 +889,15 @@ async function runDatasetSourcesAndOaFinderTests() {
         'OpenAIRE ScholeXplorer': 'OpenAIRE ScholeXplorer HTTP 429',
       });
       assert.strictEqual(res.hasOutage, false);
-      // Exactly what the original code produced: supplement is linked, citation is related
       assert.deepStrictEqual(res.linkedDatasets.map((d) => [d.doi, d.relationType, d.isLinked]), [['10.5555/d6.supp', 'Direct Supplemental Dataset', true]]);
       assert.deepStrictEqual(res.relatedDatasets.map((d) => [d.doi, d.relationType, d.isLinked]), [['10.5555/d6.cited', 'Referenced Work / Citation', false]]);
 
-      // Every source failing is an outage
       installFetch(routesWith(Object.fromEntries(Object.keys(EMPTY).map((needle) => [needle, () => jsonResponse({}, 500)]))));
       const outage = await enrichPaperDatasets({ paperId: 'd6-outage', doi: '10.5555/d6.outage', title: 'A Longer Title For The Outage Case' });
       assert.strictEqual(outage.hasOutage, true);
       assert.strictEqual(outage.totalCount, 0);
       assert.strictEqual(Object.keys(outage.providerErrors).length, 6);
 
-      // A paper with nothing to look up is not an outage
       const calls = installFetch([]);
       const nothing = await enrichPaperDatasets({ paperId: 'd6-nothing', doi: null, title: '' });
       assert.strictEqual(nothing.hasOutage, false);
@@ -997,9 +906,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Paper enrichment: failing sources are reported per source, original linked/related rules are unchanged');
     }
 
-    // =======================================================================
-    // PART E: OFFLINE MODE (dataset sources)
-    // =======================================================================
     console.log('--- 5. Offline mode ---');
     {
       process.env.OFFLINE_MODE = 'true';
@@ -1037,14 +943,10 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Offline mode: all three new sources answer from fixtures through the real mapping code, with no network use');
     }
 
-    // =======================================================================
-    // PART F: OPEN ACCESS FINDER (UNPAYWALL)
-    // =======================================================================
     console.log('--- 6. Open Access Finder (Unpaywall) ---');
     const UNPAYWALL = 'api.unpaywall.org';
     process.env.UNPAYWALL_EMAIL = 'librarian@thesis-archive.test';
 
-    // F1: reason "not_configured"
     {
       oaTesting.reset();
       const calls = installFetch([]);
@@ -1056,7 +958,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(calls.length, 0, 'Without an e-mail address Unpaywall must not be contacted');
       process.env.UNPAYWALL_EMAIL = 'librarian@thesis-archive.test';
 
-      // Unpaywall refusing the address (HTTP 422) is the same setup problem, and is not cached
       const calls422 = installFetch([[UNPAYWALL, () => jsonResponse({ error: true, message: 'Please use your own email address' }, 422)]]);
       assert.deepStrictEqual(await findOpenAccessPdf({ doi: '10.5555/refused.email' }), { found: false, reason: 'not_configured' });
       await findOpenAccessPdf({ doi: '10.5555/refused.email' });
@@ -1064,7 +965,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass("Finder reason 'not_configured': no address (or a refused one) means no lookup and no caching");
     }
 
-    // F2: reason "invalid_doi"
     {
       oaTesting.reset();
       const calls = installFetch([]);
@@ -1079,7 +979,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass("Finder reason 'invalid_doi': anything that is not a DOI is refused without calling out");
     }
 
-    // F3: found, best location's PDF; DOI normalisation; request address
     {
       oaTesting.reset();
       process.env.UNPAYWALL_EMAIL = 'li+brarian@thesis-archive.test';
@@ -1103,14 +1002,12 @@ async function runDatasetSourcesAndOaFinderTests() {
       );
       assert.ok(calls[0].options.signal instanceof AbortSignal, 'The request must be cancellable by the timeout');
 
-      // Odd characters in a DOI cannot change the address that is called
       await findOpenAccessPdf({ doi: '10.5555/weird?x=1#frag' });
       assert.ok(calls[1].url.startsWith('https://api.unpaywall.org/v2/10.5555/weird%3Fx%3D1%23frag?email='));
       process.env.UNPAYWALL_EMAIL = 'librarian@thesis-archive.test';
       pass('Finder found: prefers best_oa_location.url_for_pdf, normalises the DOI, builds a safe request address');
     }
 
-    // F4: found through fallbacks
     {
       oaTesting.reset();
       installFetch([[UNPAYWALL, () => jsonResponse(unpaywallRepositoryFallbackResponse)]]);
@@ -1125,7 +1022,6 @@ async function runDatasetSourcesAndOaFinderTests() {
         source: 'unpaywall',
       });
 
-      // No PDF anywhere: a page where the paper can be read for free still counts
       installFetch([[UNPAYWALL, () => jsonResponse(unpaywallLandingOnlyResponse)]]);
       assert.deepStrictEqual(await findOpenAccessPdf({ doi: '10.5555/oa.bronze.2019.003' }), {
         found: true,
@@ -1138,14 +1034,12 @@ async function runDatasetSourcesAndOaFinderTests() {
         source: 'unpaywall',
       });
 
-      // No best_oa_location at all, only the list
       installFetch([[UNPAYWALL, () => jsonResponse({ ...unpaywallRepositoryFallbackResponse, best_oa_location: null })]]);
       const listOnly = await findOpenAccessPdf({ doi: '10.5555/list.only' });
       assert.strictEqual(listOnly.pdfUrl, 'https://repository.example.edu/bitstream/1234/5678/1/manuscript.pdf');
       pass('Finder found: falls back to another location with a PDF, then to a free-to-read landing page');
     }
 
-    // F5: unsafe links from Unpaywall are never returned
     {
       oaTesting.reset();
       const unsafeBest = { ...unpaywallOpenResponse.best_oa_location, url: 'http://169.254.169.254/latest/meta-data/', url_for_pdf: 'http://169.254.169.254/latest/meta-data/', url_for_landing_page: 'javascript:alert(1)' };
@@ -1156,14 +1050,12 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(skipped.pdfUrl, 'https://repository.example.edu/bitstream/1234/5678/1/manuscript.pdf', 'An unsafe link is skipped in favour of the next safe one');
       assert.strictEqual(skipped.hostType, 'repository', 'The details must describe the copy that was actually chosen');
 
-      // A safe PDF with an unsafe landing page keeps the PDF and blanks the landing page
       const mixed = { ...unpaywallOpenResponse.best_oa_location, url_for_landing_page: 'http://localhost:8080/admin' };
       installFetch([[UNPAYWALL, () => jsonResponse({ ...unpaywallOpenResponse, best_oa_location: mixed, oa_locations: [mixed] })]]);
       const mixedRes = await findOpenAccessPdf({ doi: '10.5555/unsafe.landing' });
       assert.strictEqual(mixedRes.pdfUrl, 'https://journals.example.org/jfs/article/001/pdf');
       assert.strictEqual(mixedRes.landingUrl, null);
 
-      // Nothing safe at all
       const hostile = [
         'http://127.0.0.1/a.pdf',
         'http://localhost/a.pdf',
@@ -1201,7 +1093,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Finder safety: private, local, credential-carrying and non-http links are never returned');
     }
 
-    // F6: reason "no_open_copy"
     {
       oaTesting.reset();
       installFetch([[UNPAYWALL, () => jsonResponse(unpaywallClosedResponse)]]);
@@ -1211,7 +1102,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass("Finder reason 'no_open_copy': a known paper with no free copy");
     }
 
-    // F7: reason "not_found"
     {
       oaTesting.reset();
       installFetch([[UNPAYWALL, () => jsonResponse(unpaywallNotFoundBody, 404)]]);
@@ -1219,19 +1109,16 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass("Finder reason 'not_found': Unpaywall does not know the DOI (HTTP 404)");
     }
 
-    // F8: reason "rate_limited" and the pause that follows
     {
       oaTesting.reset();
       let calls = installFetch([[UNPAYWALL, () => jsonResponse({ error: true }, 429, { 'retry-after': '120' })]]);
       assert.deepStrictEqual(await findOpenAccessPdf({ doi: '10.5555/rate.one' }), { found: false, reason: 'rate_limited' });
       assert.strictEqual(calls.length, 1);
 
-      // While paused, other DOIs are answered at once without calling Unpaywall
       calls = installFetch([[UNPAYWALL, () => jsonResponse(unpaywallOpenResponse)]]);
       assert.deepStrictEqual(await findOpenAccessPdf({ doi: '10.5555/rate.two' }), { found: false, reason: 'rate_limited' });
       assert.strictEqual(calls.length, 0, 'No requests while Unpaywall has asked us to wait');
 
-      // After the wait (2 minutes as asked) lookups resume, and the 429 itself was not cached
       const realNow = Date.now;
       Date.now = () => realNow() + 121 * 1000;
       const resumed = await findOpenAccessPdf({ doi: '10.5555/rate.one' });
@@ -1239,7 +1126,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(resumed.found, true);
       assert.strictEqual(calls.length, 1);
 
-      // An absurd Retry-After is capped at ten minutes; a missing one means one minute
       oaTesting.reset();
       installFetch([[UNPAYWALL, () => jsonResponse({}, 429, { 'retry-after': '999999' })]]);
       await findOpenAccessPdf({ doi: '10.5555/rate.three' });
@@ -1260,7 +1146,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass("Finder reason 'rate_limited': HTTP 429 pauses all lookups for the time asked (capped), then resumes");
     }
 
-    // F9: reason "unavailable", never throws, never cached
     {
       oaTesting.reset();
       const failures = {
@@ -1286,7 +1171,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       }
       assert.strictEqual(oaTesting.cacheSize(), 0);
 
-      // A real timeout: the request is cancelled and reported as unavailable
       oaTesting.setTimeoutMs(40);
       let sawAbort = false;
       installFetch([
@@ -1310,12 +1194,10 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass("Finder reason 'unavailable': server errors, network errors, bad bodies and timeouts never throw and are not cached");
     }
 
-    // F10: cache (positive, negative, expiry, size cap, safe copies)
     {
       oaTesting.reset();
       const realNow = Date.now;
 
-      // Positive
       let calls = installFetch([[UNPAYWALL, () => jsonResponse(unpaywallOpenResponse)]]);
       const first = await findOpenAccessPdf({ doi: '10.5555/cache.positive' });
       first.pdfUrl = 'https://tampered.example.org/x.pdf';
@@ -1323,7 +1205,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(calls.length, 1, 'The same DOI in another spelling is answered from the cache');
       assert.strictEqual(second.pdfUrl, 'https://journals.example.org/jfs/article/001/pdf', 'Editing a result must not change the stored copy');
 
-      // Negative: "no free copy" and "unknown DOI" are remembered too
       calls = installFetch([[UNPAYWALL, (url) => (url.includes('cache.missing') ? jsonResponse(unpaywallNotFoundBody, 404) : jsonResponse(unpaywallClosedResponse))]]);
       await findOpenAccessPdf({ doi: '10.5555/cache.closed' });
       await findOpenAccessPdf({ doi: '10.5555/cache.missing' });
@@ -1331,7 +1212,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.deepStrictEqual(await findOpenAccessPdf({ doi: '10.5555/cache.missing' }), { found: false, reason: 'not_found' });
       assert.strictEqual(calls.length, 2);
 
-      // Expiry: negative answers go first, positive ones last longer
       assert.ok(oaTesting.NEGATIVE_TTL_MS < oaTesting.POSITIVE_TTL_MS);
       calls = installFetch([[UNPAYWALL, () => jsonResponse(unpaywallOpenResponse)]]);
       Date.now = () => realNow() + oaTesting.NEGATIVE_TTL_MS + 1000;
@@ -1344,7 +1224,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(calls.length, 2, 'An expired "found" answer is looked up again');
       Date.now = realNow;
 
-      // Size cap: the oldest answers make room for new ones
       oaTesting.reset();
       calls = installFetch([[UNPAYWALL, () => jsonResponse(unpaywallOpenResponse)]]);
       const total = oaTesting.MAX_CACHE_ENTRIES + 5;
@@ -1361,11 +1240,10 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Finder cache: positive and negative answers are remembered, expire on time, and the cache size is capped');
     }
 
-    // F11: offline mode
     {
       oaTesting.reset();
       process.env.OFFLINE_MODE = 'true';
-      delete process.env.UNPAYWALL_EMAIL; // offline mode needs no configuration
+      delete process.env.UNPAYWALL_EMAIL;
       const calls = installFetch([]);
 
       const open = await findOpenAccessPdf({ doi: '10.5555/any.offline.paper' });
@@ -1381,7 +1259,6 @@ async function runDatasetSourcesAndOaFinderTests() {
       pass('Finder offline mode: deterministic fixture answers with no network use and no configuration');
     }
   } finally {
-    // Put everything back exactly as it was, even if a test failed.
     global.fetch = originalFetch;
     Date.now = originalDateNow;
     oaTesting.reset();

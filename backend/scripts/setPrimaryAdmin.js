@@ -16,14 +16,12 @@ async function setPrimaryAdmin() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log('Connected to MongoDB database.');
 
-  // 1. Demote any other accounts with role: 'admin'
   const demoteRes = await User.updateMany(
     { email: { $ne: targetAdminEmail }, role: 'admin' },
     { $set: { role: 'student', permissions: [] } }
   );
   console.log(`Demoted other admin accounts count: ${demoteRes.modifiedCount}`);
 
-  // 2. Upsert targetAdminEmail
   let adminUser = await User.findOne({ email: targetAdminEmail });
   if (adminUser) {
     adminUser.role = 'admin';
@@ -46,7 +44,6 @@ async function setPrimaryAdmin() {
     console.log(`✓ New Administrator user provisioned: ${targetAdminEmail}`);
   }
 
-  // 3. Confirm all admins in database
   const allAdmins = await User.find({ role: 'admin' }, 'name email role status googleId');
   console.log('\nAuthoritative List of All Administrators in Database:');
   console.log(JSON.stringify(allAdmins, null, 2));

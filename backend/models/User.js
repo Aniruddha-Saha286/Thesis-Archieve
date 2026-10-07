@@ -46,13 +46,12 @@ const userSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected', 'banned'],
-    default: 'pending', // Requires admin verification
+    default: 'pending',
   },
   banReason: {
     type: String,
     default: '',
   },
-  // Academic & Student Profile Fields (Optional for discovery)
   isProfileComplete: {
     type: Boolean,
     default: false,
@@ -93,7 +92,6 @@ const userSchema = new mongoose.Schema({
     default: null,
   },
 
-  // Priority 2: Student Research Workspace & Productivity Features
   savedPapers: [{
     paperId: { type: String, required: true },
     title: { type: String, required: true },

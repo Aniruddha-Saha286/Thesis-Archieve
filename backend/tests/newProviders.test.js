@@ -10,17 +10,11 @@ const sessionStore = require('../services/sessionStore');
 const { coreSearchWorksResponse } = require('./fixtures/coreApiFixtures');
 const { dblpSearchPublResponse, dblpEmptyResponse } = require('./fixtures/dblpApiFixtures');
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-// A copy that a test can change without spoiling the fixture for the next test.
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// Builds the small part of a fetch() answer that the adapters read.
-// Pass body = undefined to imitate an answer whose text is not valid JSON.
 function fakeResponse(body, { status = 200, headers = {} } = {}) {
   return {
     ok: status >= 200 && status < 300,
@@ -33,8 +27,6 @@ function fakeResponse(body, { status = 200, headers = {} } = {}) {
   };
 }
 
-// Replaces the real fetch. Nothing in this file ever reaches the internet.
-// Returns the list of calls made so a test can look at the address and headers used.
 function stubFetch(handler) {
   const calls = [];
   global.fetch = async (url, options = {}) => {
@@ -115,12 +107,8 @@ async function runNewProviderTests() {
     resetCoreStateForTests();
     resetDblpStateForTests();
 
-    // =======================================================================
-    // PART A: CORE
-    // =======================================================================
     console.log('--- 1. CORE Provider Adapter ---');
 
-    // A1: the request that is sent
     {
       const calls = stubFetch(() => fakeResponse(coreBody([])));
       await searchCore({ query: 'BERT: pre-training (2019) "deep" -models', page: 1, limit: 10 });
@@ -141,7 +129,6 @@ async function runNewProviderTests() {
       pass('CORE request uses the v3 search endpoint, a cleaned query, a time limit and no key by default');
     }
 
-    // A2: API key
     {
       process.env.CORE_API_KEY = '  test-core-key-123  ';
       const withKey = stubFetch(() => fakeResponse(coreBody([])));
@@ -156,7 +143,6 @@ async function runNewProviderTests() {
       pass('CORE sends CORE_API_KEY as a Bearer token and works without it');
     }
 
-    // A3: every field of a complete thesis record
     let coreRecords;
     {
       stubFetch(() => fakeResponse(clone(coreSearchWorksResponse)));
@@ -211,7 +197,6 @@ async function runNewProviderTests() {
       pass('CORE thesis record maps every field (title, author, year, type, links, language, provenance)');
     }
 
-    // A4: journal article with HTML entities, "Surname, Given" names and a quoted publisher
     {
       const article = coreRecords[1];
       assert.strictEqual(article.title, 'Transformers & Sentiment: A Study of Low-Resource Text – Models, Data "Gaps"');
@@ -236,7 +221,6 @@ async function runNewProviderTests() {
       pass('CORE article decodes HTML entities, strips tags, fixes author name order and cleans the publisher');
     }
 
-    // A5: missing and odd fields
     {
       const paper = coreRecords[2];
       assert.strictEqual(paper.publishedYear, 2019, 'year is read from publishedDate when yearPublished is empty');
@@ -274,7 +258,6 @@ async function runNewProviderTests() {
       assert.strictEqual(spanish.publisher, 'Repositorio Institucional de Ejemplo', 'a thesis falls back to its repository');
       assert.strictEqual(spanish.language, 'es');
 
-      // Things that are not works at all must be skipped, not crash the search.
       stubFetch(() => fakeResponse(coreBody([null, 'text', 42, { id: 7 }, { id: 8, title: 'A Valid Work About Rivers', authors: ['Plain, Text'] }])));
       const odd = await searchCore({ query: 'rivers' });
       assert.strictEqual(odd.error, null);
@@ -284,7 +267,6 @@ async function runNewProviderTests() {
       pass('CORE handles missing, empty and oddly shaped fields without inventing data');
     }
 
-    // A6: filters
     {
       stubFetch(() => fakeResponse(clone(coreSearchWorksResponse)));
       const ids = async (filters) => {
@@ -303,13 +285,11 @@ async function runNewProviderTests() {
       assert.deepStrictEqual(await ids({ publicationType: 'all' }).then((l) => l.length), 5);
       assert.deepStrictEqual(await ids({ hasPdf: true }), ['core_900000001', 'core_900000002', 'core_900000003']);
       assert.deepStrictEqual(await ids({ hasPdf: true, publicationType: 'thesis', yearMin: 2018 }), ['core_900000001']);
-      // filters = null must not crash (the search manager always sends an object, but be safe)
       const noFilters = await searchCore({ query: 'deep learning', filters: null });
       assert.strictEqual(noFilters.records.length, 5);
       pass('CORE applies year range, publication type and PDF filters to the returned records');
     }
 
-    // A7: pagination and hasMore
     {
       let calls = stubFetch(() => fakeResponse(coreBody(manyCoreWorks(30), { totalHits: 95 })));
       const first = await searchCore({ query: 'water', limit: 50 });
@@ -346,7 +326,6 @@ async function runNewProviderTests() {
       pass('CORE pagination: capped page size, offsets, hasMore, last page, empty page and zero results');
     }
 
-    // A8: HTTP 429
     {
       resetCoreStateForTests();
       let calls = stubFetch(() => fakeResponse({ message: 'Too many requests' }, { status: 429 }));
@@ -357,7 +336,6 @@ async function runNewProviderTests() {
       assert.strictEqual(limited.hasMore, false);
       assert.strictEqual(calls.length, 1, 'a 429 without a short wait is not retried');
 
-      // While told to wait, CORE is not called again at all.
       calls = stubFetch(() => fakeResponse(coreBody(manyCoreWorks(2))));
       const duringWait = await searchCore({ query: 'water' });
       assert.strictEqual(calls.length, 0, 'no request is sent during the waiting time');
@@ -368,7 +346,6 @@ async function runNewProviderTests() {
       assert.strictEqual(afterWait.error, null);
       assert.strictEqual(afterWait.records.length, 2);
 
-      // A very short wait is honoured once, then the search goes through.
       calls = stubFetch((call, n) =>
         n === 1 ? fakeResponse({}, { status: 429, headers: { 'Retry-After': '1' } }) : fakeResponse(coreBody(manyCoreWorks(3)))
       );
@@ -379,13 +356,11 @@ async function runNewProviderTests() {
       assert.strictEqual(retried.error, null);
       assert.strictEqual(retried.records.length, 3);
 
-      // Two refusals in a row: give up after the single retry.
       calls = stubFetch(() => fakeResponse({}, { status: 429, headers: { 'X-RateLimit-Retry-After': '1' } }));
       const refusedTwice = await searchCore({ query: 'water' });
       assert.strictEqual(calls.length, 2, 'never more than one retry');
       assert.strictEqual(refusedTwice.error, 'CORE rate limit reached');
 
-      // A long wait is not slept through; the adapter answers at once and remembers it.
       resetCoreStateForTests();
       calls = stubFetch(() => fakeResponse({}, { status: 429, headers: { 'Retry-After': '120' } }));
       const longWait = await searchCore({ query: 'water' });
@@ -396,7 +371,6 @@ async function runNewProviderTests() {
       pass('CORE 429: clean error, one short retry at most, and no further calls while told to wait');
     }
 
-    // A9: network errors and bad answers
     {
       const expectError = async (handler, expected) => {
         resetCoreStateForTests();
@@ -432,7 +406,6 @@ async function runNewProviderTests() {
       pass('CORE network failure, timeout, 4xx/5xx and malformed answers become an error result, never a crash');
     }
 
-    // A10: the "leave the full text out" request falls back safely if CORE refuses it
     {
       resetCoreStateForTests();
       let calls = stubFetch((call) =>
@@ -449,7 +422,6 @@ async function runNewProviderTests() {
       assert.strictEqual(calls.length, 1);
       assert.strictEqual(calls[0].params.has('exclude'), false, 'once refused, the hint is not sent again');
 
-      // A wrong key must not be asked twice.
       resetCoreStateForTests();
       calls = stubFetch(() => fakeResponse({}, { status: 401 }));
       await searchCore({ query: 'water' });
@@ -458,7 +430,6 @@ async function runNewProviderTests() {
       pass('CORE keeps working if the service refuses the "exclude full text" request');
     }
 
-    // A11: offline mode
     {
       process.env.OFFLINE_MODE = 'true';
       const calls = stubFetch(() => {
@@ -484,12 +455,8 @@ async function runNewProviderTests() {
       pass('CORE offline mode returns deterministic records with paging and no network call');
     }
 
-    // =======================================================================
-    // PART B: DBLP
-    // =======================================================================
     console.log('--- 2. DBLP Provider Adapter ---');
 
-    // B1: the request that is sent
     {
       const calls = stubFetch(() => fakeResponse(clone(dblpEmptyResponse)));
       await searchDblp({ query: 'author:Wei_Wang: graph|tree$ (2020)', page: 1, limit: 10 });
@@ -511,7 +478,6 @@ async function runNewProviderTests() {
       pass('DBLP request uses the publication search endpoint, JSON format, a cleaned query and a time limit');
     }
 
-    // B2: every field of a complete journal article
     let dblpRecords;
     {
       stubFetch(() => fakeResponse(clone(dblpSearchPublResponse)));
@@ -565,7 +531,6 @@ async function runNewProviderTests() {
       pass('DBLP journal article maps every field (title, authors, venue, year, type, DOI, links, access)');
     }
 
-    // B3: single author sent as an object, homonym numbers, HTML entities
     {
       const paper = dblpRecords[1];
       assert.deepStrictEqual(paper.authors, [{ name: "Chidinma O'Brien", affiliation: null }], 'one author sent as an object');
@@ -603,7 +568,6 @@ async function runNewProviderTests() {
       pass('DBLP authors: single object, list, plain text, homonym numbers and HTML entities');
     }
 
-    // B4: publication types and links
     {
       const preprint = dblpRecords[2];
       assert.strictEqual(preprint.publicationType, 'preprint', '"Informal and Other Publications"');
@@ -662,7 +626,6 @@ async function runNewProviderTests() {
       pass('DBLP types (journal, conference, preprint, thesis, book, unknown) and links (ee, DOI, arXiv PDF)');
     }
 
-    // B5: missing and odd fields
     {
       const volume = dblpRecords[4];
       assert.strictEqual(volume.title, 'Deep Learning in Practice - Proceedings of the Example Workshop', 'title is trimmed');
@@ -714,7 +677,6 @@ async function runNewProviderTests() {
       assert.strictEqual(entities.fullTextUrl, 'https://dblp.org/rec/conf/a%20b/C%231', 'record page is built from the key');
       assert.ok(entities.title.includes('– Title &amp; More'), 'entities are decoded once only');
 
-      // One hit sent as a single object instead of a list.
       const single = dblpBody([]);
       single.result.hits.hit = dblpHit({ title: 'Only One Hit.', key: 'x/only' });
       single.result.hits['@total'] = '1';
@@ -725,7 +687,6 @@ async function runNewProviderTests() {
       pass('DBLP handles missing, empty and oddly shaped fields without inventing data');
     }
 
-    // B6: filters
     {
       stubFetch(() => fakeResponse(clone(dblpSearchPublResponse)));
       const ids = async (filters) => {
@@ -753,7 +714,6 @@ async function runNewProviderTests() {
       pass('DBLP applies year range, publication type and PDF filters to the returned records');
     }
 
-    // B7: pagination and hasMore
     {
       let calls = stubFetch(() => fakeResponse(dblpBody(manyDblpHits(30), 95)));
       const first = await searchDblp({ query: 'graph', limit: 50 });
@@ -776,7 +736,6 @@ async function runNewProviderTests() {
       assert.strictEqual(calls[0].params.get('f'), '20', 'page 3 of 10 starts at offset 20');
       assert.strictEqual(byPage.hasMore, false, 'an empty page ends the search even when the total says otherwise');
 
-      // Nothing found: DBLP leaves the "hit" key out completely.
       stubFetch(() => fakeResponse(clone(dblpEmptyResponse)));
       const none = await searchDblp({ query: 'zzzznothingmatches' });
       assert.deepStrictEqual(
@@ -792,7 +751,6 @@ async function runNewProviderTests() {
       pass('DBLP pagination: capped page size, offsets, hasMore, last page, empty page and zero results');
     }
 
-    // B8: HTTP 429
     {
       resetDblpStateForTests();
       let calls = stubFetch(() => fakeResponse(undefined, { status: 429 }));
@@ -823,7 +781,6 @@ async function runNewProviderTests() {
       assert.strictEqual(retried.error, null);
       assert.strictEqual(retried.records.length, 3);
 
-      // Retry-After can also be a date. A date far away must not be slept through.
       resetDblpStateForTests();
       const inTwoMinutes = new Date(Date.now() + 120000).toUTCString();
       calls = stubFetch(() => fakeResponse(undefined, { status: 429, headers: { 'Retry-After': inTwoMinutes } }));
@@ -835,7 +792,6 @@ async function runNewProviderTests() {
       pass('DBLP 429: clean error, one short retry at most, and no further calls while told to wait');
     }
 
-    // B9: network errors and bad answers
     {
       const expectError = async (handler, expected) => {
         resetDblpStateForTests();
@@ -872,7 +828,6 @@ async function runNewProviderTests() {
       pass('DBLP network failure, timeout, 4xx/5xx and malformed answers become an error result, never a crash');
     }
 
-    // B10: offline mode
     {
       process.env.OFFLINE_MODE = 'true';
       const calls = stubFetch(() => {
@@ -899,12 +854,8 @@ async function runNewProviderTests() {
       pass('DBLP offline mode returns deterministic records with paging and no network call');
     }
 
-    // =======================================================================
-    // PART C: BOTH PROVIDERS INSIDE A SEARCH SESSION
-    // =======================================================================
     console.log('--- 3. CORE and DBLP inside a search session ---');
 
-    // C1: registration
     {
       assert.strictEqual(PROVIDER_NAMES.core, 'CORE');
       assert.strictEqual(PROVIDER_NAMES.dblp, 'DBLP');
@@ -930,7 +881,6 @@ async function runNewProviderTests() {
 
     const uniqueId = (label) => `test_newprov_${label}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // C2: an ordinary (offline) session search reports and uses both
     {
       process.env.OFFLINE_MODE = 'true';
       const calls = stubFetch(() => {
@@ -952,7 +902,6 @@ async function runNewProviderTests() {
       assert.strictEqual(res.providerStatus.DBLP.count, 7);
       assert.strictEqual(res.providerStatus.CORE.totalAvailable, 6);
       assert.strictEqual(res.providerStatus.DBLP.totalAvailable, 8);
-      // The providers that were there before are still reported.
       for (const name of Object.values(PROVIDER_NAMES)) {
         assert.ok(res.providerStatus[name], `${name} is still reported`);
       }
@@ -965,7 +914,6 @@ async function runNewProviderTests() {
       pass('A session search reports CORE and DBLP, uses their records and tracks their paging position');
     }
 
-    // C3: the "source" filter can pick either one, and their paging runs across pages
     {
       const sessionId = uniqueId('dblp');
       const page1 = await executeSearchSession({
@@ -1001,7 +949,6 @@ async function runNewProviderTests() {
       pass('The source filter selects CORE or DBLP alone, and their records page without repeats');
     }
 
-    // C4: a session saved before the two providers existed keeps working
     {
       const sessionId = uniqueId('old');
       await executeSearchSession({ query: 'deep learning', page: 1, limit: 5, explicitSessionId: sessionId });
@@ -1017,7 +964,6 @@ async function runNewProviderTests() {
       pass('An older saved session without CORE/DBLP entries is repaired instead of crashing');
     }
 
-    // C5: live-style session with a stubbed network: same paper from both is merged into one
     {
       process.env.OFFLINE_MODE = 'false';
       resetCoreStateForTests();
@@ -1061,7 +1007,6 @@ async function runNewProviderTests() {
         throw new Error(`unexpected host in test: ${call.url}`);
       });
 
-      // "core,dblp" makes exactly these two eligible, so no other host is contacted.
       const res = await executeSearchSession({
         query: 'graph neural networks', page: 1, limit: 20, filters: { source: 'core,dblp' }, explicitSessionId: uniqueId('merge'),
       });
@@ -1079,7 +1024,6 @@ async function runNewProviderTests() {
       pass('The same paper from CORE and DBLP is merged into one record crediting both');
     }
 
-    // C6: failures are reported per provider and do not break the search
     {
       resetCoreStateForTests();
       resetDblpStateForTests();
@@ -1123,7 +1067,6 @@ async function runNewProviderTests() {
     console.log(`  ALL ${passed}/${passed} NEW PROVIDER TESTS PASSED (100% OK)`);
     console.log('===============================================================');
   } finally {
-    // Put everything back, whether the tests passed or not, so other suites are not affected.
     global.fetch = originalFetch;
     if (originalEnvOffline === undefined) delete process.env.OFFLINE_MODE;
     else process.env.OFFLINE_MODE = originalEnvOffline;

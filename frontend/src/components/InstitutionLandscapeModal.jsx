@@ -17,17 +17,14 @@ import {
   Building2,
 } from 'lucide-react';
 
-/**
- * Color-blind safe palette matching backend implementation.
- */
 const COLOR_BLIND_PALETTE = [
-  '#1E3A8A', // Deep Blue
-  '#0D9488', // Teal
-  '#D97706', // Amber
-  '#7C3AED', // Purple
-  '#E11D48', // Rose
-  '#059669', // Emerald
-  '#78716C', // Stone/Gray (Other Disciplines)
+  '#1E3A8A',
+  '#0D9488',
+  '#D97706',
+  '#7C3AED',
+  '#E11D48',
+  '#059669',
+  '#78716C',
 ];
 
 export default function InstitutionLandscapeModal({
@@ -42,7 +39,6 @@ export default function InstitutionLandscapeModal({
   const [data, setData] = useState(null);
   const [disabledNotice, setDisabledNotice] = useState(null);
 
-  // Year range filters
   const currentYear = new Date().getFullYear();
   const [fromYearInput, setFromYearInput] = useState(String(currentYear - 5));
   const [toYearInput, setToYearInput] = useState(String(currentYear));
@@ -51,11 +47,9 @@ export default function InstitutionLandscapeModal({
     to: currentYear,
   });
 
-  // Active view tab: 'chart' | 'table'
   const [distributionView, setDistributionView] = useState('chart');
   const [activeHoveredSlice, setActiveHoveredSlice] = useState(null);
 
-  // Normalize institution ID (OpenAlex canonical format 'I...')
   const explicitCanonicalId = useMemo(() => {
     if (!institution) return null;
     const rawId = institution.id || institution.openAlexId || institution._id || '';
@@ -71,7 +65,6 @@ export default function InstitutionLandscapeModal({
 
   const canonicalId = explicitCanonicalId || resolvedId;
 
-  // Auto-resolve OpenAlex institution ID from name if not provided
   useEffect(() => {
     if (!isOpen || explicitCanonicalId || !institution?.name) return;
     let isSubscribed = true;
@@ -105,7 +98,6 @@ export default function InstitutionLandscapeModal({
     };
   }, [isOpen, explicitCanonicalId, institution?.name]);
 
-  // Fetch landscape data
   const fetchLandscape = useCallback(
     async (force = false) => {
       if (!canonicalId) {
@@ -170,7 +162,6 @@ export default function InstitutionLandscapeModal({
     }
   }, [isOpen, canonicalId, fetchLandscape]);
 
-  // Apply Year Filter Handler
   const handleApplyYearFilter = (e) => {
     e.preventDefault();
     const from = parseInt(fromYearInput, 10);
@@ -203,15 +194,13 @@ export default function InstitutionLandscapeModal({
 
   if (!isOpen) return null;
 
-  // Donut chart math
   const slices = data?.fieldDistribution?.slices || [];
   const totalClassifiedWorks = data?.fieldDistribution?.totalClassifiedWorks || 0;
 
-  // SVG parameters
   const chartSize = 220;
   const strokeWidth = 32;
-  const radius = (chartSize - strokeWidth) / 2; // 94
-  const circumference = 2 * Math.PI * radius; // ~590.6
+  const radius = (chartSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
 
   const donutSlices = slices.reduce((acc, slice, index) => {
     const fraction = totalClassifiedWorks > 0 ? slice.count / totalClassifiedWorks : 0;
@@ -227,7 +216,6 @@ export default function InstitutionLandscapeModal({
     return acc;
   }, { list: [], cumulative: 0 }).list;
 
-  // Trends max calculation for bar normalization
   const publicationTrends = data?.publicationTrends || [];
   const maxYearWorks = publicationTrends.reduce((max, t) => Math.max(max, t.count), 0) || 1;
 
@@ -244,9 +232,6 @@ export default function InstitutionLandscapeModal({
         className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#1C1B18] dark:border-[#2C2A26] w-full max-w-4xl max-h-[92vh] flex flex-col rounded-sm shadow-2xl overflow-hidden my-auto text-[#1C1B18] dark:text-[#F0EDE6]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ========================================================================= */}
-        {/* MODAL HEADER                                                              */}
-        {/* ========================================================================= */}
         <div className="bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] p-4 sm:p-5 shrink-0 flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">

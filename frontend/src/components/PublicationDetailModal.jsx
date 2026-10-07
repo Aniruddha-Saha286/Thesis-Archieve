@@ -53,7 +53,6 @@ export default function PublicationDetailModal({
   const currentThesisId = thesis ? (thesis._id || thesis.id || thesis.doi || thesis.title || '') : '';
   const currentThesisIdRef = useRef(currentThesisId);
 
-  // Active Tab: 'overview' | 'authors' | 'datasets' | 'citations' | 'summary'
   const [activeTab, setActiveTab] = useState(initialTab || 'overview');
   const [showAllAuthors, setShowAllAuthors] = useState(false);
   const [isSaved, setIsSaved] = useState(Boolean(initiallySaved));
@@ -72,9 +71,7 @@ export default function PublicationDetailModal({
     copied: false,
   });
 
-  // The paper's own Limitations / Future work / Data sections, read from its free PDF on request
   const [fullTextState, setFullTextState] = useState({ requested: false, loading: false, isLocked: false, data: null });
-  // "Find a free PDF": a legal free copy looked up by DOI
   const [freePdfState, setFreePdfState] = useState({ requested: false, loading: false, result: null });
 
   const [datasetsState, setDatasetsState] = useState({
@@ -89,7 +86,6 @@ export default function PublicationDetailModal({
     quota: null,
   });
 
-  // Background body scroll locking while modal is active
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -98,7 +94,6 @@ export default function PublicationDetailModal({
     };
   }, []);
 
-  // Strictly reset dataset discovery and tabs whenever a different thesis is opened
   useEffect(() => {
     currentThesisIdRef.current = currentThesisId;
     setActiveTab(initialTab || 'overview');
@@ -128,7 +123,6 @@ export default function PublicationDetailModal({
     setFreePdfState({ requested: false, loading: false, result: null });
   }, [currentThesisId, initialTab]);
 
-  // Check saved papers state on load
   useEffect(() => {
     let isMounted = true;
     if (isAuthenticated && thesis) {
@@ -218,7 +212,6 @@ export default function PublicationDetailModal({
 
       const res = await axios.get(`/api/thesis/${encodeURIComponent(id)}/datasets`, { params });
 
-      // Stale check: discard if user switched to another paper while request was in-flight
       if (currentThesisIdRef.current !== requestedThesisId) {
         return;
       }
@@ -371,7 +364,6 @@ export default function PublicationDetailModal({
     }, 2000);
   };
 
-  // Reads the paper's free PDF on the server and brings back the authors' own sections
   const fetchFullText = async () => {
     const requestedThesisId = currentThesisId;
     setFullTextState({ requested: true, loading: true, isLocked: false, data: null });
@@ -398,7 +390,6 @@ export default function PublicationDetailModal({
     }
   };
 
-  // Looks for a legal free copy of a paper that has a DOI but no PDF link
   const findFreePdf = async () => {
     if (!thesis.doi) return;
     const requestedThesisId = currentThesisId;
@@ -436,13 +427,9 @@ export default function PublicationDetailModal({
 
   const pubType = (thesis.publicationType || thesis.degreeType || 'article').toLowerCase();
 
-  // Where the record came from. Search results carry it in `sources`, older records in `source`.
   const sourceName = thesis.source || thesis.sources?.[0]?.provider || '';
   const isLocalRecord = /local (archive|repository)|thesis archive/i.test(sourceName) || /^THESIS-/.test(String(thesis.catalogId || ''));
-  // Open access is three-valued: yes, no, or not stated. Records deposited in this archive are open
-  // unless marked otherwise. "Not stated" must never be shown as "Subscription".
   const accessState = thesis.isOpenAccess === true ? 'open' : thesis.isOpenAccess === false ? 'closed' : isLocalRecord ? 'open' : 'unknown';
-  // A record copied from a university repository: say which one, and link back to it
   const isHarvested = thesis.origin === 'harvest';
   const originalUrl = /^https?:\/\//i.test(String(thesis.sourceUrl || '')) ? thesis.sourceUrl : '';
   const sourceDisplay = isHarvested
@@ -450,7 +437,6 @@ export default function PublicationDetailModal({
     : isLocalRecord
     ? 'The Thesis Archive (deposited here)'
     : sourceName || 'Not stated';
-  // Codes the server uses for "how we know this" are turned into words; unknown codes are not shown
   const EVIDENCE_WORDS = {
     local_archive_thesis_metadata: 'Stated on the thesis record in this archive',
     openalex_institution: 'From the OpenAlex record',
@@ -502,11 +488,7 @@ export default function PublicationDetailModal({
       }}
     >
       <div className="bg-[#FAF9F5] dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-4xl shadow-2xl relative h-[96vh] sm:h-[90vh] max-h-[900px] flex flex-col overflow-hidden text-[#1C1B18] dark:text-[#F0EDE6]">
-        {/* ========================================================================= */}
-        {/* 1. STICKY SUMMARY HEADER                                                  */}
-        {/* ========================================================================= */}
         <div className="px-4 sm:px-5 pt-3 pb-3 bg-white dark:bg-[#201F1C] border-b border-[#E2DFD8] dark:border-[#2C2A26] shrink-0 space-y-2">
-          {/* Top Meta Badges & Close Button */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap text-xs font-mono-meta">
               <span

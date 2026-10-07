@@ -12,7 +12,6 @@ async function runArchiveReviewRepairsRegressionTests() {
   console.log('  TEST SUITE: ARCHIVE REVIEW REPAIRS & REGRESSION (ALL DEFECTS)');
   console.log('===============================================================');
 
-  // --- Category A: Item 1 - Field & Topic Normalization Persistence ---
   {
     console.log('--- 1. Field and Topic Metadata Persistence & Filtering ---');
     const mockRecord = createNormalizedRecord({
@@ -30,47 +29,37 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] Field, subfield, and topic IDs preserved through record normalization');
   }
 
-  // --- Category A: Item 2 - Country Resolver Strict Disambiguation ---
   {
     console.log('--- 2. Academic Country Resolver Regex & Substring Disambiguation ---');
-    // RMIT (Royal Melbourne Institute of Technology) in Australia must NEVER resolve to US
     const rmitResult = resolveCountryCode('RMIT University, Australia');
     assert.strictEqual(rmitResult, 'AU', 'RMIT University, Australia must resolve to AU (not US)');
 
-    // Université du Québec in Canada must NEVER resolve to BD due to "du"
     const quebecResult = resolveCountryCode('Université du Québec, Canada');
     assert.strictEqual(quebecResult, 'CA', 'Université du Québec, Canada must resolve to CA (not BD)');
 
-    // KAUST in Saudi Arabia must NEVER resolve to BD due to unanchored "aust"
     const kaustResult = resolveCountryCode('King Abdullah University of Science and Technology (KAUST), Saudi Arabia');
     assert.strictEqual(kaustResult, 'SA', 'KAUST, Saudi Arabia must resolve to SA (not BD)');
 
-    // Unknown entity must preserve null honesty
     const unknownResult = resolveCountryCode('Global Institute of Unknown Frontiers');
     assert.strictEqual(unknownResult, null, 'Unknown entity must return null honestly');
 
     console.log('  ✓ [PASS] Country resolver strictly enforces boundaries and rejects false acronym matches');
   }
 
-  // --- Category A: Item 3 - Institution Matching Empty & Conflicting ID Guards ---
   {
     console.log('--- 3. Institution Matching: Empty Strings & Conflicting Canonical IDs ---');
-    // Empty candidate name must never match any target
     const emptyMatch = instMatchesTarget('', '', 'I136199984', 'Harvard University');
     assert.strictEqual(emptyMatch, false, 'Empty candidate name and ID must never match target');
 
-    // Conflicting canonical OpenAlex IDs must reject even if names share tokens
     const conflictMatch = instMatchesTarget('I63966007', 'MIT Cambridge Campus', 'I136199984', 'Harvard University Cambridge');
     assert.strictEqual(conflictMatch, false, 'Conflicting canonical IDs must reject match');
 
-    // Conjunction: Institution filter with country filter on university fallback
     const mockRecUniFallback = {
       title: 'Quantum Materials',
       university: 'Oxford Institute of Tech',
       awardingInstitution: null,
       authorships: [],
     };
-    // Should fail when target country is BD because Oxford Institute of Tech is not BD
     const passedFalseCountry = matchesInstitutionalAndAuthorFilters(mockRecUniFallback, {
       institutionName: 'Oxford',
       countryCodes: ['BD'],
@@ -80,22 +69,18 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] Institution matching guards against empty inputs, conflicting IDs, and enforces country conjunction');
   }
 
-  // --- Category D: Item 15 - Magic Byte WebP & RIFF Validation ---
   {
     console.log('--- 4. Verification Document WebP Magic Byte Validation ---');
     const { validateMagicBytes } = require('../routes/upload');
-    // Legitimate WebP buffer: RIFF (4) + length (4) + WEBP (4)
     const validWebp = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]);
     assert.strictEqual(validateMagicBytes(validWebp, 'image/webp'), true, 'Authentic RIFF WEBP header must pass');
 
-    // False WebP: RIFF (4) + length (4) + WAVE (4) - e.g. WAV audio file
     const falseWebpWav = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45]);
     assert.strictEqual(validateMagicBytes(falseWebpWav, 'image/webp'), false, 'WAV audio disguised as WebP must fail validation');
 
     console.log('  ✓ [PASS] WebP magic byte inspection strictly enforces RIFF + WEBP header');
   }
 
-  // --- Category D: Item 18 - Manual Grant Enum 'custom' Support ---
   {
     console.log('--- 5. MembershipPeriod Schema Enum Alignment ---');
     const MembershipPeriod = require('../models/MembershipPeriod');
@@ -107,7 +92,6 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] MembershipPeriod schema supports all manual grant types including custom');
   }
 
-  // --- Category B: Item 10 & 11 - Author Works Continuation & Curated Metrics Honesty ---
   {
     console.log('--- 6. Author Works Continuation & Curated Attribution Honesty ---');
     const { CURATED_AUTHORS } = require('../services/authorService');
@@ -119,7 +103,6 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] Curated author metrics are explicitly marked as offline reference fallback');
   }
 
-  // --- Category C: Item 12 & 13 - Institution Analytics Metric Integrity ---
   {
     console.log('--- 7. Institution Research Landscape & Donut Slice Metrics ---');
     const { getInstitutionResearchLandscape } = require('../services/institutionAnalyticsService');
@@ -138,11 +121,8 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] Institution analytics separates lifetime vs range totals with exact unclassified tracking');
   }
 
-  // --- Category A: Item 6 - Sparse Pagination Boundary Tracking ---
   {
     console.log('--- 8. Sparse Filtering Pagination Continuity ---');
-    // If page 1 served 5 items (from index 0 to 5) instead of 20,
-    // page 2 must begin at index 5 rather than skipping to index 20.
     const mockSession = {
       id: 'test_sparse_session',
       pageBoundaries: new Map([
@@ -155,7 +135,6 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] Sparse pagination calculates contiguous startIndex from actual emitted page boundaries');
   }
 
-  // --- Category D: Item 14 - Unapproved Local Thesis Disclosure ---
   {
     console.log('--- 9. Unapproved Local Thesis Visibility Control ---');
     function checkThesisVisibility(thesis, user) {
@@ -167,28 +146,23 @@ async function runArchiveReviewRepairsRegressionTests() {
     }
 
     const pendingThesis = { _id: 'th123', status: 'pending', title: 'Private Research', student: 'u111' };
-    // Guest caller
     const guestAccess = checkThesisVisibility(pendingThesis, null);
     assert.strictEqual(guestAccess.allowed, false);
     assert.strictEqual(guestAccess.status, 404);
 
-    // Other student caller
     const otherStudentAccess = checkThesisVisibility(pendingThesis, { _id: 'u222', role: 'student' });
     assert.strictEqual(otherStudentAccess.allowed, false);
     assert.strictEqual(otherStudentAccess.status, 404);
 
-    // Owner student caller
     const ownerAccess = checkThesisVisibility(pendingThesis, { _id: 'u111', role: 'student' });
     assert.strictEqual(ownerAccess.allowed, true);
 
-    // Admin staff caller
     const adminAccess = checkThesisVisibility(pendingThesis, { _id: 'u999', role: 'admin' });
     assert.strictEqual(adminAccess.allowed, true);
 
     console.log('  ✓ [PASS] Unapproved local thesis returns 404 for guests and unauthorized students');
   }
 
-  // --- Category D: Item 17 - Staff Guard on Admin Stats ---
   {
     console.log('--- 10. Staff Boundary Enforcement on Admin Stats ---');
     const { requireStaff } = require('../middleware/rbac');
@@ -199,19 +173,16 @@ async function runArchiveReviewRepairsRegressionTests() {
       json(d) { jsonMessage = d; return this; },
     };
 
-    // Student attempt
     let nextCalled = false;
     requireStaff({ user: { role: 'student' } }, mockRes, () => { nextCalled = true; });
     assert.strictEqual(statusCode, 403, 'Student role must be rejected with 403');
     assert.strictEqual(nextCalled, false, 'Next middleware must not be called on rejection');
 
-    // Editor attempt
     statusCode = null;
     nextCalled = false;
     requireStaff({ user: { role: 'editor' } }, mockRes, () => { nextCalled = true; });
     assert.strictEqual(nextCalled, true, 'Editor role must pass requireStaff');
 
-    // Admin attempt
     nextCalled = false;
     requireStaff({ user: { role: 'admin' } }, mockRes, () => { nextCalled = true; });
     assert.strictEqual(nextCalled, true, 'Admin role must pass requireStaff');
@@ -219,7 +190,6 @@ async function runArchiveReviewRepairsRegressionTests() {
     console.log('  ✓ [PASS] Admin stats endpoint strictly enforces staff role (admin or editor)');
   }
 
-  // --- Category D: Item 19 - Payment State Transition Atomicity ---
   {
     console.log('--- 11. Payment State Transition Atomicity & Guard Against Reopening ---');
     function simulatePaymentCorrectionRequest(paymentStatus) {

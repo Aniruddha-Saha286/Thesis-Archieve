@@ -11,7 +11,6 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-neutral-900/50 backdrop-blur-xs transition-opacity"
         onClick={onClose}
@@ -20,7 +19,6 @@ export default function VerificationDrawer({ isOpen, onClose, pendingStudents, o
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
         <div className="w-screen max-w-lg bg-white dark:bg-neutral-900 border-l border-[#D5D1C7] dark:border-neutral-800 p-6 shadow-2xl overflow-y-auto text-[#1C1B18] dark:text-neutral-100">
           
-          {/* Drawer Header */}
           <div className="flex items-center justify-between pb-4 border-b border-[#E2DFD8] dark:border-neutral-800 mb-5">
             <div>
               <h3 className="text-xl font-serif-title font-semibold text-[#1C1B18] dark:text-neutral-100">

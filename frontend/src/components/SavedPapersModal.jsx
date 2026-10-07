@@ -80,7 +80,6 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm w-full max-w-3xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col text-[#1C1B18] dark:text-[#F0EDE6] transition-colors">
-        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
           <div className="flex items-center gap-2">
             <Bookmark className="w-5 h-5 text-amber-600 dark:text-amber-400" />
@@ -99,7 +98,6 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
           </button>
         </div>
 
-        {/* Filter Input */}
         <div className="pt-3 pb-2">
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-[#8C887E] dark:text-[#5C5950] absolute left-3 top-2.5" />
@@ -113,7 +111,6 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
           </div>
         </div>
 
-        {/* Papers List */}
         <div className="flex-1 overflow-y-auto space-y-3 py-2 pr-1">
           {loading ? (
             <div className="py-12 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9A968D]">
@@ -265,7 +262,6 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
           )}
         </div>
 
-        {/* Footer */}
         <div className="pt-3 border-t border-[#E2DFD8] dark:border-[#2C2A26] flex items-center justify-between text-xs font-mono-meta text-[#737067] dark:text-[#9A968D]">
           <span>Notes and saved papers are private to your authenticated workspace.</span>
           <button

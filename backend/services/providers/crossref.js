@@ -66,17 +66,14 @@ async function searchCrossref({ query = '', page = 1, limit = 20, offset: explic
       const title = it.title?.[0] || 'Crossref Scholarly Work';
       const doi = it.DOI ? it.DOI.toLowerCase() : null;
 
-      // Extract authors
       const authors = (it.author || []).map((a) => ({
         name: `${a.given || ''} ${a.family || ''}`.trim() || 'Academic Researcher',
         affiliation: a.affiliation?.[0]?.name || null,
       })).filter((a) => a.name);
 
-      // Published year
       const dateParts = it.published?.['date-parts']?.[0] || it.created?.['date-parts']?.[0];
       const publishedYear = dateParts ? dateParts[0] : null;
 
-      // Look for authentic direct PDF link in Crossref metadata
       let directPdfUrl = null;
       if (it.link && Array.isArray(it.link)) {
         const pdfEntry = it.link.find((l) => l['content-type'] === 'application/pdf');
@@ -90,7 +87,6 @@ async function searchCrossref({ query = '', page = 1, limit = 20, offset: explic
         }
       }
 
-      // If user specifically requested only direct PDFs and none exists, skip
       if (filters.hasPdf && !directPdfUrl) return null;
 
       const fullTextLocations = [];
@@ -111,13 +107,11 @@ async function searchCrossref({ query = '', page = 1, limit = 20, offset: explic
         });
       }
 
-      // Check for retraction updates
       const isRetracted = Boolean(
         it['update-to'] && Array.isArray(it['update-to']) &&
         it['update-to'].some((u) => u.type === 'retraction' || u.label?.toLowerCase().includes('retract'))
       );
 
-      // Real citation count from Crossref
       const citationCount = typeof it['is-referenced-by-count'] === 'number' ? it['is-referenced-by-count'] : null;
 
       const venue = it['container-title']?.[0] || null;

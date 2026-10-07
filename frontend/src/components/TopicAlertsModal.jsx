@@ -105,7 +105,6 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />

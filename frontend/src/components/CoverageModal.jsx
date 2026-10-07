@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import { X, Globe2, Database, Layers, Info } from 'lucide-react';
 
-// Everything a search asks, in the order a student is likely to care about.
 const PAPER_SOURCES = [
   { name: 'The Thesis Archive', note: 'Theses deposited here by students, and thesis records copied from university repositories with a link back to the original.', tag: 'This site' },
   { name: 'OpenAlex', note: 'A very large open index of papers, books and theses from all fields, with citation counts.', tag: 'All fields' },
@@ -39,7 +38,6 @@ export default function CoverageModal({ isOpen, onClose }) {
         ref={modalRef}
         className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
       >
-        {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-[#E2DFD8] dark:border-[#2C2A26] bg-[#FAF9F5] dark:bg-[#201F1C]">
           <div className="flex items-start gap-2">
             <Globe2 className="w-5 h-5 mt-0.5 text-[#1C1B18] dark:text-[#F0EDE6]" />
@@ -63,7 +61,6 @@ export default function CoverageModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-5 overflow-y-auto space-y-5 text-sm text-[#524F47] dark:text-[#B0ACA2] leading-relaxed">
           <section className="space-y-2.5">
             <h3 className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-1.5">
