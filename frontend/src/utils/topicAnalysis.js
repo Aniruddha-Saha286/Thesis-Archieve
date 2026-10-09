@@ -50,6 +50,7 @@ function stemSet(text) {
 export function recordKey(record) {
   if (!record) return '';
   if (record.doi) return `doi:${String(record.doi).toLowerCase()}`;
+  if (record._id || record.id) return 'id:' + String(record._id || record.id);
   const title = String(record.title || '').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim();
   return title ? `t:${title}` : `id:${record._id || record.id || ''}`;
 }
@@ -69,10 +70,11 @@ export function isLocalRecord(record) {
 }
 
 export function recordUniversity(record) {
+  if (isThesisRecord(record)) return record?.awardingInstitution?.name || (isLocalRecord(record) ? record?.university : '') || '';
   return (
     record?.awardingInstitution?.name ||
     record?.university ||
-    record?.authorships?.[0]?.institutions?.[0]?.name ||
+    (!isThesisRecord(record) ? record?.authorships?.[0]?.institutions?.[0]?.name : '') ||
     ''
   );
 }
@@ -168,7 +170,25 @@ function pickVerdict(closeCount, relatedCount) {
   return 4;
 }
 
-export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets = [], currentYear = new Date().getFullYear(), userUniversity = '' }) {
+export function universityMatchesRecord(record, institution, thesisOnly = false) {
+  const target = typeof institution === 'string' ? { name: institution } : institution || {};
+  const norm = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim();
+  const names = new Set([target.name, ...(target.aliases || []), ...(target.acronyms || [])].filter(Boolean).map(norm));
+  const id = String(target.id || '').split('/').pop().toLowerCase();
+  const candidates = [];
+  if (isThesisRecord(record)) {
+    if (record.awardingInstitution) candidates.push(record.awardingInstitution);
+    if (!record.awardingInstitution && isLocalRecord(record) && record.university) candidates.push({ name: record.university });
+  }
+  if (!thesisOnly) for (const author of record.authorships || []) candidates.push(...(author.institutions || []));
+  return candidates.some((candidate) => {
+    const candidateId = String(candidate.id || '').split('/').pop().toLowerCase();
+    if (candidateId && id) return candidateId === id;
+    return names.has(norm(candidate.name));
+  });
+}
+
+export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets = [], currentYear = new Date().getFullYear(), userUniversity = '', universityInstitution = null }) {
   const keywords = extractKeywords(topic);
 
   const byKey = new Map();
@@ -176,6 +196,14 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
     if (!r || !r.title) continue;
     const key = recordKey(r);
     if (!byKey.has(key)) byKey.set(key, r);
+    else {
+      const existing = byKey.get(key);
+      byKey.set(key, {
+        ...existing, ...r, title: r.title || existing.title, abstract: r.abstract || existing.abstract,
+        awardingInstitution: r.awardingInstitution || existing.awardingInstitution,
+        authorships: [...(existing.authorships || []), ...(r.authorships || [])],
+      });
+    }
   }
 
   const items = [...byKey.values()].map((record) => {
@@ -200,9 +228,12 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
   const theses = related.filter((i) => isThesisRecord(i.record));
   const localTheses = theses.filter((i) => isLocalRecord(i.record));
   const bangladeshTheses = theses.filter((i) => String(recordCountry(i.record)).toUpperCase() === 'BD');
-  const uniNeedle = String(userUniversity || '').trim().toLowerCase();
-  const sameUniversity = uniNeedle
-    ? theses.filter((i) => recordUniversity(i.record).toLowerCase().includes(uniNeedle))
+  const institution = universityInstitution || { name: userUniversity };
+  const sameUniversity = institution.name
+    ? theses.filter((i) => universityMatchesRecord(i.record, institution, true))
+    : [];
+  const universityMatches = institution.name
+    ? related.filter((i) => universityMatchesRecord(i.record, institution))
     : [];
 
   const supervisorMap = new Map();
@@ -270,6 +301,8 @@ export function analyzeTopic({ topic, records = [], thesisRecords = [], datasets
     localTheses,
     bangladeshTheses,
     sameUniversity,
+    universityMatches,
+    selectedUniversity: institution.name || '',
     supervisors,
     universities,
     mostCited,
@@ -300,6 +333,12 @@ export function buildBriefText(report, appName = 'The Thesis Archive') {
         .join(', ');
       lines.push(`${n + 1}. ${r.title}${where ? ` (${where})` : ''}${r.doi ? ` https://doi.org/${r.doi}` : ''}`);
     });
+    lines.push('');
+  }
+  if (report.selectedUniversity) {
+    lines.push('Matched work at ' + report.selectedUniversity + ':');
+    for (const item of report.universityMatches || []) lines.push('- ' + item.record.title + ' [' + item.level + ' match]');
+    lines.push('Awarding-university thesis matches: ' + report.sameUniversity.length + '. Paper matches may instead be author affiliations.');
     lines.push('');
   }
   if (report.rareTerms.length) {

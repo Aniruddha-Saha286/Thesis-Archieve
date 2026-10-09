@@ -362,7 +362,12 @@ async function getOrGeneratePaperSummary({
   entitlements,
   language = 'en',
   forceRefresh = false,
+  analysisMode = 'extractive',
 }) {
+  if (analysisMode === 'ai') {
+    const { getAiPaperAnalysis } = require('./aiPaperAnalysisService');
+    return getAiPaperAnalysis({ paper, user, scope, entitlements, language });
+  }
   const isEnabled = process.env.PAPER_SUMMARIZER_ENABLED !== 'false';
   if (!isEnabled) {
     return {

@@ -887,7 +887,7 @@ async function runNewProviderTests() {
         throw new Error('offline mode must not use the network');
       });
       const sessionId = uniqueId('all');
-      const res = await executeSearchSession({ query: 'deep learning', page: 1, limit: 50, explicitSessionId: sessionId });
+      const res = await executeSearchSession({ query: '', page: 1, limit: 50, explicitSessionId: sessionId });
       assert.strictEqual(calls.length, 0);
 
       for (const name of ['CORE', 'DBLP']) {
@@ -917,7 +917,7 @@ async function runNewProviderTests() {
     {
       const sessionId = uniqueId('dblp');
       const page1 = await executeSearchSession({
-        query: 'deep learning', page: 1, limit: 5, filters: { source: 'DBLP' }, explicitSessionId: sessionId,
+        query: '', page: 1, limit: 5, filters: { source: 'DBLP' }, explicitSessionId: sessionId,
       });
       assert.strictEqual(page1.records.length, 5);
       assert.strictEqual(page1.pagination.hasMore, true);
@@ -927,7 +927,7 @@ async function runNewProviderTests() {
       assert.strictEqual(page1.providerStatus.OpenAlex.status, 'skipped_unsupported_filter');
 
       const page2 = await executeSearchSession({
-        query: 'deep learning', page: 2, limit: 5, filters: { source: 'DBLP' }, explicitSessionId: sessionId,
+        query: '', page: 2, limit: 5, filters: { source: 'DBLP' }, explicitSessionId: sessionId,
       });
       assert.strictEqual(page2.records.length, 2);
       assert.strictEqual(page2.pagination.hasMore, false);
@@ -935,14 +935,14 @@ async function runNewProviderTests() {
       assert.strictEqual(overlap.length, 0, 'page 2 does not repeat page 1');
 
       const coreOnly = await executeSearchSession({
-        query: 'deep learning', page: 1, limit: 20, filters: { source: 'core' }, explicitSessionId: uniqueId('core'),
+        query: '', page: 1, limit: 20, filters: { source: 'core' }, explicitSessionId: uniqueId('core'),
       });
       assert.strictEqual(coreOnly.records.length, 5);
       for (const r of coreOnly.records) assert.strictEqual(r.sources[0].provider, 'CORE');
       assert.strictEqual(coreOnly.providerStatus.DBLP.status, 'skipped_unsupported_filter');
 
       const coreTheses = await executeSearchSession({
-        query: 'deep learning', page: 1, limit: 20, filters: { source: 'core', publicationType: 'thesis', yearMin: 2020 },
+        query: '', page: 1, limit: 20, filters: { source: 'core', publicationType: 'thesis', yearMin: 2020 },
         explicitSessionId: uniqueId('corethesis'),
       });
       assert.deepStrictEqual(coreTheses.records.map((r) => r.id), ['core_900000001'], 'session filters reach the adapter');
@@ -951,13 +951,13 @@ async function runNewProviderTests() {
 
     {
       const sessionId = uniqueId('old');
-      await executeSearchSession({ query: 'deep learning', page: 1, limit: 5, explicitSessionId: sessionId });
+      await executeSearchSession({ query: '', page: 1, limit: 5, explicitSessionId: sessionId });
       const stored = sessionStore.inMemorySessions.get(sessionId);
       delete stored.providerStates.core;
       delete stored.providerStates.dblp;
       stored.allProvidersExhausted = false;
 
-      const page2 = await executeSearchSession({ query: 'deep learning', page: 2, limit: 5, explicitSessionId: sessionId });
+      const page2 = await executeSearchSession({ query: '', page: 2, limit: 5, explicitSessionId: sessionId });
       assert.ok(Array.isArray(page2.records), 'the next page is served instead of crashing');
       assert.ok(stored.providerStates.core && stored.providerStates.dblp, 'the missing entries are filled in');
       assert.ok(page2.providerStatus.CORE && page2.providerStatus.DBLP);
@@ -1008,7 +1008,7 @@ async function runNewProviderTests() {
       });
 
       const res = await executeSearchSession({
-        query: 'graph neural networks', page: 1, limit: 20, filters: { source: 'core,dblp' }, explicitSessionId: uniqueId('merge'),
+        query: 'graph', page: 1, limit: 20, filters: { source: 'core,dblp' }, explicitSessionId: uniqueId('merge'),
       });
       assert.ok(calls.length >= 2);
       assert.ok(calls.every((c) => c.url.includes('api.core.ac.uk') || c.url.includes('dblp.org')));
@@ -1036,7 +1036,7 @@ async function runNewProviderTests() {
         return fakeResponse(dblpBody(manyDblpHits(3)));
       });
       const partial = await executeSearchSession({
-        query: 'graph', page: 1, limit: 20, filters: { source: 'core,dblp' }, explicitSessionId: uniqueId('partial'),
+        query: '', page: 1, limit: 20, filters: { source: 'core,dblp' }, explicitSessionId: uniqueId('partial'),
       });
       assert.strictEqual(partial.records.length, 3, 'DBLP results are still served');
       assert.strictEqual(partial.providerStatus.CORE.status, 'degraded');

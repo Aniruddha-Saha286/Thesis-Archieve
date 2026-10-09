@@ -156,8 +156,22 @@ export default function TopicCheck({
   initialTopic = '',
 }) {
   const { user } = useAuth();
+  const [university, setUniversity] = useState(user?.university || '');
+  const [universitySuggestions, setUniversitySuggestions] = useState([]);
+  const contextKey = (topic, universityName = university) => topicKeyOf(topic) + '::' + topicKeyOf(universityName) + '::' + String(user?._id || user?.id || 'guest');
+  useEffect(() => {
+    if (university.trim().length < 2) { setUniversitySuggestions([]); return; }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      axios.get('/api/institutions/suggest', { params: { q: university, limit: 8 }, signal: controller.signal })
+        .then((res) => setUniversitySuggestions(Array.isArray(res.data) ? res.data : []))
+        .catch(() => {});
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [university]);
   // A topic handed over from Discover is only pre-filled, never run automatically (a check costs a search)
-  const seedKey = initialTopic ? topicKeyOf(initialTopic) : lastTopicKey;
+  const previousReport = reportCache.get(lastTopicKey);
+  const seedKey = initialTopic ? contextKey(initialTopic) : previousReport ? contextKey(previousReport.topic) : '';
   const [input, setInput] = useState(() => (initialTopic ? String(initialTopic).slice(0, 200) : reportCache.get(lastTopicKey)?.topic || ''));
   const [report, setReport] = useState(() => reportCache.get(seedKey) || null);
   const [loading, setLoading] = useState(false);
@@ -180,7 +194,7 @@ export default function TopicCheck({
   }, []);
 
   const remember = (rep) => {
-    const key = topicKeyOf(rep.topic);
+    const key = contextKey(rep.topic, rep.requestedUniversity || '');
     reportCache.set(key, rep);
     lastTopicKey = key;
     if (reportCache.size > 12) reportCache.delete(reportCache.keys().next().value);
@@ -193,6 +207,7 @@ export default function TopicCheck({
   };
 
   const runCheck = async (rawTopic) => {
+    const requestId = ++requestIdRef.current;
     const topic = String(rawTopic || '').trim().slice(0, 200);
     const keywords = extractKeywords(topic);
     setError(null);
@@ -205,14 +220,14 @@ export default function TopicCheck({
     }
     setHint('');
 
-    const key = topicKeyOf(topic);
+    const key = contextKey(topic);
     if (reportCache.has(key)) {
       lastTopicKey = key;
       setReport(reportCache.get(key));
+      setLoading(false);
       return;
     }
 
-    const requestId = ++requestIdRef.current;
     setLoading(true);
     // Search with the meaningful words only, in singular form ("transformers" -> "transformer"),
     // so filler words and plurals do not make keyword matching stricter for no benefit
@@ -230,11 +245,19 @@ export default function TopicCheck({
       }
 
       // Same search context => the server treats these as refinements, not new billed searches
-      const [thesisRes, datasetRes] = await Promise.allSettled([
+      const selectedInstitution = universitySuggestions.find((item) => [item.name, ...(item.aliases || []), ...(item.acronyms || [])].some((name) => topicKeyOf(name) === topicKeyOf(university))) || { name: university.trim() };
+      const institutionParams = { institutionName: selectedInstitution.name, ...(selectedInstitution.id ? { institutionId: selectedInstitution.id } : {}), ...(data.searchContextId ? { searchContextId: data.searchContextId } : {}) };
+      const [thesisRes, datasetRes, universityRes, universityThesisRes] = await Promise.allSettled([
         axios.get('/api/thesis', {
           params: { search, publicationType: 'thesis', page: 1, limit: 50, sort: 'relevance', ...(data.searchContextId ? { searchContextId: data.searchContextId } : {}) },
         }),
         axios.get('/api/datasets', { params: { q: search, page: 1, limit: 6 } }),
+        selectedInstitution.name && data.searchContextId
+          ? axios.get('/api/thesis', { params: { search, page: 1, limit: 30, ...institutionParams, institutionMode: 'affiliation' } })
+          : Promise.resolve({ data: { records: [] } }),
+        selectedInstitution.name && data.searchContextId
+          ? axios.get('/api/thesis', { params: { search, page: 1, limit: 30, publicationType: 'thesis', ...institutionParams, institutionMode: 'awarding' } })
+          : Promise.resolve({ data: { records: [] } }),
       ]);
       if (requestId !== requestIdRef.current) return;
 
@@ -242,9 +265,19 @@ export default function TopicCheck({
       const thesisRecords = Array.isArray(thesisData) ? thesisData : thesisData.records || [];
       const datasets = datasetRes.status === 'fulfilled' ? datasetRes.value.data?.datasets || [] : [];
 
-      const rep = analyzeTopic({ topic, records, thesisRecords, datasets, userUniversity: user?.university || '' });
-      rep.thesisLookupFailed = thesisRes.status !== 'fulfilled';
-      rep.datasetLookupFailed = datasetRes.status !== 'fulfilled';
+      const universityData = universityRes.status === 'fulfilled' ? universityRes.value.data || {} : {};
+      const universityThesisData = universityThesisRes.status === 'fulfilled' ? universityThesisRes.value.data || {} : {};
+      const rep = analyzeTopic({
+        topic, records: [...records, ...(universityData.records || [])],
+        thesisRecords: [...thesisRecords, ...(universityThesisData.records || [])],
+        datasets, userUniversity: university, universityInstitution: selectedInstitution,
+      });
+      rep.universityLookupFailed = universityRes.status !== 'fulfilled' || universityThesisRes.status !== 'fulfilled' ||
+        Boolean(universityData.totalTechnicalFailure || universityThesisData.totalTechnicalFailure);
+      rep.universityLookupPartial = Boolean(universityData.partialResults || universityThesisData.partialResults);
+      rep.requestedUniversity = university.trim();
+      rep.thesisLookupFailed = thesisRes.status !== 'fulfilled' || Boolean(thesisData.totalTechnicalFailure);
+      rep.datasetLookupFailed = datasetRes.status !== 'fulfilled' || Boolean(datasetRes.status === 'fulfilled' && datasetRes.value.data?.hasOutage);
       rep.partial = Boolean(data.partialResults);
       rep.searchContextId = (!Array.isArray(data) && data.searchContextId) || null;
       rep.searchQuery = search;
@@ -314,7 +347,7 @@ export default function TopicCheck({
   const compareCandidates = report ? report.related.filter((i) => !inCompare(i.record)).slice(0, Math.max(0, 5 - comparisonIds.length)) : [];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
+    <div className="topic-workspace max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
       {/* Ask */}
       <section className="bg-white dark:bg-[#151413] border border-[#E2DFD8] dark:border-[#2A2824] rounded-md overflow-hidden">
         <div className="h-1 bg-indigo-600 dark:bg-indigo-400" aria-hidden="true" />
@@ -333,6 +366,15 @@ export default function TopicCheck({
             </p>
           </div>
 
+          <div className="space-y-1.5 max-w-xl">
+            <label htmlFor="topic-university" className="text-xs font-semibold text-[#524F47] dark:text-[#B3AFA6]">University to check (optional)</label>
+            <input id="topic-university" list="topic-universities" value={university} maxLength={200}
+              disabled={loading} onChange={(e) => setUniversity(e.target.value)}
+              placeholder="Choose or type a university"
+              className="w-full border border-[#D5D1C7] dark:border-[#383530] rounded-md px-3 py-2 text-sm bg-[#FAF9F5] dark:bg-[#1C1A18]" />
+            <datalist id="topic-universities">{universitySuggestions.map((item) => <option key={item.id || item.name} value={item.name} />)}</datalist>
+            <p className="text-[11px] text-[#737067] dark:text-[#9A968D]">Find topic matches from that university. Paper affiliations and degree-awarding universities are shown separately.</p>
+          </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -424,6 +466,15 @@ export default function TopicCheck({
       {/* Report */}
       {report && !loading && (
         <div ref={resultRef} className="space-y-6 scroll-mt-28">
+          <nav aria-label="Topic report sections" className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-[#737067] dark:text-[#9A968D] mr-1">Jump to</span>
+            {[
+              ['topic-verdict', 'Overview'], ['topic-closest', 'Papers'],
+              ['topic-angle', 'Research gaps'], ['topic-theses', 'Theses'], ['topic-data', 'Datasets'],
+            ].map(([id, label]) => (
+              <a key={id} href={`#${id}`} className="rounded-full px-4 py-2 border border-[#D5D1C7] dark:border-[#383530] bg-white dark:bg-[#151413] hover:border-indigo-500 transition-colors">{label}</a>
+            ))}
+          </nav>
           {/* Verdict */}
           <section aria-labelledby="topic-verdict" className="bg-white dark:bg-[#151413] border border-[#E2DFD8] dark:border-[#2A2824] rounded-md p-5 md:p-6">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:items-center">
@@ -659,7 +710,7 @@ export default function TopicCheck({
                   <p className="text-xs text-[#605D55] dark:text-[#9A968D]">
                     {report.thesisLookupFailed
                       ? 'The thesis lookup did not respond this time.'
-                      : 'No related thesis was found. If you do this one, yours could be the first in the archive on this topic.'}
+                      : 'No related thesis was found in the checked results. This does not establish that the topic is new.'}
                   </p>
                 ) : (
                   <>
@@ -667,7 +718,7 @@ export default function TopicCheck({
                       {[
                         { n: report.localTheses.length, t: 'In this archive' },
                         { n: report.bangladeshTheses.length, t: 'From Bangladesh' },
-                        { n: user?.university ? report.sameUniversity.length : report.theses.length, t: user?.university ? 'At your university' : 'In total' },
+                        { n: report.selectedUniversity ? report.sameUniversity.length : report.theses.length, t: report.selectedUniversity ? 'Awarded there' : 'In total' },
                       ].map((cell) => (
                         <div key={cell.t} className="bg-[#FAF9F5] dark:bg-[#1C1A18] rounded-md py-2">
                           <dd className="text-lg font-semibold tabular-nums text-[#1C1B18] dark:text-[#F0EDE6]">{cell.n}</dd>
@@ -708,6 +759,21 @@ export default function TopicCheck({
                 )}
               </section>
 
+              {report.selectedUniversity && (
+                <section aria-label="University topic matches" className="bg-white dark:bg-[#151413] border border-[#E2DFD8] dark:border-[#2A2824] rounded-md p-5 space-y-3">
+                  <h3 className="text-base font-semibold">Topic matches at {report.selectedUniversity}</h3>
+                  <p className="text-xs text-[#737067] dark:text-[#9A968D]">Related papers with an author affiliation, plus theses with a stated awarding university. Counts cover the retrieved sample.</p>
+                  {(report.universityLookupFailed || report.universityLookupPartial) && <p className="text-xs text-amber-700">Some university sources did not respond. This list may be incomplete.</p>}
+                  {!(report.universityMatches || []).length && <p className="text-xs">No matching work was found in this sample. University thesis coverage may be limited.</p>}
+                  {(report.universityMatches || []).slice(0, 10).map((item) => (
+                    <button key={item.record.doi || paperId(item.record) || item.record.title} type="button" onClick={() => onViewDetail?.(item.record)}
+                      className="block w-full text-left border-t border-[#E2DFD8] dark:border-[#2A2824] pt-2 space-y-1 cursor-pointer">
+                      <span className="block text-sm font-medium">{item.record.title}</span>
+                      <span className="block text-xs text-[#737067] dark:text-[#9A968D]">{item.level} topic match · {item.matched.join(', ')} · {report.sameUniversity.some((thesis) => thesis.record === item.record) ? 'Awarding university stated' : 'Author affiliation'}</span>
+                    </button>
+                  ))}
+                </section>
+              )}
               <section aria-labelledby="topic-data" className="bg-white dark:bg-[#151413] border border-[#E2DFD8] dark:border-[#2A2824] rounded-md p-5 space-y-3">
                 <h3 id="topic-data" className="text-base font-semibold text-[#1C1B18] dark:text-[#F0EDE6] flex items-center gap-2">
                   <Database className="w-4 h-4 text-[#2C6B3F] dark:text-emerald-400" />

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { queryMatch } = require('./queryRelevance');
 const { searchLocal } = require('./providers/local');
 const { searchOpenAlex } = require('./providers/openalex');
 const { searchArxiv } = require('./providers/arxiv');
@@ -311,6 +312,7 @@ function normalizePublicationType(type) {
   const t = String(type).trim().toLowerCase();
   if (t === 'article') return 'journal-article';
   if (t === 'proceedings') return 'conference-paper';
+  if (t === 'dissertation') return 'thesis';
   return t;
 }
 
@@ -346,7 +348,7 @@ function normalizeSessionFilterKey(filters = {}) {
 function computeSessionHash(query = '', filters = {}, sort = 'relevance') {
   const normQuery = (query || '').trim().toLowerCase();
   const normFilters = normalizeSessionFilterKey(filters);
-  const payload = JSON.stringify({ q: normQuery, f: normFilters, s: sort });
+  const payload = JSON.stringify({ q: normQuery, f: normFilters, s: sort, relevancePolicy: 2 });
   return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 20);
 }
 
@@ -389,6 +391,9 @@ function sortRecords(records, sort, query, pageNum) {
     const words = (query || '').toLowerCase().split(/\s+/).filter(Boolean);
     records.sort((a, b) => {
       if (pageNum === 1 && a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      const matchedA = a.queryMatch?.score || 0;
+      const matchedB = b.queryMatch?.score || 0;
+      if (matchedA !== matchedB) return matchedB - matchedA;
       const scoreA = computeRelevanceScore(a, words);
       const scoreB = computeRelevanceScore(b, words);
       if (scoreB !== scoreA) return scoreB - scoreA;
@@ -871,6 +876,11 @@ async function executeSearchSessionLocked(session, {
       if (Array.isArray(res.records)) {
         for (const record of res.records) {
           if (!record || !record.title) continue;
+          const match = queryMatch(record, query);
+          if (!match.accepted) continue;
+          record.queryMatch = match;
+          if (filters.yearMin && (!Number.isFinite(Number(record.publishedYear)) || Number(record.publishedYear) < Number(filters.yearMin))) continue;
+          if (filters.yearMax && (!record.publishedYear || Number(record.publishedYear) > Number(filters.yearMax))) continue;
 
           if (!matchesInstitutionalAndAuthorFilters(record, filters)) {
             continue;
@@ -918,7 +928,7 @@ async function executeSearchSessionLocked(session, {
           }
 
           if (filters.isOpenAccess) {
-            if (record.isOpenAccess === false) {
+            if (record.isOpenAccess !== true) {
               continue;
             }
           }
@@ -926,7 +936,7 @@ async function executeSearchSessionLocked(session, {
           if (filters.publicationType && filters.publicationType !== 'all') {
             const normType = normalizePublicationType(filters.publicationType);
             const recType = normalizePublicationType(record.publicationType);
-            if (normType !== 'all' && recType !== 'all' && recType !== normType) {
+            if (normType !== 'all' && recType !== normType) {
               continue;
             }
           }

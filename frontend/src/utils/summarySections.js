@@ -211,7 +211,14 @@ export function buildSummaryCopyText(title, summary, language = 'en') {
     );
   }
   if (view.keyTerms.length > 0) lines.push(`${labels.keyTerms}: ${view.keyTerms.join(', ')}`);
-  lines.push("[Sentences taken from the paper's own text by keyword rules, via The Thesis Archive. Not written by AI. Check the original paper.]");
+  if (Array.isArray(summary.researchDirections) && summary.researchDirections.length) {
+    lines.push('Possible thesis directions (AI suggestions; novelty is not established):\n' +
+      summary.researchDirections.map((item) => '- ' + item.text + '\n  Evidence — ' + item.sectionOrPage + ': "' + item.quote + '"').join('\n'));
+  }
+  if (summary.isAiGenerated && view.evidence.length) {
+    lines.push('Supporting evidence:\n' + view.evidence.map((item) => '- ' + (item.field || 'Source') + ' — ' + item.sectionOrPage + ': "' + item.quote + '"').join('\n'));
+  }
+  lines.push(summary.disclaimer || "[Sentences taken from the paper's own text by keyword rules, via The Thesis Archive. Not written by AI. Check the original paper.]");
 
   return lines.join('\n\n');
 }

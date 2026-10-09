@@ -562,6 +562,7 @@ router.post('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, 
       entitlements,
       language: language === 'bn' ? 'bn' : 'en',
       forceRefresh: Boolean(forceRefresh),
+      analysisMode: req.body?.analysisMode === 'ai' ? 'ai' : 'extractive',
     });
 
     if (summaryResult.error) {
@@ -647,6 +648,7 @@ router.get('/:id/summary', summaryGenerationLimiter, optionalAuth, async (req, r
       entitlements,
       language,
       forceRefresh,
+      analysisMode: req.query.analysisMode === 'ai' ? 'ai' : 'extractive',
     });
 
     if (summaryResult.error) {

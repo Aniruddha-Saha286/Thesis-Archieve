@@ -7,6 +7,7 @@ const {
   queryScholexplorer,
   enrichPaperDatasets,
   searchGlobalDatasets,
+  resetDatasetCacheForTests,
 } = require('../services/datasetDiscoveryService');
 const { findOpenAccessPdf, __testing: oaTesting } = require('../services/openAccessFinder');
 const {
@@ -51,6 +52,7 @@ function jsonResponse(body, status = 200, headers = {}) {
 }
 
 function installFetch(routes) {
+  resetDatasetCacheForTests();
   const calls = [];
   global.fetch = async (url, options) => {
     const address = String(url);
@@ -619,7 +621,7 @@ async function runDatasetSourcesAndOaFinderTests() {
           [HUGGING_FACE]: () => jsonResponse(huggingFaceDatasetsResponse),
         })
       );
-      const res = await searchGlobalDatasets({ query: 'd1 six sources', page: 1, limit: 15 });
+      const res = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
 
       assert.deepStrictEqual(Object.keys(res).sort(), ['datasets', 'hasOutage', 'pagination', 'providerErrors', 'retrievedAt']);
       assert.deepStrictEqual(Object.keys(res.pagination).sort(), ['hasMore', 'limit', 'page', 'returnedCount']);
@@ -635,7 +637,12 @@ async function runDatasetSourcesAndOaFinderTests() {
       for (const [source, expected] of Object.entries(EXPECTED_ORIGINAL_RECORDS)) {
         const got = res.datasets.filter((d) => d.source === source);
         assert.strictEqual(got.length, 1, `${source} must still contribute its record`);
-        assert.deepStrictEqual(got[0], expected, `${source} record must be unchanged`);
+        const { queryMatch, ...mapped } = got[0];
+        assert.strictEqual(queryMatch.accepted, true);
+        const expectedMapped = { ...expected };
+        if (['DataCite', 'Zenodo', 'Figshare'].includes(source)) expectedMapped.keywords = [];
+        if (source === 'Figshare') expectedMapped.formats = [];
+        assert.deepStrictEqual(mapped, expectedMapped, source + ' metadata mapping must remain honest');
       }
 
       assert.ok(calls.find((c) => c.url.includes(DATACITE)).url.includes('page[size]=4'));
@@ -674,7 +681,7 @@ async function runDatasetSourcesAndOaFinderTests() {
             }),
         })
       );
-      const res = await searchGlobalDatasets({ query: 'd2 duplicates', page: 1, limit: 30 });
+      const res = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 30 });
       const dois = res.datasets.map((d) => d.doi).filter(Boolean);
       assert.strictEqual(new Set(dois).size, dois.length, 'No DOI may appear twice');
       const urls = res.datasets.map((d) => d.url.toLowerCase());
@@ -695,7 +702,7 @@ async function runDatasetSourcesAndOaFinderTests() {
           },
         })
       );
-      const res = await searchGlobalDatasets({ query: 'd3 partial failure', page: 1, limit: 15 });
+      const res = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       assert.deepStrictEqual(res.providerErrors, {
         'Harvard Dataverse': 'connect ECONNREFUSED',
         'Hugging Face': 'Hugging Face HTTP 429',
@@ -715,7 +722,7 @@ async function runDatasetSourcesAndOaFinderTests() {
           [HUGGING_FACE]: () => jsonResponse(huggingFaceDatasetsResponse),
         })
       );
-      const res2 = await searchGlobalDatasets({ query: 'd3 originals down', page: 1, limit: 15 });
+      const res2 = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       assert.deepStrictEqual(Object.keys(res2.providerErrors).sort(), ['DataCite', 'Dryad', 'Figshare', 'Zenodo']);
       assert.strictEqual(res2.providerErrors.Zenodo, 'Zenodo HTTP 429');
       assert.strictEqual(res2.hasOutage, false);
@@ -751,28 +758,28 @@ async function runDatasetSourcesAndOaFinderTests() {
           [HUGGING_FACE]: () => jsonResponse(huggingFaceDatasetsResponse),
         })
       );
-      const first = await searchGlobalDatasets({ query: 'd4 cached search', page: 1, limit: 15 });
+      const first = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       const callsAfterFirst = calls.length;
       assert.strictEqual(callsAfterFirst, 6);
-      const second = await searchGlobalDatasets({ query: 'd4 cached search', page: 1, limit: 15 });
+      const second = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       assert.strictEqual(calls.length, callsAfterFirst, 'A repeated search must be answered from the cache');
       assert.deepStrictEqual(second, first);
 
       second.datasets.length = 0;
-      const third = await searchGlobalDatasets({ query: 'd4 cached search', page: 1, limit: 15 });
+      const third = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       assert.strictEqual(third.datasets.length, first.datasets.length);
 
-      await searchGlobalDatasets({ query: 'd4 cached search', page: 2, limit: 15 });
+      await searchGlobalDatasets({ query: 'research dataset', page: 2, limit: 15 });
       assert.strictEqual(calls.length, callsAfterFirst + 6);
 
       const allDown = Object.fromEntries(Object.keys(EMPTY).map((needle) => [needle, () => jsonResponse({}, 503)]));
       calls = installFetch(routesWith(allDown));
-      const outage = await searchGlobalDatasets({ query: 'd4 total outage', page: 1, limit: 15 });
+      const outage = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       assert.strictEqual(outage.hasOutage, true);
       assert.strictEqual(outage.datasets.length, 0);
       assert.strictEqual(Object.keys(outage.providerErrors).length, 6);
       const callsDuringOutage = calls.length;
-      await searchGlobalDatasets({ query: 'd4 total outage', page: 1, limit: 15 });
+      await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 15 });
       assert.strictEqual(calls.length, callsDuringOutage * 2, 'An outage must not be cached, the next search tries again');
       pass('Caching: repeated searches are served from memory as safe copies, a total outage is never cached');
     }
@@ -928,7 +935,7 @@ async function runDatasetSourcesAndOaFinderTests() {
       assert.strictEqual(sx.records.length, 3);
       assert.ok(sx.records.every((r) => r.source === 'OpenAIRE ScholeXplorer' && r.isLinked === true));
 
-      const search = await searchGlobalDatasets({ query: 'e offline search', page: 1, limit: 12 });
+      const search = await searchGlobalDatasets({ query: 'research dataset', page: 1, limit: 12 });
       const sources = new Set(search.datasets.map((d) => d.source));
       assert.ok(sources.has('Hugging Face') && sources.has('Harvard Dataverse') && sources.has('DataCite'));
       assert.ok(!sources.has('OpenAIRE ScholeXplorer'));

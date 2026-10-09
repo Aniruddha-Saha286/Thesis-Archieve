@@ -936,8 +936,10 @@ async function runFullTextTests() {
     const fetchImpl = fakeFetch({ 'https://repo.example.org/p1.pdf': pdfRoute });
     const opts = { lookup: PUBLIC_DNS, fetchImpl, extractImpl: okExtract };
     const first = await readPaperFullText({ pdfUrl: 'https://repo.example.org/p1.pdf' }, opts);
-    assert.deepStrictEqual(Object.keys(first).sort(), ['finalUrl', 'keySections', 'links', 'ok', 'pageCount', 'pagesRead', 'sectionTitles', 'truncated']);
+    assert.deepStrictEqual(Object.keys(first).sort(), ['analysisSources', 'finalUrl', 'keySections', 'links', 'ok', 'pageCount', 'pagesRead', 'sectionTitles', 'truncated']);
     assert.strictEqual(first.ok, true);
+    assert(first.analysisSources.some((source) => source.title === '2 Limitations' && source.text.startsWith('Only one site')));
+    assert(first.analysisSources.reduce((sum, source) => sum + source.text.length, 0) <= 120000);
     assert.strictEqual(first.finalUrl, 'https://repo.example.org/p1.pdf');
     assert.deepStrictEqual(first.sectionTitles, [
       { title: '1 Introduction', type: 'introduction', page: 1 }, { title: '2 Limitations', type: 'limitations', page: 1 }, { title: '3 Conclusion', type: 'conclusion', page: 1 },

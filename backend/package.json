@@ -32,6 +32,7 @@
     "mongoose": "^9.10.2",
     "multer": "^2.4.0",
     "nodemailer": "^10.0.10",
+    "pdfjs-dist": "^6.2.108",
     "socket.io": "^4.8.3"
   }
 }

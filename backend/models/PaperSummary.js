@@ -29,7 +29,9 @@ const paperSummarySchema = new mongoose.Schema(
       enum: ['full_text', 'abstract_only', 'unavailable'],
       required: true,
     },
+    coverageNote: { type: String, default: '' },
     summary: {
+      researchDirections: [{ text: String, quote: String, sectionOrPage: String }],
       tldr: {
         type: String,
         default: '',
@@ -125,6 +127,7 @@ const paperSummarySchema = new mongoose.Schema(
       ],
       evidence: [
         {
+          field: { type: String, default: '' },
           sectionOrPage: { type: String, default: '' },
           quote: { type: String, default: '' },
         },

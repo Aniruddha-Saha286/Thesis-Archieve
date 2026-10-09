@@ -220,7 +220,7 @@ export default function ThesisCard({
   const venueName = thesis.publisher || thesis.venue || '';
   const showVenue = Boolean(venueName) && !(institutionName && venueName.toLowerCase().includes(institutionName.toLowerCase()));
 
-  const buttonBase = 'inline-flex items-center justify-center gap-1.5 rounded-sm text-sm lg:text-[13px] transition cursor-pointer min-h-[40px] lg:min-h-[32px] px-3 lg:px-2.5';
+  const buttonBase = 'inline-flex items-center justify-center gap-1.5 rounded-xl text-sm transition cursor-pointer min-h-[40px] px-3';
   const quietButton = `${buttonBase} bg-[#FAF9F5] dark:bg-[#201F1C] hover:bg-[#F2EFE8] dark:hover:bg-[#282622] border border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] dark:text-[#F0EDE6] font-medium`;
   const mainButton = `${buttonBase} bg-[#1C1B18] hover:bg-[#2E2C28] dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 font-semibold shadow-2xs`;
   const menuItem = 'w-full text-left flex items-center justify-between gap-2 px-3 py-2.5 lg:py-2 hover:bg-[#FAF9F5] dark:hover:bg-[#282622] text-[#1C1B18] dark:text-[#F0EDE6] transition cursor-pointer';
@@ -228,11 +228,11 @@ export default function ThesisCard({
 
   return (
     <article
-      className={`relative bg-white dark:bg-[#161513] border rounded-sm p-3 pl-5 sm:px-4 sm:pl-5 shadow-2xs transition-colors ${
+      className={`paper-card relative bg-white dark:bg-[#161513] border rounded-2xl p-5 sm:p-6 shadow-2xs transition-colors ${
         thesis.isPinned ? 'border-amber-400 bg-amber-50/20 dark:bg-amber-950/20' : 'border-[#E2DFD8] dark:border-[#2C2A26] hover:border-[#BDB9AF] dark:hover:border-[#423F3A]'
       }`}
     >
-      <span aria-hidden="true" className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-sm ${typeEdge}`} />
+      <span aria-hidden="true" className={`absolute left-0 top-6 bottom-6 w-1 rounded-r-full ${typeEdge}`} />
 
       {thesis.isRetracted && (
         <div className="mb-2.5 bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 px-2.5 py-2 rounded-sm text-xs text-red-900 dark:text-red-300 flex items-center justify-between flex-wrap gap-2">
@@ -253,9 +253,9 @@ export default function ThesisCard({
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row lg:items-start gap-2.5 lg:gap-4">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-[17px] font-serif-title font-normal leading-snug">
+      <div className="flex flex-col gap-4">
+        <div className="min-w-0 flex-1 space-y-3">
+          <h3 className="text-lg md:text-xl font-semibold leading-snug">
             <button
               type="button"
               onClick={() => onViewDetail && onViewDetail(thesis)}
@@ -359,7 +359,7 @@ export default function ThesisCard({
             )}
           </div>
 
-          <p className="text-sm text-[#4A4740] dark:text-[#A8A49C] leading-snug line-clamp-2">
+          <p className="text-sm text-[#4A4740] dark:text-[#A8A49C] leading-relaxed line-clamp-2 max-w-4xl">
             {thesis.abstract || 'No abstract is available for this record.'}
           </p>
         </div>

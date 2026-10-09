@@ -52,6 +52,7 @@ export default function PublicationDetailModal({
   const { isAuthenticated } = useAuth();
   const currentThesisId = thesis ? (thesis._id || thesis.id || thesis.doi || thesis.title || '') : '';
   const currentThesisIdRef = useRef(currentThesisId);
+  const summaryRequestRef = useRef(0);
 
   const [activeTab, setActiveTab] = useState(initialTab || 'overview');
   const [showAllAuthors, setShowAllAuthors] = useState(false);
@@ -262,8 +263,9 @@ export default function PublicationDetailModal({
     }
   };
 
-  const fetchSummary = async (lang = summaryState.language, force = false) => {
+  const fetchSummary = async (lang = summaryState.language, force = false, mode = summaryState.analysisMode || 'extractive') => {
     const requestedThesisId = currentThesisId;
+    const requestId = ++summaryRequestRef.current;
     setSummaryState((s) => ({
       ...s,
       requested: true,
@@ -272,6 +274,8 @@ export default function PublicationDetailModal({
       error: null,
       quotaReached: false,
       language: lang,
+      analysisMode: mode,
+      data: null,
     }));
 
     try {
@@ -279,6 +283,7 @@ export default function PublicationDetailModal({
       const payload = {
         language: lang,
         forceRefresh: force,
+        analysisMode: mode,
         paper: {
           title: thesis.title,
           abstract: thesis.abstract,
@@ -288,7 +293,7 @@ export default function PublicationDetailModal({
       };
 
       const res = await axios.post(`/api/thesis/${encodeURIComponent(id)}/summary`, payload);
-      if (currentThesisIdRef.current !== requestedThesisId) return;
+      if (currentThesisIdRef.current !== requestedThesisId || summaryRequestRef.current !== requestId) return;
 
       if (res.data.enabled === false) {
         setSummaryState((s) => ({
@@ -309,7 +314,7 @@ export default function PublicationDetailModal({
         error: null,
       }));
     } catch (err) {
-      if (currentThesisIdRef.current !== requestedThesisId) return;
+      if (currentThesisIdRef.current !== requestedThesisId || summaryRequestRef.current !== requestId) return;
       if (err.response?.status === 401) {
         if (onRequireAuth) {
           onRequireAuth('Sign in to use Quick Summary.');
@@ -1627,11 +1632,21 @@ export default function PublicationDetailModal({
                     </h3>
                   </div>
                   <p className="text-xs text-[#605D55] font-mono-meta mt-1">
-                    The paper's own sentences, sorted under headings by keyword rules. Not written by AI.
+                    Quick Summary extracts sentences. Analyze for thesis uses AI to explain the available text with supporting quotes. Selected paper text is sent to OpenAI for analysis.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" disabled={summaryState.loading}
+                    onClick={() => fetchSummary(summaryState.language, false, 'ai')}
+                    className="min-h-[40px] px-3 py-1.5 bg-[#1C1B18] text-white rounded-sm text-xs font-bold disabled:opacity-50 cursor-pointer">
+                    {summaryState.loading ? 'Reading paper…' : 'Analyze for thesis'}
+                  </button>
+                  <button type="button" disabled={summaryState.loading}
+                    onClick={() => fetchSummary(summaryState.language, false, 'extractive')}
+                    className="min-h-[40px] px-3 py-1.5 border border-[#D5D1C7] rounded-sm text-xs font-bold disabled:opacity-50 cursor-pointer">
+                    Quick Summary
+                  </button>
                   {/* Language Selector */}
                   <div className="inline-flex rounded-sm border border-[#D5D1C7] p-0.5 bg-[#FAF9F5] text-xs font-mono-meta">
                     <button
@@ -1983,12 +1998,18 @@ export default function PublicationDetailModal({
                       )}
                     </div>
 
-                    {(summaryState.data.language || summaryState.language) === 'bn' && (
+                    {!summaryState.data.summary.isAiGenerated && (summaryState.data.language || summaryState.language) === 'bn' && (
                       <p className="text-xs text-[#605D55] leading-relaxed">
                         শিরোনাম ও টীকা বাংলায় দেখানো হচ্ছে। বাক্যগুলো গবেষণাপত্রের নিজের ভাষাতেই থাকে, অনুবাদ করা হয় না।
                       </p>
                     )}
 
+                    {summaryState.data.coverageNote && (
+                      <p className="text-xs text-[#605D55] leading-relaxed">{summaryState.data.coverageNote}</p>
+                    )}
+                    {summaryState.data.cached && summaryState.data.summary.isAiGenerated && (
+                      <p className="text-xs text-emerald-800">Saved analysis reused. No new analysis credit used.</p>
+                    )}
                     {/* Opening sentence */}
                     {view.takeaway && (
                       <div className="bg-white border-2 border-[#1C1B18] p-5 sm:p-6 rounded-sm space-y-2 shadow-2xs">
@@ -2044,6 +2065,18 @@ export default function PublicationDetailModal({
                       </div>
                     )}
 
+                    {summaryState.data.summary.researchDirections?.length > 0 && (
+                      <section className="bg-[#FAF9F5] border border-dashed border-[#C9C4B8] p-5 rounded-sm space-y-3">
+                        <h4 className="text-sm font-bold text-[#1C1B18]">Possible thesis directions</h4>
+                        <p className="text-xs text-[#605D55]">AI suggestions based on this paper. Check related literature and discuss with your supervisor before claiming a new research gap.</p>
+                        {summaryState.data.summary.researchDirections.map((direction, index) => (
+                          <div key={index} className="space-y-1">
+                            <p className="text-sm text-[#2E2C28]">{direction.text}</p>
+                            <p className="text-xs text-[#605D55]">{direction.sectionOrPage}: “{direction.quote}”</p>
+                          </div>
+                        ))}
+                      </section>
+                    )}
                     {view.notFound.length > 0 && (
                       <p className="text-xs text-[#605D55] leading-relaxed" data-testid="summary-not-found">
                         <span className="font-bold text-[#2E2C28]">{L.notFound}:</span> {view.notFound.join(', ')}
@@ -2089,7 +2122,7 @@ export default function PublicationDetailModal({
                         <div className="space-y-2">
                           {view.evidence.map((ev, eIdx) => (
                             <div key={eIdx} className="text-xs p-2.5 bg-[#FAF9F5] border border-[#E5E2DA] rounded-sm">
-                              <strong className="text-[#1C1B18] block">{ev.sectionOrPage}</strong>
+                              <strong className="text-[#1C1B18] block">{ev.field ? `${ev.field}: ` : ''}{ev.sectionOrPage}</strong>
                               <span className="text-[#605D55] italic">"{ev.quote}"</span>
                             </div>
                           ))}

@@ -28,6 +28,7 @@ export default function DiscoverSearchBar({
   onToggleIsOpenAccessOnly,
   onToggleFilterDrawer,
   activeFilterCount = 0,
+  filtersOpen = false,
   onOpenCoverage,
   onOpenTopicCheck,
 }) {
@@ -160,10 +161,14 @@ export default function DiscoverSearchBar({
   ];
 
   return (
-    <div className="border-b border-[#E2DFD8] dark:border-[#2A2824] shadow-xs">
-      <div className="bg-[#1C1B18] dark:bg-[#151413] transition-colors py-3.5 md:py-4">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 space-y-2">
-        <h1 className="sr-only">Search theses and research papers</h1>
+    <div className="discovery-search border-b border-[#E2DFD8] dark:border-[#2A2824]">
+      <div className="research-hero text-white transition-colors py-7 md:py-10">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 space-y-5">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold tracking-widest uppercase text-amber-300 mb-2">Your next discovery starts here</p>
+          <h1 className="font-serif-title text-3xl md:text-5xl leading-tight">Make room for a great idea.</h1>
+          <p className="text-sm md:text-base text-stone-300 mt-3 leading-relaxed">Find the papers behind your topic. Save what matters, then explore the gaps.</p>
+        </div>
         <div className="flex flex-col-reverse md:flex-row md:items-center gap-2.5">
         {/* Prominent Search Form */}
         <div className="relative flex-1 min-w-0" ref={authorDropdownRef}>
@@ -171,6 +176,7 @@ export default function DiscoverSearchBar({
             <div className="relative w-full shadow-xs">
               <input
                 type="text"
+                aria-label={searchMode === 'authors' ? 'Search researchers' : 'Search research papers'}
                 value={inputValue}
                 onChange={handleChange}
                 onFocus={() => {
@@ -183,10 +189,10 @@ export default function DiscoverSearchBar({
                     ? 'Type a researcher’s name or ORCID'
                     : 'Search by title, topic, author, university or DOI'
                 }
-                className="w-full bg-[#FAF9F5] dark:bg-[#1C1A18] border-2 border-[#FAF9F5] dark:border-[#383530] hover:border-amber-300 dark:hover:border-[#FAF9F5] focus:border-amber-400 dark:focus:border-amber-400 px-4 py-2.5 pl-11 pr-28 text-sm md:text-base text-[#1C1B18] dark:text-[#FAF9F5] placeholder-[#8C887E] dark:placeholder-[#736E66] focus:outline-none rounded-sm transition font-sans"
+                className="w-full bg-[#FAF9F5] dark:bg-[#1C1A18] border-2 border-[#FAF9F5] dark:border-[#383530] hover:border-amber-300 dark:hover:border-[#FAF9F5] focus:border-amber-400 dark:focus:border-amber-400 px-4 py-2.5 pl-11 pr-28 text-sm md:text-base text-[#1C1B18] dark:text-[#FAF9F5] placeholder-[#8C887E] dark:placeholder-[#736E66] focus:outline-none rounded-xl transition font-sans"
               />
 
-              <div className="absolute left-3.5 top-3 pointer-events-none">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
                 {loadingTheses || loadingCandidates ? (
                   <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
                 ) : (
@@ -200,7 +206,7 @@ export default function DiscoverSearchBar({
                   <button
                     type="button"
                     onClick={handleClear}
-                    className="p-1.5 text-[#8C887E] hover:text-[#1C1B18] dark:text-[#736E66] dark:hover:text-[#FAF9F5] transition rounded-xs cursor-pointer"
+                    className="p-1.5 text-[#8C887E] hover:text-[#1C1B18] dark:text-[#736E66] dark:hover:text-[#FAF9F5] transition rounded-xl cursor-pointer"
                     title="Clear search query"
                     aria-label="Clear search"
                   >
@@ -210,7 +216,7 @@ export default function DiscoverSearchBar({
 
                 <button
                   type="submit"
-                  className="bg-amber-400 hover:bg-amber-300 text-neutral-950 px-4 py-2 rounded-xs text-sm font-bold transition cursor-pointer shadow-2xs"
+                  className="bg-amber-400 hover:bg-amber-300 text-neutral-950 px-4 py-2 rounded-xl text-sm font-bold transition cursor-pointer shadow-2xs"
                 >
                   Search
                 </button>
@@ -220,7 +226,7 @@ export default function DiscoverSearchBar({
 
           {/* Author Candidates Autocomplete Dropdown */}
           {searchMode === 'authors' && showAuthorDropdown && (
-            <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-sm shadow-xl z-50 overflow-hidden font-sans">
+            <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-xl shadow-xl z-50 overflow-hidden font-sans">
               <div className="bg-[#FAF9F5] dark:bg-[#181614] px-4 py-2 border-b border-[#E2DFD8] dark:border-[#2E2B26] text-xs font-mono-meta uppercase tracking-wider text-[#737067] dark:text-[#9E9A90] flex items-center justify-between">
                 <span>Matching researchers ({authorCandidates.length})</span>
                 <span className="text-[#2C6B3F] dark:text-emerald-400">Data from OpenAlex</span>
@@ -283,7 +289,7 @@ export default function DiscoverSearchBar({
         </div>
 
           {/* Papers or people */}
-          <div className="flex items-center bg-[#2A2824] dark:bg-[#1C1A18] p-1 rounded-sm border border-[#47433C] dark:border-[#383530] text-xs shrink-0 self-start md:self-auto">
+          <div className="flex items-center bg-[#2A2824] dark:bg-[#1C1A18] p-1 rounded-xl border border-[#47433C] dark:border-[#383530] text-xs shrink-0 self-start md:self-auto">
             <button
               type="button"
               onClick={() => {
@@ -291,7 +297,7 @@ export default function DiscoverSearchBar({
                 setShowAuthorDropdown(false);
               }}
               aria-pressed={searchMode === 'publications'}
-              className={`px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer font-bold ${
+              className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer font-bold ${
                 searchMode === 'publications'
                   ? 'bg-[#FAF9F5] text-[#1C1B18] shadow-2xs'
                   : 'text-[#B3AFA6] dark:text-[#9E9A90] hover:text-[#FAF9F5]'
@@ -307,7 +313,7 @@ export default function DiscoverSearchBar({
                 if (onChangeSearchMode) onChangeSearchMode('authors');
               }}
               aria-pressed={searchMode === 'authors'}
-              className={`px-3 py-1.5 rounded-xs transition flex items-center gap-1.5 cursor-pointer font-bold ${
+              className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer font-bold ${
                 searchMode === 'authors'
                   ? 'bg-[#FAF9F5] text-[#1C1B18] shadow-2xs'
                   : 'text-[#B3AFA6] dark:text-[#9E9A90] hover:text-[#FAF9F5]'
@@ -344,31 +350,18 @@ export default function DiscoverSearchBar({
       </div>
 
       {/* Quick filters on a light strip under the band */}
-      <div className="bg-white dark:bg-[#151413] dark:border-t dark:border-[#24221F] py-2 transition-colors">
+      <div className="bg-white dark:bg-[#151413] dark:border-t dark:border-[#24221F] py-3 transition-colors">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         {/* Publication Type Filters & Quick Switches Row */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-xs">
-          {/* Publication Types Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-            {pubTypes.map((type) => {
-              const active = selectedPublicationType === type.id;
-              return (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => onChangePublicationType && onChangePublicationType(type.id)}
-                  aria-pressed={active}
-                  className={`px-3 py-1.5 rounded-xs transition whitespace-nowrap cursor-pointer ${
-                    active
-                      ? 'bg-[#1C1B18] text-white dark:bg-[#FAF9F5] dark:text-[#1C1B18] font-bold shadow-2xs'
-                      : 'bg-[#FAF9F5] dark:bg-[#1C1A18] text-[#5C5950] dark:text-[#A6A298] hover:text-[#1C1B18] dark:hover:text-[#FAF9F5] border border-[#D5D1C7] dark:border-[#383530]'
-                  }`}
-                >
-                  {type.label}
-                </button>
-              );
-            })}
-          </div>
+          <label className="flex items-center gap-3 text-sm text-[#524F47] dark:text-[#B3AFA6]">
+            <span>Looking for</span>
+            <select aria-label="Publication type" value={selectedPublicationType}
+              onChange={(e) => onChangePublicationType?.(e.target.value)}
+              className="bg-[#FAF9F5] dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-xl px-3 py-2 text-sm cursor-pointer">
+              {pubTypes.map((type) => <option key={type.id} value={type.id}>{type.id === 'all' ? 'All publications' : type.label}</option>)}
+            </select>
+          </label>
 
           {/* Secondary Quick Toggles & Controls */}
           <div className="flex items-center gap-3 text-xs text-[#524F47] dark:text-[#B3AFA6] flex-wrap">
@@ -401,7 +394,8 @@ export default function DiscoverSearchBar({
               type="button"
               onClick={onToggleFilterDrawer}
               aria-controls="discover-filters"
-              className={`md:hidden px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 cursor-pointer font-bold ${
+              aria-expanded={filtersOpen}
+              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer font-bold ${
                 activeFilterCount > 0
                   ? 'bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-300'
                   : 'bg-[#FAF9F5] hover:bg-[#F2EFE8] dark:bg-[#1C1A18] dark:hover:bg-[#252320] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#FAF9F5]'
@@ -409,7 +403,7 @@ export default function DiscoverSearchBar({
               title="Filter by Discipline, University, Country, Year, and Citations"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-[#737067] dark:text-[#9E9A90]" />
-              <span>Filters</span>
+              <span>{filtersOpen ? 'Hide filters' : 'More filters'}</span>
               {activeFilterCount > 0 && (
                 <span className="bg-[#1C1B18] dark:bg-[#FAF9F5] text-white dark:text-[#1C1B18] text-[11px] px-1.5 py-0.2 rounded-2xs font-bold font-mono-meta">
                   {activeFilterCount}
@@ -423,7 +417,7 @@ export default function DiscoverSearchBar({
                 <button
                   type="button"
                   onClick={onOpenCoverage}
-                  className="hidden sm:inline-flex px-2 py-1 rounded-xs bg-[#FAF9F5] hover:bg-[#F2EFE8] dark:bg-[#1C1A18] dark:hover:bg-[#252320] border border-[#D5D1C7] dark:border-[#383530] text-[#524F47] dark:text-[#B3AFA6] hover:text-[#1C1B18] dark:hover:text-[#FAF9F5] transition items-center gap-1.5 cursor-pointer"
+                  className="hidden sm:inline-flex px-2 py-1 rounded-xl bg-[#FAF9F5] hover:bg-[#F2EFE8] dark:bg-[#1C1A18] dark:hover:bg-[#252320] border border-[#D5D1C7] dark:border-[#383530] text-[#524F47] dark:text-[#B3AFA6] hover:text-[#1C1B18] dark:hover:text-[#FAF9F5] transition items-center gap-1.5 cursor-pointer"
                   title="Which sources are searched, and what they cover"
                 >
                   <Globe className="w-3.5 h-3.5 text-[#737067] dark:text-[#9E9A90]" />

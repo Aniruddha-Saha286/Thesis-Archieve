@@ -828,9 +828,9 @@ async function extractPdfText(buffer, opts = {}) {
       stopAtErrors: false,
     };
     if (root) {
-      params.cMapUrl = path.join(root, 'cmaps') + path.sep;
+      params.cMapUrl = path.join(root, 'cmaps').replace(/\\/g, '/') + '/';
       params.cMapPacked = true;
-      params.standardFontDataUrl = path.join(root, 'standard_fonts') + path.sep;
+      params.standardFontDataUrl = path.join(root, 'standard_fonts').replace(/\\/g, '/') + '/';
     }
     task = lib.getDocument(params);
 
@@ -2160,6 +2160,20 @@ async function parsePdfBuffer(buffer, opts = {}) {
     pagesRead: extracted.pagesRead,
     truncated: Boolean(extracted.truncated),
     keySections: extractKeySections(sections),
+    // Only server-extracted text is supplied to AI; references are excluded.
+    analysisSources: (() => {
+      let remaining = 120000;
+      return [...sections].filter((section) => section.type !== 'references')
+        .sort((a, b) => {
+          const priority = (s) => /method|experiment|result|discussion|limitation|future|conclusion/i.test(s.title) ? 0 : 1;
+          return priority(a) - priority(b);
+        })
+        .flatMap((section) => {
+          const text = section.text.slice(0, Math.min(16000, remaining));
+          remaining -= text.length;
+          return text.length >= 50 ? [{ title: section.title, startPage: section.startPage, endPage: section.endPage, text }] : [];
+        });
+    })(),
     links: findResourceLinks(extracted.pages),
     sectionTitles: sections
       .filter((section) => section.title)

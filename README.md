@@ -34,7 +34,7 @@ npm run dev                 # http://localhost:5173
 
 Check the server: open `http://localhost:5000/api/health`.
 
-Run the server tests (no database or internet needed): `cd backend && npm test`. The last line should read `ALL 27 DETERMINISTIC TEST SUITES PASSED`.
+Run the server tests (no database or internet needed): `cd backend && npm test`. The last line should read `ALL 29 DETERMINISTIC TEST SUITES PASSED`.
 
 ## 3. Settings
 
@@ -79,7 +79,7 @@ Run the server tests (no database or internet needed): `cd backend && npm test`.
 
 ## 4. Reading the full paper (limitations, future work, conclusion)
 
-The "From the full paper" block reads a paper's free PDF and copies out the authors' own sections. It needs one extra package:
+The "From the full paper" block reads a paper's free PDF and copies out the authors' own sections. The PDF reader is included in backend dependencies. To reinstall it separately:
 
 ```bash
 cd backend
@@ -138,3 +138,32 @@ IEEE, ACM, Springer and Elsevier papers appear through these sources (title, abs
 | `node scripts/setPrimaryAdmin.js` | change the main admin |
 | `node scripts/testEmail.js` | send a test email |
 | `node scripts/harvestRepository.js --list` | list repositories that can be copied |
+
+
+## AI analysis for thesis research
+
+Open a paper's Summary tab and select **Analyze for thesis**. This is separate from the existing keyword-based Quick Summary. It explains objectives, methods, data/sample, findings, contributions, explicitly stated limitations, and author-proposed future work. Possible thesis directions are labeled AI suggestions, not established novelty. Each retained field must include a supporting quotation found in a supplied source excerpt; this checks quotation presence, not whether the AI interpretation is correct.
+
+Set these server-only values in backend/.env:
+- PAPER_AI_ENABLED=true
+- OPENAI_API_KEY=your server-side OpenAI API key
+- PAPER_AI_MODEL=gpt-4o-mini (configurable; choose a model supporting Responses structured outputs)
+- PAPER_AI_MAX_INPUT_CHARS=36000 (optional; capped at 60000)
+
+AI analysis is opt-in and off by default. It uses the existing trial/Premium summary quota and full-text entitlement. No API key is sent to the browser. Clicking the action sends selected available paper text to OpenAI; API response storage is disabled with store:false. Uploaded/private paper text is also sent if the authorized member selects this action. Configure provider/project spending limits for your budget.
+
+The PDF reader is included in backend dependencies (section 4). The server reads a PDF through the existing protected downloader and worker, or tries Unpaywall if a DOI has no PDF link. Scanned/unreadable or unavailable PDFs fall back to the abstract, clearly labeled. Selected sections and page ranges are shown; excerpts and pages are bounded, so analysis does not claim complete-paper coverage.
+
+One AI request produces all fields. Results are shared for matching source content, language, model and prompt version, persisted in MongoDB, and held in a bounded process cache. Repeated/Refresh requests reuse saved AI results without another summary credit. Concurrent identical requests share a call within one server process. At most two AI calls run concurrently per process. Failures refund newly reserved summary credits, although an API provider may still charge for a failed or rejected response. Multiple server processes can each generate the same uncached paper concurrently; this is not a global cost cap.
+
+No paid calls are made by the automated tests. They verify evidence rejection, caching, concurrent reuse, source selection, entitlements and credit refunds using mock responses. A real provider check requires a configured API key.
+
+## Search relevance and university topic matches
+
+Paper and global dataset search now check returned titles, abstracts/descriptions and supplied keywords/tags against meaningful query terms before showing results. Matching uses whole words, basic plural normalization, and selected acronym/language aliases (for example AI/artificial intelligence and Bangla/Bengali). Multi-term searches require at least two terms and at least half the meaningful terms. This is a metadata relevance check, not proof of semantic relevance: synonyms outside the supported aliases or incomplete metadata may cause relevant results to be omitted. Review the original record. The service does not manufacture extra results when fewer pass.
+
+Dataset adapters reject explicitly wrong resource types returned by DataCite, Zenodo and Figshare. Figshare file formats are reported only when supplied, rather than using DATASET as a fabricated format. API-filtered records lacking a type remain dependent on the source filter. Verified paper-to-dataset relationships are preserved; topic suggestions receive the relevance check.
+
+In Topic Check, optionally select a university before running the check. Dedicated affiliation and awarding-university searches reuse the original search context. The report includes clickable topic matches, matched words and counts based on the retrieved sample, with source failures identified. Author affiliation does not establish a thesis awarding institution. Thesis repository coverage remains limited. Cached topic reports are separated by university and account.
+
+Live verification on 2026-10-08 found unrelated age-bias/blog results in a Bangla sentiment dataset search before the change. After filtering, that sample returned a matching Bangla sentiment dataset, and the crop-disease sample returned leaf/crop image datasets. Eight paper results passed the metadata check for each query. Zenodo timed out in the final sample, so this is not a comprehensive retrieval benchmark. AI credentials were configured in the ignored backend .env; the provider returned insufficient API credits, so a real AI analysis remains unverified.

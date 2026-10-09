@@ -32,6 +32,7 @@ function normalizePublicationType(type) {
   const t = String(type).trim().toLowerCase();
   if (t === 'article') return 'journal-article';
   if (t === 'proceedings') return 'conference-paper';
+  if (t === 'dissertation') return 'thesis';
   return t;
 }
 

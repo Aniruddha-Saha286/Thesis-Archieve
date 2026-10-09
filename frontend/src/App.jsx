@@ -926,7 +926,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex items-center justify-center font-mono-meta text-xs transition-colors">
+      <div className="research-shell min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex items-center justify-center font-mono-meta text-xs transition-colors">
         <div className="space-y-2 text-center">
           <div className="w-8 h-8 rounded-sm bg-[#1C1B18] dark:bg-amber-400 text-[#FAF9F5] dark:text-neutral-950 flex items-center justify-center font-serif-title text-xl mx-auto animate-pulse">
             §
@@ -1009,7 +1009,7 @@ export default function App() {
 
   // 6. Authenticated & Approved: Renders the Full Scholarly Discovery Repository & Workspace
   return (
-    <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex flex-col justify-between transition-colors duration-150">
+    <div className="research-shell min-h-screen bg-[#FAF9F5] dark:bg-[#0E0D0C] text-[#1C1B18] dark:text-[#E8E6E1] flex flex-col justify-between transition-colors duration-150">
       <div>
 
         {systemMaintenance.enabled && isAdmin && (
@@ -1129,10 +1129,10 @@ export default function App() {
         {activeTab === 'datasets' && (
           <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
             {/* Datasets Search Header */}
-            <div className="bg-[#FAF9F5] dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] p-5 rounded-sm space-y-3 transition-colors">
+            <div className="dataset-hero bg-white dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] p-6 md:p-8 rounded-2xl space-y-5 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] font-normal flex items-center gap-2">
+                  <h3 className="text-3xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6] font-normal flex items-center gap-2">
                     <Database className="w-5 h-5 text-[#2C6B3F] dark:text-emerald-400" />
                     <span>Find a dataset</span>
                   </h3>
@@ -1159,7 +1159,7 @@ export default function App() {
                     aria-label="Search datasets"
                     value={datasetInput}
                     onChange={(e) => setDatasetInput(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2.5 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] text-xs font-mono-meta text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 shadow-2xs transition-colors"
+                    className="w-full pl-9 pr-8 py-2.5 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] text-sm text-[#1C1B18] dark:text-[#F0EDE6] rounded-xl focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 shadow-2xs transition-colors"
                   />
                   {datasetInput && (
                     <button
@@ -1171,6 +1171,7 @@ export default function App() {
                       }}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#737067] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] text-xs p-1 cursor-pointer"
                       title="Clear search"
+                      aria-label="Clear dataset search"
                     >
                       ✕
                     </button>
@@ -1384,6 +1385,7 @@ export default function App() {
                 setCurrentPage(1);
               }}
               onToggleFilterDrawer={() => setMobileFilterOpen((v) => !v)}
+              filtersOpen={mobileFilterOpen}
               activeFilterCount={activeFilterCount}
               onOpenCoverage={() => setIsCoverageOpen(true)}
               onOpenTopicCheck={(typed) => {
@@ -1394,12 +1396,12 @@ export default function App() {
               }}
             />
 
-            <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div className={`discovery-layout max-w-7xl mx-auto px-4 md:px-6 py-6 grid grid-cols-1 ${mobileFilterOpen ? 'md:grid-cols-4' : ''} gap-6`}>
             {/* Left Column: Grouped Filters */}
             <aside
               id="discover-filters"
               aria-label="Search filters"
-              className={`md:col-span-1 space-y-3 ${mobileFilterOpen ? 'block' : 'hidden md:block'}`}
+              className={`filter-panel md:col-span-1 space-y-3 ${mobileFilterOpen ? 'block' : 'hidden'}`}
             >
               {/* Filters header: one place to see how many filters are on and to reset them */}
               <div className="flex items-center justify-between gap-2">
@@ -1426,7 +1428,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setMobileFilterOpen(false)}
-                    className="md:hidden p-1.5 text-[#737067] dark:text-[#9A968D] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer"
+                    className="p-1.5 text-[#737067] dark:text-[#9A968D] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer"
                     aria-label="Close filters"
                   >
                     <X className="w-4 h-4" />
@@ -1683,7 +1685,7 @@ export default function App() {
                   setMobileFilterOpen(false);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="md:hidden w-full bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 py-2.5 rounded-sm text-xs font-mono-meta font-bold cursor-pointer shadow-2xs"
+                className="w-full bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 py-2.5 rounded-xl text-sm font-bold cursor-pointer shadow-2xs"
               >
                 Show results
               </button>
@@ -1700,7 +1702,7 @@ export default function App() {
             </aside>
 
           {/* Right Column: Thesis Catalog Grid */}
-          <main className="md:col-span-3 space-y-3">
+          <main className={`${mobileFilterOpen ? 'md:col-span-3' : ''} min-w-0 space-y-4`}>
             {/* Results header, one row: how many, how they are ordered, and the two things a student may want next */}
             {(() => {
               const sourceEntries = Object.entries(providerTelemetry);

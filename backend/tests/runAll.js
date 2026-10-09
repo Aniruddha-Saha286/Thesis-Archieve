@@ -25,6 +25,8 @@ const { runDatasetSourcesAndOaFinderTests } = require('./datasetSourcesAndOaFind
 const { runRepositoryHarvesterTests } = require('./repositoryHarvester.test');
 const { runFullTextTests } = require('./fullText.test');
 const { runReleaseBackendTests } = require('./releaseBackend.test');
+const { runAiPaperAnalysisTests } = require('./aiPaperAnalysis.test');
+const { runRetrievalRelevanceTests } = require('./retrievalRelevance.test');
 
 console.log('===============================================================');
 console.log('  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   ');
@@ -89,9 +91,11 @@ async function main() {
     await runFullTextTests();
     console.log('');
     await runReleaseBackendTests();
+    await runAiPaperAnalysisTests();
+    await runRetrievalRelevanceTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 27 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 29 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

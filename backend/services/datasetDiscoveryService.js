@@ -1,5 +1,6 @@
 const { URL } = require('url');
 const crypto = require('crypto');
+const { queryMatch } = require('./queryRelevance');
 const { normalizeDoi, compareDois } = require('../utils/doiNormalizer');
 
 const datasetCache = new Map();
@@ -199,7 +200,7 @@ async function queryDataCite({ query, doi, isLinked = false, page = 1, size = 5 
     const items = data.data || [];
     const totalCount = data.meta?.total || items.length;
 
-    const mapped = items.map((item) => {
+    const mapped = items.filter((item) => !item.attributes?.types?.resourceTypeGeneral || item.attributes.types.resourceTypeGeneral.toLowerCase() === 'dataset').map((item) => {
       const attrs = item.attributes || {};
       const title = attrs.titles?.[0]?.title || 'Scholarly Dataset';
       const itemDoi = attrs.doi || null;
@@ -230,6 +231,7 @@ async function queryDataCite({ query, doi, isLinked = false, page = 1, size = 5 
         relationEvidence: rel.relationEvidence,
         source: 'DataCite',
         sourceUrl: directUrl,
+        keywords: (attrs.subjects || []).map(s => s.subject).filter(Boolean),
       };
     }).filter((d) => d.url && isSafeDatasetUrl(d.url));
 
@@ -346,7 +348,7 @@ async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 })
     const items = data.hits?.hits || [];
     const totalCount = data.hits?.total || items.length;
 
-    const mapped = items.map((hit) => {
+    const mapped = items.filter((hit) => !hit.metadata?.resource_type?.type || hit.metadata.resource_type.type === 'dataset').map((hit) => {
       const meta = hit.metadata || {};
       const title = meta.title || 'Zenodo Open Research Dataset';
       const hitDoi = hit.doi || meta.doi || null;
@@ -394,6 +396,7 @@ async function queryZenodo({ query, doi, isLinked = false, page = 1, size = 5 })
         relationEvidence: rel.relationEvidence,
         source: 'Zenodo',
         sourceUrl: doiUrl,
+        keywords: cleanStringList(meta.keywords),
       };
     }).filter((d) => d.url && isSafeDatasetUrl(d.url));
 
@@ -467,6 +470,7 @@ async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 
     }
 
     const mapped = items
+      .filter((it) => (it.defined_type == null || Number(it.defined_type) === 3) && (!it.defined_type_name || it.defined_type_name.toLowerCase() === 'dataset'))
       .map((it) => {
         const itemDoi = it.doi ? it.doi.toLowerCase().trim() : null;
         const itemUrl =
@@ -484,13 +488,14 @@ async function queryFigshare({ query, doi, isLinked = false, page = 1, size = 5 
 
         return {
           id: `figshare_${it.id}`,
-          title: it.title || 'Figshare Research Dataset',
+          title: String(it.title || '').replace(/<[^>]*>/g, ' ').trim(),
           url: itemUrl,
           doi: itemDoi,
           publisher: 'Figshare Open Repository',
           publicationYear: it.published_date ? new Date(it.published_date).getFullYear() : null,
-          description: null,
-          formats: ['DATASET'],
+          description: typeof it.description === 'string' ? it.description.replace(/<[^>]*>/g, ' ').slice(0, 1000) : null,
+          keywords: cleanStringList(it.tags),
+          formats: extractFormats(null, it.files),
           size: null,
           license,
           isLinked: hasVerifiedRel,
@@ -1253,6 +1258,9 @@ async function enrichPaperDatasets({
         ...dryadRelatedRes.records,
         ...dataverseRelatedRes.records,
       ]) {
+        const match = queryMatch(d, title);
+        if (!match.accepted) continue;
+        d.queryMatch = match;
         const dKey = d.doi ? d.doi.toLowerCase() : d.url.toLowerCase();
         if (!seenDois.has(dKey) && !seenUrls.has(d.url.toLowerCase())) {
           if (d.doi) seenDois.add(d.doi.toLowerCase());
@@ -1321,6 +1329,9 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
     ...dataverseRes.records,
     ...huggingFaceRes.records,
   ]) {
+    const match = queryMatch(d, cleanQ);
+    if (!match.accepted) continue;
+    d.queryMatch = match;
     const dKey = d.doi ? d.doi.toLowerCase() : d.url.toLowerCase();
     if (!seenDois.has(dKey) && !seenUrls.has(d.url.toLowerCase())) {
       if (d.doi) seenDois.add(d.doi.toLowerCase());
@@ -1329,6 +1340,7 @@ async function searchGlobalDatasets({ query = '', page = 1, limit = 15 }) {
     }
   }
 
+  combined.sort((a, b) => b.queryMatch.score - a.queryMatch.score);
   const hasMore = Boolean(
     dcRes.hasMore ||
       zenodoRes.hasMore ||
@@ -1369,4 +1381,5 @@ module.exports = {
   queryScholexplorer,
   enrichPaperDatasets,
   searchGlobalDatasets,
+  resetDatasetCacheForTests: () => datasetCache.clear(),
 };

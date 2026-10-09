@@ -1,6 +1,46 @@
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+/* Spacious research workspace. Keep decorative effects behind readable content. */
+.research-hero {
+  background: radial-gradient(ellipse at 90% 10%, #37645a 0%, transparent 55%),
+    linear-gradient(120deg, #192e2b, #17221f 70%);
+}
+.dark .research-hero {
+  background: radial-gradient(ellipse at 90% 10%, #264a42 0%, transparent 55%), #101c19;
+}
+.research-header nav button { min-height: 40px; }
+.research-header nav { gap: 4px; }
+.research-shell :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #c48a28;
+  outline-offset: 3px;
+}
+.discovery-search input[type="text"] {
+  border-radius: 14px;
+  min-height: 56px;
+}
+.discovery-search form button[type="submit"] { border-radius: 10px; min-height: 40px; }
+.discovery-search .font-mono-meta { font-family: 'Inter', system-ui, sans-serif; }
+.paper-card { box-shadow: 0 3px 14px #1c1b1805; }
+.paper-card:hover { box-shadow: 0 8px 24px #1c1b180b; }
+.filter-panel > section { border-radius: 14px; }
+.filter-panel .font-mono-meta { font-family: 'Inter', system-ui, sans-serif; }
+.dataset-hero { border-top: 4px solid #427967; }
+.topic-workspace section { border-radius: 16px; }
+.topic-workspace :is(h2, h3)[id] { scroll-margin-top: 140px; }
+.welcome-page {
+  background-image: radial-gradient(ellipse at 8% 20%, #d7e8df80, transparent 55%),
+    radial-gradient(ellipse at 90% 90%, #f2e5c480, transparent 55%);
+}
+.welcome-page h1 { color: #254b40; }
+.dark .welcome-page h1 { color: #c4e1d1; }
+.welcome-page #sign-in > div { box-shadow: 0 16px 48px #1c1b180a; border-top: 4px solid #427967; }
+@media (max-width: 639px) {
+  .research-header nav { gap: 0; }
+  .research-header nav button { padding-inline: 8px; font-size: 12px; }
+  .research-hero { padding-block: 24px; }
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {

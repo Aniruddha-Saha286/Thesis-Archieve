@@ -57,32 +57,32 @@ export default function LoginView() {
   const jobs = [
     {
       icon: Search,
-      title: 'One search for theses and papers',
-      text: 'Theses deposited by students here, next to papers from OpenAlex, arXiv, Crossref, CORE, DBLP and five more sources.',
+      title: 'Find papers',
+      text: 'Search university theses and research papers together, then narrow down what matters.',
     },
     {
       icon: Lightbulb,
-      title: 'Check a thesis idea before you commit',
+      title: 'Explore your topic',
       text: 'See who has already done it, which supervisors work on it, and whether data exists for it.',
     },
     {
       icon: FileText,
-      title: 'Limitations and future work, in the authors’ words',
-      text: 'Copied from the paper itself, with the section and page. Not written by AI. Part of the 7-day trial and Premium.',
+      title: 'Understand each paper faster',
+      text: 'Explore methodology, limitations and future work with supporting excerpts. AI analysis is available when enabled.',
     },
     {
       icon: Bookmark,
-      title: 'Save, cite and compare',
+      title: 'Build your reading list',
       text: 'Keep a reading list, copy citations in APA, BibTeX or RIS, and compare up to five papers side by side.',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#141412] text-[#1C1B18] dark:text-[#F0EDE6] flex flex-col">
+    <div className="research-shell welcome-page min-h-screen bg-[#FAF9F5] dark:bg-[#141412] text-[#1C1B18] dark:text-[#F0EDE6] flex flex-col">
       <header className="max-w-6xl mx-auto w-full flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-sm bg-[#1C1B18] dark:bg-[#F0EDE6] text-[#FAF9F5] dark:text-[#141412] flex items-center justify-center font-serif-title text-xl font-normal">
-            §
+          <div className="w-8 h-8 rounded-2xl bg-[#1C1B18] dark:bg-[#F0EDE6] text-[#FAF9F5] dark:text-[#141412] flex items-center justify-center font-serif-title text-xl font-normal">
+            T
           </div>
           <span className="font-serif-title text-xl tracking-tight text-[#1C1B18] dark:text-[#F0EDE6] leading-none">
             The Thesis Archive
@@ -100,18 +100,18 @@ export default function LoginView() {
             <p className="text-xs font-mono-meta uppercase tracking-wider text-amber-800 dark:text-amber-400 font-bold">
               For thesis students
             </p>
-            <h1 className="text-3xl sm:text-4xl lg:text-[2.75rem] font-serif-title font-normal tracking-tight leading-[1.12]">
-              Find what has already been done before you start your thesis.
+            <h1 className="text-3xl sm:text-4xl lg:text-6xl font-serif-title font-normal tracking-tight leading-[1.12]">
+              Your thesis starts with a spark. Find yours.
             </h1>
             <p className="text-base text-[#524F47] dark:text-[#B0ACA2] max-w-xl leading-relaxed">
-              Theses from universities in Bangladesh and research papers from ten outside sources, in one search. Searching is free for students.
+              Turn a curious question into a research direction. Discover papers, explore datasets and keep your best ideas in one place.
             </p>
           </div>
 
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
             {jobs.map((job) => (
-              <li key={job.title} className="flex items-start gap-3">
-                <span className="mt-0.5 w-8 h-8 shrink-0 rounded-sm bg-[#1C1B18] dark:bg-[#2C2A26] text-amber-300 flex items-center justify-center">
+              <li key={job.title} className="flex items-start gap-3 bg-white/70 dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl p-4">
+                <span className="mt-0.5 w-8 h-8 shrink-0 rounded-2xl bg-[#1C1B18] dark:bg-[#2C2A26] text-amber-300 flex items-center justify-center">
                   <job.icon className="w-4 h-4" />
                 </span>
                 <span>
@@ -123,18 +123,18 @@ export default function LoginView() {
           </ul>
 
           <figure className="hidden sm:block">
-            <figcaption className="text-xs text-[#737067] dark:text-[#9C988F] mb-1.5">What a result looks like</figcaption>
-            <div className="relative bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm p-3.5 pl-5 shadow-2xs max-w-xl" aria-hidden="true">
+            <figcaption className="text-xs text-[#737067] dark:text-[#9C988F] mb-1.5">A glimpse of your research workspace · illustrative example</figcaption>
+            <div className="relative bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl p-3.5 pl-5 shadow-2xs max-w-xl" aria-hidden="true">
               <span className="absolute left-0 top-0 bottom-0 w-1 rounded-l-sm bg-blue-500" />
-              <div className="font-serif-title text-[17px] leading-snug">Sentiment analysis in Bangla using transformers</div>
+              <div className="text-lg font-semibold leading-snug">Sentiment analysis in Bangla using transformers</div>
               <div className="text-[13px] text-[#605D55] dark:text-[#A8A49C] mt-1">
                 <span className="font-semibold text-blue-800 dark:text-blue-300">B.Sc. Thesis</span> · 2025 · a university in Dhaka · Advisor named
               </div>
               <div className="mt-2 flex items-center gap-1.5 text-[13px]">
-                <span className="px-2.5 py-1 rounded-sm bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 font-semibold">Open PDF</span>
-                <span className="px-2.5 py-1 rounded-sm border border-[#D5D1C7] dark:border-[#383530]">Save</span>
-                <span className="px-2.5 py-1 rounded-sm border border-[#D5D1C7] dark:border-[#383530]">Cite</span>
-                <span className="px-2 py-1 rounded-sm border border-[#D5D1C7] dark:border-[#383530]">···</span>
+                <span className="px-2.5 py-1 rounded-2xl bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 font-semibold">Open PDF</span>
+                <span className="px-2.5 py-1 rounded-2xl border border-[#D5D1C7] dark:border-[#383530]">Save</span>
+                <span className="px-2.5 py-1 rounded-2xl border border-[#D5D1C7] dark:border-[#383530]">Cite</span>
+                <span className="px-2 py-1 rounded-2xl border border-[#D5D1C7] dark:border-[#383530]">More</span>
               </div>
             </div>
           </figure>
@@ -142,7 +142,7 @@ export default function LoginView() {
 
         {/* Sign in */}
         <div id="sign-in" className="lg:col-span-2 lg:sticky lg:top-6 scroll-mt-4">
-          <div className="bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm shadow-sm p-5 sm:p-6 space-y-5">
+          <div className="bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl shadow-sm p-5 sm:p-6 space-y-5">
             <div>
               <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Sign in to start</h2>
               <p className="text-sm text-[#605D55] dark:text-[#A8A49C] mt-1 leading-relaxed">
@@ -158,7 +158,7 @@ export default function LoginView() {
             )}
 
             {isGoogleConfigured ? (
-              <div className="w-full flex flex-col items-center justify-center py-4 bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#E5E2DA] dark:border-[#2C2A26] rounded-sm px-3 space-y-2 overflow-hidden">
+              <div className="w-full flex flex-col items-center justify-center py-4 bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#E5E2DA] dark:border-[#2C2A26] rounded-2xl px-3 space-y-2 overflow-hidden">
                 <div className="w-full flex justify-center">
                   <GoogleLogin
                     onSuccess={handleGoogleSuccess}
@@ -177,7 +177,7 @@ export default function LoginView() {
                 )}
               </div>
             ) : (
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 rounded-sm space-y-2 text-sm">
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 rounded-2xl space-y-2 text-sm">
                 <div className="font-bold flex items-center gap-1.5 text-amber-950 dark:text-amber-200">
                   <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
                   Sign-in is not set up yet
