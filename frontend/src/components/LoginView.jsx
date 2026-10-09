@@ -1,12 +1,24 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { AlertCircle, Search, Lightbulb, FileText, Bookmark } from 'lucide-react';
+import { AlertCircle, ArrowRight, Search, Lightbulb, FileText, Bookmark } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 
 export default function LoginView() {
   const { loginWithGoogle } = useAuth();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signInIntent, setSignInIntent] = useState('');
+  const signInHeadingRef = useRef(null);
+
+  const goToSignIn = (event, intent) => {
+    event.preventDefault();
+    setSignInIntent(intent);
+    signInHeadingRef.current?.focus({ preventScroll: true });
+    document.getElementById('sign-in')?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  };
 
   const rawClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const isGoogleConfigured = Boolean(
@@ -110,31 +122,40 @@ export default function LoginView() {
 
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
             {jobs.map((job) => (
-              <li key={job.title} className="flex items-start gap-3 bg-white/70 dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl p-4">
+              <li key={job.title}>
+                <a href="#sign-in" onClick={(event) => goToSignIn(event, job.title)}
+                  className="group flex h-full items-start gap-3 bg-white/70 dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] hover:border-emerald-600 dark:hover:border-emerald-400 rounded-2xl p-4 transition-colors">
                 <span className="mt-0.5 w-8 h-8 shrink-0 rounded-2xl bg-[#1C1B18] dark:bg-[#2C2A26] text-amber-300 flex items-center justify-center">
                   <job.icon className="w-4 h-4" />
                 </span>
                 <span>
                   <span className="block text-sm font-semibold text-[#1C1B18] dark:text-[#F0EDE6]">{job.title}</span>
                   <span className="block text-sm text-[#605D55] dark:text-[#A8A49C] leading-relaxed mt-0.5">{job.text}</span>
+                  <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                    Sign in to get started <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                  </span>
                 </span>
+                </a>
               </li>
             ))}
           </ul>
 
           <figure className="hidden sm:block">
             <figcaption className="text-xs text-[#737067] dark:text-[#9C988F] mb-1.5">A glimpse of your research workspace · illustrative example</figcaption>
-            <div className="relative bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl p-3.5 pl-5 shadow-2xs max-w-xl" aria-hidden="true">
+            <div className="relative bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl p-3.5 pl-5 shadow-2xs max-w-xl">
               <span className="absolute left-0 top-0 bottom-0 w-1 rounded-l-sm bg-blue-500" />
               <div className="text-lg font-semibold leading-snug">Sentiment analysis in Bangla using transformers</div>
               <div className="text-[13px] text-[#605D55] dark:text-[#A8A49C] mt-1">
                 <span className="font-semibold text-blue-800 dark:text-blue-300">B.Sc. Thesis</span> · 2025 · a university in Dhaka · Advisor named
               </div>
               <div className="mt-2 flex items-center gap-1.5 text-[13px]">
-                <span className="px-2.5 py-1 rounded-2xl bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 font-semibold">Open PDF</span>
-                <span className="px-2.5 py-1 rounded-2xl border border-[#D5D1C7] dark:border-[#383530]">Save</span>
-                <span className="px-2.5 py-1 rounded-2xl border border-[#D5D1C7] dark:border-[#383530]">Cite</span>
-                <span className="px-2 py-1 rounded-2xl border border-[#D5D1C7] dark:border-[#383530]">More</span>
+                {['Open PDF', 'Save', 'Cite', 'More'].map((action, index) => (
+                  <a key={action} href="#sign-in" onClick={(event) => goToSignIn(event, action)}
+                    aria-label={`${action} — sign in to use paper tools`}
+                    className={`px-2.5 py-1 rounded-2xl ${index === 0 ? 'bg-[#1C1B18] dark:bg-amber-400 text-white dark:text-neutral-950 font-semibold' : 'border border-[#D5D1C7] dark:border-[#383530] hover:border-emerald-600'}`}>
+                    {action}
+                  </a>
+                ))}
               </div>
             </div>
           </figure>
@@ -144,7 +165,8 @@ export default function LoginView() {
         <div id="sign-in" className="lg:col-span-2 lg:sticky lg:top-6 scroll-mt-4">
           <div className="bg-white dark:bg-[#1A1916] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-2xl shadow-sm p-5 sm:p-6 space-y-5">
             <div>
-              <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Sign in to start</h2>
+              <h2 ref={signInHeadingRef} tabIndex={-1} className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Sign in to start</h2>
+              {signInIntent && <p role="status" className="mt-2 text-sm font-medium text-emerald-800 dark:text-emerald-300">{signInIntent}: continue with Google to get started.</p>}
               <p className="text-sm text-[#605D55] dark:text-[#A8A49C] mt-1 leading-relaxed">
                 Use any Google account. New students add their university details after signing in.
               </p>
