@@ -16,10 +16,14 @@
 }
 .research-header nav button { min-height: 40px; }
 .research-header nav { gap: 4px; }
-/* Anchor the mobile inbox to the viewport, not to the bell's right edge. */
+/* Anchor the mobile inbox to the viewport, preventing header or bottom navigation overlap. */
 .notification-panel { max-height: min(36rem, calc(100dvh - 6rem)); overflow-wrap: anywhere; }
 @media (max-width: 639px) {
-  .notification-panel { max-height: calc(100dvh - 10rem - env(safe-area-inset-bottom)); }
+  .notification-panel {
+    top: calc(56px + 8px);
+    max-height: calc(100dvh - 56px - 76px - env(safe-area-inset-bottom) - 24px);
+    bottom: auto;
+  }
 }
 @media (max-width: 639px) {
   .research-shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }

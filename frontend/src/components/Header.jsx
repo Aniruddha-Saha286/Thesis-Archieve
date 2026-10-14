@@ -68,7 +68,7 @@ export default function Header({
   };
 
   return (
-    <header className="research-header bg-white dark:bg-[#151413] border-b border-[#E2DFD8] dark:border-[#2A2824] sticky top-0 z-30 shadow-2xs transition-colors">
+    <header className="research-header bg-white dark:bg-[#151413] border-b border-[#E2DFD8] dark:border-[#2A2824] sticky top-0 z-40 shadow-2xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between h-14 md:h-16 gap-3">
           <button
