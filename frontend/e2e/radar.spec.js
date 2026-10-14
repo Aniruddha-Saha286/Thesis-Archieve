@@ -1,5 +1,36 @@
 import { test, expect } from '@playwright/test';
 
+for (const width of [320, 360, 390, 768, 1440]) {
+  test(`notifications stay inside the viewport without shifting the page at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 640 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.route('**/api/user/notifications', route => route.fulfill({ json: Array.from({ length: 8 }, (_, i) => ({
+      _id: `notification-${i}`, type: 'membership_granted', read: false,
+      title: 'Academic Research Access Granted — Membership Verification Notice',
+      message: 'Your research library remains available. Reference: ' + 'LongTransactionReference'.repeat(8),
+      createdAt: '2026-10-10T10:00:00Z',
+    })) }));
+    await page.getByRole('navigation', { name: 'Main navigation' }).filter({ visible: true }).getByRole('button', { name: 'Find papers', exact: true }).click();
+    for (let theme = 0; theme < 2; theme++) {
+      await page.getByRole('button', { name: /^Notifications/ }).click();
+      const dialog = page.getByRole('dialog', { name: 'Notifications', exact: true });
+      await expect(dialog.getByText('Academic Research Access Granted — Membership Verification Notice').first()).toBeVisible();
+      const bounds = await dialog.boundingBox();
+      expect(bounds.x).toBeGreaterThanOrEqual(8);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 8);
+      expect(bounds.y).toBeGreaterThanOrEqual(0);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(640);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && window.scrollX === 0)).toBe(true);
+      await expect(dialog.getByRole('button', { name: 'Mark all read' })).toBeVisible();
+      await page.screenshot({ path: `../docs/screenshots/notifications-${width}-${theme}.png`, animations: 'disabled' });
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && window.scrollX === 0)).toBe(true);
+      await page.getByLabel('Toggle Light and Dark Mode').click();
+    }
+  });
+}
+
 test('opening Find papers from a Radar deep link fetches the catalog', async ({ page }) => {
   await page.route('**/api/thesis?**', route => route.fulfill({ json: { records: [paper], pagination: { hasMore: false } } }));
   await page.getByRole('navigation', { name: 'Main navigation' }).filter({ visible: true }).getByRole('button', { name: 'Find papers', exact: true }).click();

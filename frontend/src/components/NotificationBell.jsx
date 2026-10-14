@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { Bell, Check, MessageSquare } from 'lucide-react';
+import { Bell, Check, MessageSquare, X } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import { timeAgo } from '../utils/timeAgo';
@@ -93,19 +93,20 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
         <div
           role="dialog"
           aria-label="Notifications"
-          className="absolute right-0 top-full mt-1.5 w-[min(22rem,calc(100vw-1.5rem))] bg-white dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-sm shadow-xl z-50 font-sans"
+          className="notification-panel fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-[22rem] bg-white dark:bg-[#1C1A18] border border-[#D5D1C7] dark:border-[#383530] rounded-xl shadow-xl z-50 font-sans flex flex-col overflow-hidden"
         >
-          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#F2EFE8] dark:border-[#2A2824]">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 shrink-0 border-b border-[#F2EFE8] dark:border-[#2A2824]">
             <span className="text-sm font-semibold text-[#1C1B18] dark:text-[#FAF9F5]">Notifications</span>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Close notifications" className="ml-auto min-w-11 min-h-11 flex items-center justify-center rounded-lg text-[#605D55] dark:text-[#B3AFA6] hover:bg-[#F2EFE8] dark:hover:bg-[#252320] cursor-pointer"><X className="w-4 h-4" /></button>
             {unread > 0 && (
-              <button type="button" onClick={markAllRead} className="text-xs text-[#605D55] dark:text-[#B3AFA6] hover:text-[#1C1B18] dark:hover:text-white underline cursor-pointer inline-flex items-center gap-1">
+              <button type="button" onClick={markAllRead} className="text-xs min-h-11 text-[#605D55] dark:text-[#B3AFA6] hover:text-[#1C1B18] dark:hover:text-white underline cursor-pointer inline-flex items-center gap-1">
                 <Check className="w-3 h-3" />
                 <span>Mark all read</span>
               </button>
             )}
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto">
+          <div className="min-h-0 overflow-y-auto overscroll-contain">
             {loading && items.length === 0 ? (
               <p className="p-4 text-xs text-[#737067] dark:text-[#9E9A90]">Loading…</p>
             ) : failed && items.length === 0 ? (
@@ -126,12 +127,12 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
                       <div className="flex items-start gap-2">
                         <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-rose-600'}`} aria-hidden="true" />
                         <div className="min-w-0 flex-1 space-y-0.5">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="font-semibold text-[#1C1B18] dark:text-[#FAF9F5]">{n.title}</span>
+                          <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                            <span className="min-w-0 font-semibold text-[#1C1B18] dark:text-[#FAF9F5]">{n.title}</span>
                             <span className="shrink-0 text-[11px] text-[#8C887E] dark:text-[#736E66]">{timeAgo(n.createdAt)}</span>
                           </div>
                           <p className="text-[#524F47] dark:text-[#B3AFA6] leading-relaxed break-words">{n.message}</p>
-                          <div className="flex items-center gap-3 pt-0.5">
+                          <div className="flex flex-wrap items-center gap-x-3 pt-0.5 [&_button]:min-h-11">
                             {action && (
                               <button
                                 type="button"

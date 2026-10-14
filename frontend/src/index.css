@@ -16,6 +16,11 @@
 }
 .research-header nav button { min-height: 40px; }
 .research-header nav { gap: 4px; }
+/* Anchor the mobile inbox to the viewport, not to the bell's right edge. */
+.notification-panel { max-height: min(36rem, calc(100dvh - 6rem)); overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  .notification-panel { max-height: calc(100dvh - 10rem - env(safe-area-inset-bottom)); }
+}
 @media (max-width: 639px) {
   .research-shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
   .research-header nav[aria-label="Main navigation"] {
