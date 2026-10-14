@@ -3,6 +3,10 @@ import { useAuth } from './context/AuthContext';
 import { useSocket } from './context/SocketContext';
 import axios from 'axios';
 import Header from './components/Header';
+import LocalDiscoveryShortcuts from './components/LocalDiscoveryShortcuts';
+import TopicTrendRadar from './components/TopicTrendRadar';
+import PaperSkeletons from './components/PaperSkeletons';
+import { cacheOfflineLibrary, offlineLibrary } from './utils/offlineLibrary';
 import AdminDesk from './components/AdminDesk';
 import ThesisCard from './components/ThesisCard';
 import LoginView from './components/LoginView';
@@ -62,6 +66,7 @@ const InstitutionLandscapeModal = lazyWithRetry(() => import('./components/Insti
 const CoverageModal = lazyWithRetry(() => import('./components/CoverageModal'));
 const LibraryHub = lazyWithRetry(() => import('./components/LibraryHub'));
 const TopicCheck = lazyWithRetry(() => import('./components/TopicCheck'));
+const ResearchRadar = lazyWithRetry(() => import('./components/ResearchRadar'));
 
 function PartLoading() {
   return (
@@ -122,6 +127,7 @@ export default function App() {
 
   const [searchMode, setSearchMode] = useState('publications'); // 'publications' | 'authors'
   const [searchQuery, setSearchQuery] = useState(initialUrl.q);
+  const [searchRevision, setSearchRevision] = useState(0);
   const [sessionId, setSessionId] = useState(null);
   // After a refresh the same search keeps its id, so it is not counted against the daily limit again
   const [searchContextId, setSearchContextId] = useState(() => recallSearchContext(safeSessionStorage(), initialUrl.q));
@@ -139,7 +145,13 @@ export default function App() {
   const [selectedAuthorFilter, setSelectedAuthorFilter] = useState(null);
   const [inspectingAuthor, setInspectingAuthor] = useState(null);
   const [selectedPublisher, setSelectedPublisher] = useState('');
+  const [selectedVenue, setSelectedVenue] = useState(initialUrl.venue || '');
   const [selectedPublicationType, setSelectedPublicationType] = useState(initialUrl.type);
+  useEffect(() => { if (user?.offline) setActiveTab('library'); }, [user?.offline]);
+  const [hasCodeOnly, setHasCodeOnly] = useState(initialUrl.code || false);
+  const [hasDatasetOnly, setHasDatasetOnly] = useState(initialUrl.data || false);
+  const [programFilter, setProgramFilter] = useState(initialUrl.program || "");
+  const [degreeFilter, setDegreeFilter] = useState(initialUrl.degree || "");
   const [hasPdfOnly, setHasPdfOnly] = useState(initialUrl.pdf);
   const [isOpenAccessOnly, setIsOpenAccessOnly] = useState(initialUrl.oa);
   const [yearMin, setYearMin] = useState(initialUrl.from);
@@ -189,6 +201,9 @@ export default function App() {
 
   // Primary Navigation Tabs: 'discover' | 'datasets' | 'topic' | 'library'
   const [activeTab, setActiveTab] = useState(initialUrl.view);
+  const [radarFilters, setRadarFilters] = useState(initialUrl.radar);
+  const [visitedTools, setVisitedTools] = useState(() => new Set([initialUrl.view]));
+  useEffect(() => { setVisitedTools(old => old.has(activeTab) ? old : new Set([...old, activeTab])); }, [activeTab]);
   const [topicSeed, setTopicSeed] = useState('');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
@@ -197,10 +212,12 @@ export default function App() {
 
   // Global Open Science Dataset Discovery State (DataCite & Zenodo)
   const [datasetQuery, setDatasetQuery] = useState('');
+  const [datasetRevision, setDatasetRevision] = useState(0);
   const [datasetInput, setDatasetInput] = useState('');
   const [datasetsList, setDatasetsList] = useState([]);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const [datasetError, setDatasetError] = useState(null);
+  const [datasetPartialResults, setDatasetPartialResults] = useState(false);
   const datasetRequestIdRef = useRef(0);
   const [datasetPage, setDatasetPage] = useState(1);
   const [hasMoreDatasets, setHasMoreDatasets] = useState(false);
@@ -298,6 +315,7 @@ export default function App() {
       setLoadingTheses(true);
       setSearchError(null);
       const params = {};
+      if (selectedVenue) params.venue = selectedVenue;
       const activePage = pageOverride !== undefined ? pageOverride : currentPage;
 
       if (selectedCategory && selectedCategory !== 'All Disciplines') {
@@ -312,6 +330,10 @@ export default function App() {
       if (selectedPublicationType && selectedPublicationType !== 'all') {
         params.publicationType = selectedPublicationType;
       }
+      if (hasCodeOnly) params.hasCode = "true";
+      if (hasDatasetOnly) params.hasOpenDataset = "true";
+      if (degreeFilter) params.degree = degreeFilter;
+      if (programFilter) params.program = programFilter;
       if (hasPdfOnly) {
         params.hasPdf = 'true';
       }
@@ -390,7 +412,7 @@ export default function App() {
       }
       if (requestId === currentRequestIdRef.current) {
         console.error('Error fetching theses:', err);
-        if (err.response?.status === 503 || err.response?.data?.code === 'MAINTENANCE_MODE') {
+        if (err.response?.data?.code === 'MAINTENANCE_MODE') {
           setSystemMaintenance({
             enabled: true,
             message: err.response.data?.message || 'Scheduled platform maintenance is in progress.',
@@ -399,7 +421,6 @@ export default function App() {
           setSearchQuotaError(err.response.data);
         } else {
           // Network drop, server error, rate limit... tell the user instead of silently showing stale results
-          setTheses([]);
           setHasMore(false);
           setSearchError(
             err.response?.status === 429
@@ -418,7 +439,7 @@ export default function App() {
   const fetchPublishers = async () => {
     try {
       const res = await axios.get('/api/thesis/publishers/list');
-      setPublishersList(res.data);
+      setPublishersList(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Error fetching publishers list:', err);
     }
@@ -431,12 +452,14 @@ export default function App() {
       setDatasetsList([]);
       setHasMoreDatasets(false);
       setDatasetError(null);
+      setDatasetPartialResults(false);
       setLoadingDatasets(false);
       return;
     }
     try {
       setLoadingDatasets(true);
       setDatasetError(null);
+      setDatasetPartialResults(false);
       const activePage = pageOverride !== undefined ? pageOverride : datasetPage;
       const res = await axios.get('/api/datasets', {
         params: {
@@ -446,11 +469,18 @@ export default function App() {
         },
       });
       if (requestId !== datasetRequestIdRef.current) return;
+      if (res.data.hasOutage) {
+        setDatasetError('Dataset sources could not be reached. Please try again.');
+        setHasMoreDatasets(false);
+        return;
+      }
+      setDatasetPartialResults(Object.keys(res.data.providerErrors || {}).length > 0);
       setDatasetsList(res.data.datasets || []);
       setHasMoreDatasets(Boolean(res.data.pagination?.hasMore));
     } catch (err) {
       if (requestId !== datasetRequestIdRef.current) return;
-      if (err.response?.status === 503 || err.response?.data?.code === 'MAINTENANCE_MODE') {
+      setHasMoreDatasets(false);
+      if (err.response?.data?.code === 'MAINTENANCE_MODE') {
         setSystemMaintenance({
           enabled: true,
           message: err.response.data?.message || 'Scheduled platform maintenance is in progress.',
@@ -468,9 +498,15 @@ export default function App() {
 
   const fetchUserSavedCount = async () => {
     try {
+      if (!navigator.onLine) {
+        const cached = offlineLibrary(localStorage, user?.id || user?._id);
+        setSavedPapersCount(cached?.papers.length || 0);
+        setSavedPaperIds(new Set((cached?.papers || []).map(p => p.paperId))); return;
+      }
       const res = await axios.get('/api/user/saved-papers');
       const list = Array.isArray(res.data) ? res.data : [];
       setSavedPapersCount(list.length);
+      cacheOfflineLibrary(localStorage, user?.id || user?._id, list);
       // Cards and the details window use this to show "Saved" correctly after a reload
       setSavedPaperIds(new Set(list.map((sp) => String(sp.paperId))));
     } catch (err) {
@@ -633,9 +669,12 @@ export default function App() {
     const next = buildUrl(
       {
         view: activeTab === 'publications' ? 'discover' : activeTab,
+        radar: radarFilters,
         q: searchQuery,
+        venue: selectedVenue,
         type: selectedPublicationType,
         sort: sortOrder,
+        code: hasCodeOnly, data: hasDatasetOnly, degree: degreeFilter, program: programFilter,
         pdf: hasPdfOnly,
         oa: isOpenAccessOnly,
         from: yearMin,
@@ -667,24 +706,27 @@ export default function App() {
     } else {
       window.history.pushState(selectedDetailThesis ? { ttaPaper: true } : null, '', next);
     }
-  }, [isApproved, activeTab, searchQuery, selectedPublicationType, sortOrder, hasPdfOnly, isOpenAccessOnly, yearMin, yearMax, selectedDetailThesis]);
+  }, [isApproved, activeTab, radarFilters, searchQuery, selectedVenue, selectedPublicationType, sortOrder, hasCodeOnly, hasDatasetOnly, degreeFilter, programFilter, hasPdfOnly, isOpenAccessOnly, yearMin, yearMax, selectedDetailThesis]);
 
   useEffect(() => {
     const handlePopState = () => {
       const target = parseUrlState(window.location.search);
       setActiveTab(target.view);
+      if (target.view === 'radar') setRadarFilters(target.radar);
       setMobileFilterOpen(false);
       if (target.view === 'discover') {
         const changed =
-          target.q !== searchQuery || target.type !== selectedPublicationType || target.sort !== sortOrder ||
-          target.pdf !== hasPdfOnly || target.oa !== isOpenAccessOnly || target.from !== yearMin || target.to !== yearMax;
+          target.q !== searchQuery || target.venue !== selectedVenue || target.type !== selectedPublicationType || target.sort !== sortOrder ||
+          target.code !== hasCodeOnly || target.data !== hasDatasetOnly || target.degree !== degreeFilter || target.program !== programFilter || target.pdf !== hasPdfOnly || target.oa !== isOpenAccessOnly || target.from !== yearMin || target.to !== yearMax;
         if (changed) {
           setSessionId(null);
           setSearchContextId(recallSearchContext(safeSessionStorage(), target.q));
           setCurrentPage(1);
           setSearchQuery(target.q);
           setSelectedPublicationType(target.type);
+          setSelectedVenue(target.venue);
           setSortOrder(target.sort);
+          setHasCodeOnly(target.code); setHasDatasetOnly(target.data); setDegreeFilter(target.degree); setProgramFilter(target.program);
           setHasPdfOnly(target.pdf);
           setIsOpenAccessOnly(target.oa);
           setYearMin(target.from);
@@ -701,11 +743,13 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (isApproved) {
+    if (isApproved && !user?.offline && ['discover', 'publications'].includes(activeTab)) {
       fetchTheses();
     }
   }, [
     isApproved,
+    user?.offline,
+    activeTab,
     selectedCategory,
     selectedSubjectId,
     selectedFieldId,
@@ -716,8 +760,11 @@ export default function App() {
     minCitations,
     sortOrder,
     searchQuery,
+    searchRevision,
     selectedPublisher,
+    selectedVenue,
     selectedPublicationType,
+    hasCodeOnly, hasDatasetOnly, degreeFilter, programFilter,
     hasPdfOnly,
     isOpenAccessOnly,
     yearMin,
@@ -749,7 +796,7 @@ export default function App() {
     if (activeTab === 'datasets') {
       fetchGlobalDatasets();
     }
-  }, [activeTab, datasetQuery, datasetPage]);
+  }, [activeTab, datasetQuery, datasetPage, datasetRevision]);
 
   useEffect(() => {
     if (!socket) return;
@@ -849,10 +896,12 @@ export default function App() {
     selectedFieldId ||
     selectedPublicationType !== 'all' ||
     selectedPublisher ||
+    selectedVenue ||
     selectedInstitution ||
     selectedCountries.length > 0 ||
     selectedAuthorFilter ||
     minCitations ||
+    hasCodeOnly || hasDatasetOnly || degreeFilter || programFilter ||
     hasPdfOnly ||
     isOpenAccessOnly ||
     yearMin ||
@@ -866,10 +915,12 @@ export default function App() {
     Boolean(selectedAuthorFilter),
     Boolean(minCitations),
     selectedPublicationType !== 'all',
+    hasCodeOnly, hasDatasetOnly, degreeFilter, programFilter,
     hasPdfOnly,
     isOpenAccessOnly,
     Boolean(yearMin || yearMax),
     Boolean(selectedPublisher),
+    Boolean(selectedVenue),
     Boolean(searchQuery),
   ].filter(Boolean).length;
 
@@ -894,8 +945,10 @@ export default function App() {
     setMinCitations('');
     setSortOrder('relevance');
     setSelectedPublisher('');
+    setSelectedVenue('');
     setSelectedPublicationType('all');
     setSearchQuery('');
+    setHasCodeOnly(false); setHasDatasetOnly(false); setDegreeFilter(""); setProgramFilter("");
     setHasPdfOnly(false);
     setIsOpenAccessOnly(false);
     setYearMin('');
@@ -1049,11 +1102,11 @@ export default function App() {
           </div>
         )}
 
+        {user?.offline && <div role="status" className="bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-200 p-3 text-center text-sm">Offline mode. Open Library → Saved papers for your cached reading list. Reconnect for searches and changes.</div>}
         {/* Top Header Navigation */}
         <Header
           activeTab={activeTab === 'publications' ? 'discover' : activeTab}
           onChangeActiveTab={(tab) => {
-            if (tab === 'topic') setTopicSeed('');
             setActiveTab(tab);
             setMobileFilterOpen(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1079,6 +1132,20 @@ export default function App() {
         )}
 
 
+        {visitedTools.has('radar') && <div hidden={activeTab !== 'radar'}><Suspense fallback={<PaperSkeletons />}><ResearchRadar
+          active={activeTab === 'radar'}
+          filters={radarFilters} onFiltersChange={setRadarFilters}
+          onCheckIdea={(topic) => { setTopicSeed(topic); setActiveTab('topic'); }}
+          onSearchPapers={({ query, venue, year }) => {
+            setSearchRevision(n => n + 1);
+            resetAllFilters(); setSearchQuery(query); setSelectedVenue(venue); setYearMin(year); setYearMax(year);
+            setSortOrder('newest'); setSearchMode('publications'); setActiveTab('discover');
+          }}
+          onViewDetail={(paper, tab = 'overview') => { setSelectedDetailThesis(paper); setDetailInitialTab(tab); }}
+          onCompare={handleToggleCompare} comparisonPapers={comparisonPapers} savedPaperIds={savedPaperIds}
+          onCite={setCitingThesis} onReportIssue={setReportingThesis}
+          onSavedChange={fetchUserSavedCount} onOpenMembership={() => setIsMembershipOpen(true)} onOpenAlerts={() => setIsTopicAlertsOpen(true)}
+        /></Suspense></div>}
         {activeTab === 'library' && (
           <Suspense fallback={<PartLoading />}>
           <LibraryHub
@@ -1100,8 +1167,8 @@ export default function App() {
         )}
 
         {/* Topic Check: is my thesis idea already done, and is it feasible? */}
-        {activeTab === 'topic' && (
-          <Suspense fallback={<PartLoading />}>
+        {visitedTools.has('topic') && (
+          <div hidden={activeTab !== 'topic'}><Suspense fallback={<PartLoading />}>
           <TopicCheck
             initialTopic={topicSeed}
             comparisonIds={comparisonPapers.map((p) => p._id || p.id || p.paperId)}
@@ -1113,6 +1180,8 @@ export default function App() {
             onOpenMembership={() => setIsMembershipOpen(true)}
             onOpenTopicAlerts={() => setIsTopicAlertsOpen(true)}
             onSearchInDiscover={(query, contextId) => {
+              setSearchRevision(n => n + 1);
+              resetAllFilters();
               setSearchMode('publications');
               setSessionId(null);
               setSearchContextId(contextId || null);
@@ -1122,12 +1191,12 @@ export default function App() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
-          </Suspense>
+          </Suspense></div>
         )}
 
         {/* 2. Open Science Datasets Discovery */}
         {activeTab === 'datasets' && (
-          <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+          <div className="dataset-workspace max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
             {/* Datasets Search Header */}
             <div className="dataset-hero bg-white dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] p-6 md:p-8 rounded-2xl space-y-5 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1148,10 +1217,11 @@ export default function App() {
                   e.preventDefault();
                   setDatasetQuery(datasetInput.trim());
                   setDatasetPage(1);
+                  setDatasetRevision(n => n + 1);
                 }}
                 className="flex items-center gap-2"
               >
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <Search className="w-4 h-4 text-[#737067] dark:text-[#9A968D] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
@@ -1189,6 +1259,11 @@ export default function App() {
             </div>
 
             {/* Datasets List */}
+            {datasetPartialResults && !loadingDatasets && !datasetError && (
+              <p role="status" className="text-sm text-amber-900 dark:text-amber-200">
+                Some dataset sources did not respond. Results may be incomplete. Try your search again in a moment.
+              </p>
+            )}
             {loadingDatasets ? (
               <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] space-y-2">
                 <div className="w-6 h-6 border-2 border-[#2C6B3F] dark:border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -1235,10 +1310,11 @@ export default function App() {
                 <p className="text-xs text-[#737067] dark:text-[#9A968D] max-w-md mx-auto">
                   Try fewer or more general words, or the English name of the topic.
                 </p>
+                {datasetPage > 1 && <button type="button" onClick={() => setDatasetPage(p => Math.max(1, p - 1))} className="min-h-[44px] px-3 underline cursor-pointer">Previous page</button>}
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] flex items-center justify-between pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+                <div className="text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
                   <span><strong>{datasetsList.length}</strong> datasets on page <strong>{datasetPage}</strong></span>
                   <span className="text-[11px] text-[#605D55] dark:text-[#9A968D]">From DataCite, Zenodo, Figshare, Dryad, Harvard Dataverse and Hugging Face</span>
                 </div>
@@ -1357,6 +1433,7 @@ export default function App() {
             <DiscoverSearchBar
               searchQuery={searchQuery}
               onSearch={(q) => {
+                setSearchRevision(n => n + 1);
                 setSessionId(null);
                 setSearchContextId(null);
                 setSearchQuery(q);
@@ -1372,6 +1449,9 @@ export default function App() {
                 setSelectedPublicationType(type);
                 setCurrentPage(1);
               }}
+              hasCodeOnly={hasCodeOnly} hasDatasetOnly={hasDatasetOnly}
+              onToggleHasCodeOnly={checked => { setHasCodeOnly(checked); setSessionId(null); setCurrentPage(1); }}
+              onToggleHasDatasetOnly={checked => { setHasDatasetOnly(checked); setSessionId(null); setCurrentPage(1); }}
               hasPdfOnly={hasPdfOnly}
               onToggleHasPdfOnly={(checked) => {
                 setSessionId(null);
@@ -1622,6 +1702,8 @@ export default function App() {
 
               {/* Group 4 & 5: Where (University, Country) and Impact (Citations) */}
               <DiscoveryFiltersPanel
+                selectedVenue={selectedVenue}
+                onSelectVenue={value => { setSelectedVenue(value); setSessionId(null); setCurrentPage(1); }}
                 subjects={subjectsList}
                 selectedSubjectId={selectedSubjectId}
                 onSelectSubject={(subId) => {
@@ -1703,6 +1785,11 @@ export default function App() {
 
           {/* Right Column: Thesis Catalog Grid */}
           <main className={`${mobileFilterOpen ? 'md:col-span-3' : ''} min-w-0 space-y-4`}>
+            <LocalDiscoveryShortcuts institution={selectedInstitution} degree={degreeFilter} program={programFilter}
+              onInstitution={inst => { setSelectedInstitution(inst); setInstitutionMode('affiliation'); setSessionId(null); setCurrentPage(1); }}
+              onDegree={degree => { setDegreeFilter(degree); setSessionId(null); setCurrentPage(1); }}
+              onProgram={program => { setProgramFilter(program); setSessionId(null); setCurrentPage(1); }} />
+            {!searchQuery && <TopicTrendRadar onTopic={topic => { setSearchQuery(topic); setSessionId(null); setSearchContextId(null); setCurrentPage(1); }} />}
             {/* Results header, one row: how many, how they are ordered, and the two things a student may want next */}
             {(() => {
               const sourceEntries = Object.entries(providerTelemetry);
@@ -1901,6 +1988,7 @@ export default function App() {
             {hasAnyActiveFilter && (
               <div className="p-2.5 bg-[#FAF9F5] dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm text-xs font-mono-meta flex items-center gap-1.5 flex-wrap">
                 <span className="text-[11px] text-[#737067] dark:text-[#9A968D] mr-1">Filters on:</span>
+                {selectedVenue && <button type="button" onClick={() => { setSelectedVenue(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove venue filter" className="border rounded-lg px-2 py-1">Venue: {selectedVenue.toUpperCase()} ×</button>}
                 {searchQuery && (
                   <span className="inline-flex items-center gap-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-0.5 rounded-xs text-[#1C1B18] dark:text-[#F0EDE6]">
                     <span>“{searchQuery}”</span>
@@ -2015,11 +2103,9 @@ export default function App() {
             )}
 
             {/* Catalog Entries List */}
-            {loadingTheses ? (
-              <div className="py-16 text-center text-xs font-mono-meta text-[#737067] dark:text-[#9A968D] space-y-2">
-                <div className="w-6 h-6 border-2 border-[#1C1B18] dark:border-amber-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                <div>Searching the archive and the outside sources…</div>
-              </div>
+            {loadingTheses && theses.length > 0 && <p role="status" className="text-sm mb-3">Refreshing sources. Previous results remain visible.</p>}
+            {loadingTheses && theses.length === 0 ? (
+              <PaperSkeletons />
             ) : theses.length === 0 && searchError ? null : theses.length === 0 ? (
               <div className="bg-white dark:bg-[#161513] border border-[#E2DFD8] dark:border-[#2C2A26] p-12 text-center rounded-sm space-y-4 transition-colors">
                 <p className="text-sm font-medium text-[#1C1B18] dark:text-[#F0EDE6]">

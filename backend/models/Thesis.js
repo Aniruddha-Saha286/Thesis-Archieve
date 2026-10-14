@@ -164,6 +164,7 @@ const thesisSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  isOpenDataset: { type: Boolean, default: false },
   codeUrl: {
     type: String,
     default: '',

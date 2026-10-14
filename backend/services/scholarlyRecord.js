@@ -239,7 +239,10 @@ function createNormalizedRecord(data) {
     sourceUrl: data.sourceUrl ? String(data.sourceUrl).trim() : null,
     sourceRights: data.sourceRights ? String(data.sourceRights).trim() : null,
     isPeerReviewed: typeof data.isPeerReviewed === 'boolean' ? data.isPeerReviewed : Boolean(data.hasJournalRef),
+    datePrecision: data.datePrecision || (data.publicationDate ? 'day' : publishedYear ? 'year' : 'unknown'),
     publicationDate: data.publicationDate || (publishedYear ? `${publishedYear}-01-01` : null),
+    arxivId: data.arxivId || null,
+    acceptanceStatus: data.acceptanceStatus || 'unknown',
     publishedYear: publishedYear,
     venue: data.venue ? String(data.venue).trim() : null,
     publisher: data.publisher ? String(data.publisher).trim() : null,
@@ -256,6 +259,7 @@ function createNormalizedRecord(data) {
     citationSource: citationMetrics ? citationMetrics.source : null,
     citationRetrievalDate: citationMetrics ? citationMetrics.retrievedAt : null,
     datasetUrl: data.datasetUrl ? String(data.datasetUrl).trim() : null,
+    isOpenDataset: data.isOpenDataset === true,
     codeUrl: data.codeUrl ? String(data.codeUrl).trim() : null,
     catalogId: data.catalogId || (normDoi ? `DOI:${normDoi}` : null),
     sources: Array.isArray(data.sources) ? data.sources : [{

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
+import CitationExplorer from './CitationExplorer';
+import PaperReadingPane from './PaperReadingPane';
 import { useAuth } from '../context/AuthContext';
 import { buildSummaryView, buildSummaryCopyText, buildFullTextView, buildFullTextCopyText } from '../utils/summarySections';
 import {
@@ -49,7 +51,7 @@ export default function PublicationDetailModal({
   initiallySaved = false,
 }) {
   useEscapeToClose(onClose, Boolean(thesis));
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const currentThesisId = thesis ? (thesis._id || thesis.id || thesis.doi || thesis.title || '') : '';
   const currentThesisIdRef = useRef(currentThesisId);
   const summaryRequestRef = useRef(0);
@@ -164,6 +166,7 @@ export default function PublicationDetailModal({
         await axios.post('/api/user/saved-papers', {
           paperId: paperId,
           title: thesis.title,
+          abstract: thesis.abstract || "",
           doi: thesis.doi || '',
           authors: thesis.author || (Array.isArray(thesis.authors) ? thesis.authors.map((a) => a.name).join(', ') : ''),
           year: thesis.publishedYear,
@@ -286,6 +289,7 @@ export default function PublicationDetailModal({
         analysisMode: mode,
         paper: {
           title: thesis.title,
+          abstract: thesis.abstract || "",
           abstract: thesis.abstract,
           doi: thesis.doi || '',
           pdfUrl: thesis.pdfUrl || '',
@@ -774,12 +778,14 @@ export default function PublicationDetailModal({
             <Quote className="w-3.5 h-3.5" />
             <span>Citations &amp; source</span>
           </button>
+          <button type="button" onClick={() => setActiveTab('reader')} aria-pressed={activeTab === 'reader'} className={`min-h-[42px] px-3 py-2 border-b-2 font-semibold whitespace-nowrap ${activeTab === 'reader' ? 'border-emerald-600 text-emerald-700 dark:text-emerald-300' : 'border-transparent'}`}>Read & notes</button>
         </div>
 
         {/* ========================================================================= */}
         {/* 3. SCROLLABLE TAB CONTENT                                                 */}
         {/* ========================================================================= */}
         <div className="tta-light-panel flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+          {activeTab === 'reader' && <PaperReadingPane key={`${currentThesisId}:${user?.id || user?._id || 'guest'}`} paper={{ ...thesis, pdfUrl: freePdfState.result?.pdfUrl || thesis.pdfUrl }} user={user} onSavedChange={onSavedPapersChange} />}
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
@@ -898,6 +904,8 @@ export default function PublicationDetailModal({
                 </div>
               )}
 
+              {thesis.reviewLabel && <p className="text-sm font-semibold">{thesis.reviewLabel}</p>}
+              {thesis.alternateVersions?.length > 0 && <section aria-label="Alternate paper versions" className="rounded-xl border border-[#E5E2DA] p-4"><h4 className="text-sm font-bold mb-2">Sources & alternate versions</h4><div className="flex flex-wrap gap-3 text-sm">{thesis.alternateVersions.filter(v => /^https:\/\//.test(v.url)).map(v => <a key={v.url} href={v.url} target="_blank" rel="noreferrer" className="underline">{v.provider || v.source || 'Source record'}</a>)}</div></section>}
               {/* Abstract Section with High Legibility */}
               <div className="space-y-2">
                 <h4 className="text-xs font-mono-meta font-bold uppercase tracking-wider text-[#605D55]">
@@ -1467,6 +1475,7 @@ export default function PublicationDetailModal({
           {/* TAB 4: CITATIONS & PROVENANCE */}
           {activeTab === 'citations' && (
             <div className="space-y-5">
+              <CitationExplorer key={currentThesisId} paper={thesis} />
               {/* Citation Generator Action Banner */}
               <div className="p-4 bg-white border border-[#D5D1C7] rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
                 <div className="space-y-1">

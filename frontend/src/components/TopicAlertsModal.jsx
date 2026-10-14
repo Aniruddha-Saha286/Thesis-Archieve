@@ -30,7 +30,7 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
       setAlerts(alertsRes.data || []);
       setNotifications(notifsRes.data || []);
     } catch (err) {
-      console.error('Failed to load topic alerts:', err);
+      showNotice('Follows could not be loaded. Reopen this panel to retry.', 'error');
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
       const res = await axios.post('/api/user/alerts/check');
       setCheckStatus(res.data.notificationsCreated > 0
         ? `Found new papers! Generated ${res.data.notificationsCreated} notification(s).`
-        : 'Topic scan complete: No newly deposited papers since last check.'
+        : 'Scan complete: no new matches in the available index. Source delays may limit coverage.'
       );
       fetchAlertsAndNotifications();
     } catch (err) {
@@ -218,10 +218,11 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
                   >
                     <div className="space-y-0.5">
                       <div className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6]">{al.topic}</div>
+                      {al.venueId && <p>Venue: {al.venueId.toUpperCase()} · External indexed papers</p>}
                       <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center gap-2">
                         <span>Discipline: <strong>{al.category}</strong></span>
                         <span>•</span>
-                        <span>Last scanned: {al.lastCheckedAt ? new Date(al.lastCheckedAt).toLocaleDateString() : 'Pending first scan'}</span>
+                        <span>Last index scan: {al.externalCheckedAt ? new Date(al.externalCheckedAt).toLocaleDateString() : 'Pending first scan'}</span>
                       </div>
                     </div>
 

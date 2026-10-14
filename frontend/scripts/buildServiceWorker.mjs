@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+const root = path.resolve(import.meta.dirname, '..');
+const files = fs.readdirSync(path.join(root, 'dist/assets')).filter(name => /\.(js|css)$/.test(name) && !name.startsWith('exceljs'));
+const assets = ['/index.html', '/manifest.webmanifest', '/app-icon.svg', '/app-icon-192.png', '/app-icon-512.png', ...files.map(name => '/assets/' + name)];
+const version = crypto.createHash('sha256').update(JSON.stringify(files) + fs.readFileSync(path.join(root, 'dist/index.html'), 'utf8')).digest('hex').slice(0, 16);
+const template = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
+fs.writeFileSync(path.join(root, 'dist/sw.js'), template.replace('__BUILD_VERSION__', version).replace('__CORE_ASSETS__', JSON.stringify(assets)));
+console.log('Offline app shell prepared; authenticated APIs are not cached.');

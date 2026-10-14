@@ -1,16 +1,18 @@
 const crypto = require('crypto');
+const { cachedProvider } = require('./researchCache');
+const { matchesResources } = require('./resourceLinks');
 const { queryMatch } = require('./queryRelevance');
 const { searchLocal } = require('./providers/local');
-const { searchOpenAlex } = require('./providers/openalex');
-const { searchArxiv } = require('./providers/arxiv');
-const { searchCrossref } = require('./providers/crossref');
-const { searchEuropePmc } = require('./providers/europePmc');
-const { searchHal } = require('./providers/hal');
-const { searchDoaj } = require('./providers/doaj');
-const { searchSemanticScholar } = require('./providers/semanticScholar');
-const { searchOpenAire } = require('./providers/openaire');
-const { searchCore } = require('./providers/core');
-const { searchDblp } = require('./providers/dblp');
+const searchOpenAlex = cachedProvider("searchOpenAlex", require('./providers/openalex').searchOpenAlex);
+const searchArxiv = cachedProvider("searchArxiv", require('./providers/arxiv').searchArxiv);
+const searchCrossref = cachedProvider("searchCrossref", require('./providers/crossref').searchCrossref);
+const searchEuropePmc = cachedProvider("searchEuropePmc", require('./providers/europePmc').searchEuropePmc);
+const searchHal = cachedProvider("searchHal", require('./providers/hal').searchHal);
+const searchDoaj = cachedProvider("searchDoaj", require('./providers/doaj').searchDoaj);
+const searchSemanticScholar = cachedProvider("searchSemanticScholar", require('./providers/semanticScholar').searchSemanticScholar);
+const searchOpenAire = cachedProvider("searchOpenAire", require('./providers/openaire').searchOpenAire);
+const searchCore = cachedProvider("searchCore", require('./providers/core').searchCore);
+const searchDblp = cachedProvider("searchDblp", require('./providers/dblp').searchDblp);
 const { mergeTwoRecords, cleanTitleForMatching, getFirstAuthorSurname } = require('./deduplicator');
 const { mapToCanonicalSubject, getSubjectById } = require('./subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('./institutionService');
@@ -327,7 +329,13 @@ function normalizeCountryCodes(countryCodes) {
 function normalizeSessionFilterKey(filters = {}) {
   return {
     publicationType: normalizePublicationType(filters.publicationType),
+    venue: filters.venue || '',
     hasPdf: Boolean(filters.hasPdf),
+    hasCode: Boolean(filters.hasCode),
+    hasDataset: Boolean(filters.hasDataset),
+    hasOpenDataset: Boolean(filters.hasOpenDataset),
+    degree: filters.degree || "",
+    program: filters.program || '',
     isOpenAccess: Boolean(filters.isOpenAccess),
     category: filters.category || 'All Disciplines',
     subjectId: filters.subjectId ? String(filters.subjectId).trim().toLowerCase() : '',
@@ -385,7 +393,9 @@ function sortRecords(records, sort, query, pageNum) {
       if (pageNum === 1 && a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       const yrA = a.publishedYear || 0;
       const yrB = b.publishedYear || 0;
-      return yrB - yrA;
+      const dateA = a.datePrecision === 'year' ? 0 : Date.parse(a.publicationDate) || 0;
+      const dateB = b.datePrecision === 'year' ? 0 : Date.parse(b.publicationDate) || 0;
+      return yrB - yrA || dateB - dateA || String(a.id || a._id).localeCompare(String(b.id || b._id));
     });
   } else {
     const words = (query || '').toLowerCase().split(/\s+/).filter(Boolean);
@@ -876,6 +886,8 @@ async function executeSearchSessionLocked(session, {
       if (Array.isArray(res.records)) {
         for (const record of res.records) {
           if (!record || !record.title) continue;
+          if (!matchesResources(record, filters)) continue;
+          if (filters.venue && require('./venueCatalog').identifyVenue(record.venue) !== filters.venue) continue;
           const match = queryMatch(record, query);
           if (!match.accepted) continue;
           record.queryMatch = match;
@@ -1182,6 +1194,7 @@ async function executeSearchSession(params) {
 }
 
 module.exports = {
+  sortRecords,
   executeSearchSession,
   computeSessionHash,
   validateAndGetSession,

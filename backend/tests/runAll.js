@@ -27,6 +27,9 @@ const { runFullTextTests } = require('./fullText.test');
 const { runReleaseBackendTests } = require('./releaseBackend.test');
 const { runAiPaperAnalysisTests } = require('./aiPaperAnalysis.test');
 const { runRetrievalRelevanceTests } = require('./retrievalRelevance.test');
+const { runResearchFeaturesTests } = require('./researchFeatures.test');
+const { runOfflineShellTests } = require('./offlineShell.test');
+const { runDiscoveryRadarTests } = require('./discoveryRadar.test');
 
 console.log('===============================================================');
 console.log('  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   ');
@@ -93,9 +96,12 @@ async function main() {
     await runReleaseBackendTests();
     await runAiPaperAnalysisTests();
     await runRetrievalRelevanceTests();
+    await runResearchFeaturesTests();
+    await runOfflineShellTests();
+    await runDiscoveryRadarTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 29 DETERMINISTIC TEST SUITES PASSED (0 FAILURES, 100% OK)');
+    console.log('  ALL 32 DETERMINISTIC TEST SUITES PASSED (original 31 plus Research Radar)');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

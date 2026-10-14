@@ -321,6 +321,7 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
         fullTextLocations: fullTextLocations,
         isRetracted: doc.isRetracted || false,
         datasetUrl: doc.datasetUrl || null,
+        isOpenDataset: doc.isOpenDataset === true,
         codeUrl: doc.codeUrl || null,
         catalogId: doc.catalogId,
         upvotes: doc.upvotes || 0,

@@ -1,5 +1,7 @@
 # The Thesis Archive
 
+Research Radar upgrade: see [audit, configuration, verification and rollout notes](docs/research-radar.md). Radar uses a separate external-paper index and is available to approved members. Ingestion is disabled by default; no migration or deployment is automatic.
+
 A search site for university students: theses, papers and datasets from ten open sources plus your own archive, a thesis-topic check, a personal library, and bKash membership.
 
 - `frontend/` — the website (React + Vite + Tailwind)
@@ -34,7 +36,7 @@ npm run dev                 # http://localhost:5173
 
 Check the server: open `http://localhost:5000/api/health`.
 
-Run the server tests (no database or internet needed): `cd backend && npm test`. The last line should read `ALL 29 DETERMINISTIC TEST SUITES PASSED`.
+Run the server tests (no database or internet needed): `cd backend && npm test`. The last line should read `ALL 32 DETERMINISTIC TEST SUITES PASSED`.
 
 ## 3. Settings
 
@@ -167,3 +169,23 @@ Dataset adapters reject explicitly wrong resource types returned by DataCite, Ze
 In Topic Check, optionally select a university before running the check. Dedicated affiliation and awarding-university searches reuse the original search context. The report includes clickable topic matches, matched words and counts based on the retrieved sample, with source failures identified. Author affiliation does not establish a thesis awarding institution. Thesis repository coverage remains limited. Cached topic reports are separated by university and account.
 
 Live verification on 2026-10-08 found unrelated age-bias/blog results in a Bangla sentiment dataset search before the change. After filtering, that sample returned a matching Bangla sentiment dataset, and the crop-disease sample returned leaf/crop image datasets. Eight paper results passed the metadata check for each query. Zenodo timed out in the final sample, so this is not a comprehensive retrieval benchmark. AI credentials were configured in the ignored backend .env; the provider returned insufficient API credits, so a real AI analysis remains unverified.
+
+## Research workspace tools
+
+- **Literature review matrix:** In Library, select up to 10 saved papers, or open the comparison matrix. Choose Excel (.xlsx), CSV or Markdown and export. Personal structured notes and comparison edits take precedence over cached English analyses. Existing membership rules still govern access to cached analysis. Exporting never calls an AI provider or consumes an AI credit. Missing information stays marked; supporting excerpts, source coverage and field provenance travel with the table. Review them before writing a thesis claim.
+- **Resource filters:** Has code requires a supported repository link. Has open dataset requires a dataset link and an explicit `isOpenDataset: true` metadata declaration; unknown access is excluded. A link alone does not establish a license or open access. Depositors can declare public dataset availability; older archive records need reviewed metadata before matching this filter.
+- **Research trail:** Paper details → Citations → Explore citation tree shows up to 20 indexed references, 20 citing papers and recommended similar works. OpenAlex or Semantic Scholar identifiers (or a DOI for OpenAlex lookup) are required. Any returned paper can become the next seed. This is a limited neighborhood, not a complete bibliography; provider failures and missing coverage are displayed.
+- **Read & notes:** The details tab places a directly linked PDF beside personal library notes and existing analysis. Small screens stack the panels. Publisher embedding restrictions and mobile PDF support vary; an external-reader fallback is provided. No PDF is downloaded for offline storage.
+- **Local discovery:** Expand Bangladesh university & program shortcuts for institution chips and recorded degree/department filters. Affiliation is distinct from the institution awarding a thesis. Unknown degree or department metadata does not match a selected shortcut.
+- **Public collections:** Enable sharing inside a collection to obtain a read-only link. The collection name, description and paper metadata become visible to anyone with that link. Notes and account details are excluded. Turn off sharing to revoke the link; enabling it again creates a new token.
+- **Topic activity:** The collapsed monthly radar counts approved papers added to this archive by category. It is hidden when no data exists and does not claim global topic popularity.
+
+External search-provider responses are cached per process for six hours, with limits of 300 entries and 16 MiB. Concurrent identical requests share their work; failed and partial results are not retained. Local archive searches remain live. Cache keys include provider parameters, so pages and filters remain separate. Multiple server processes have separate caches; Redis and load testing would be needed before claiming a specific response time or capacity improvement. Autocomplete offers approved archive titles and the existing author lookup.
+
+### Mobile installation and offline library
+
+Run `cd frontend && npm run build` and serve the generated `dist` over HTTPS (localhost is allowed for development). The build generates a versioned service worker and install manifest. Supported Android browsers show an install prompt; iOS uses Share → Add to Home Screen. Installation is not enabled by the Vite development server.
+
+After signing in online and opening Library, up to 100 saved papers, notes and available abstracts are retained on that browser for read-only offline viewing. Snapshots are bound to the current account/session and cleared on logout. They remain on the device while signed in, so sign out on shared computers. The service worker caches the app shell and static assets only, never authenticated API responses. Offline searching, edits, exports, shared links and new AI analyses require a connection. Reconnecting revalidates the session.
+
+Verification covers exports (including a real Excel round trip), cache boundaries and expiry, citation fixtures, sharing ownership/revocation, account-separated snapshots and service-worker request handling. Real provider coverage, publisher PDF embedding, and Android/iOS installation still need checks on the deployed HTTPS site. `npm run lint` currently reports repository warnings but no errors; production builds also report the lazily loaded Excel library size and an existing FeedbackModal import warning.

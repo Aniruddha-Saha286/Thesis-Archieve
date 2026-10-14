@@ -1,13 +1,15 @@
 
-export const VIEWS = ['discover', 'datasets', 'topic', 'library'];
+export const VIEWS = ['discover', 'datasets', 'topic', 'library', 'radar'];
 export const SORTS = ['relevance', 'citations', 'newest'];
 export const PUBLICATION_TYPES = ['all', 'thesis', 'journal-article', 'conference-paper', 'preprint', 'book'];
 
 export const DEFAULT_URL_STATE = Object.freeze({
   view: 'discover',
   q: '',
+  venue: '',
   type: 'all',
   sort: 'relevance',
+  code: false, data: false, degree: "", program: "",
   pdf: false,
   oa: false,
   from: '',
@@ -34,8 +36,20 @@ export function parseUrlState(search) {
   return {
     view: VIEWS.includes(view) ? view : DEFAULT_URL_STATE.view,
     q: cleanText(params.get('q'), 300),
+    radar: {
+      query: cleanText(params.get('rq'), 150),
+      venue: ['cvpr','iccv','eccv','wacv','iclr','neurips','jmlr','arxiv'].includes(params.get('rv')) ? params.get('rv') : '',
+      range: ['7','30','90','year'].includes(params.get('rr')) ? params.get('rr') : 'year',
+      mode: params.get('rm') === 'activity' ? 'activity' : 'publication',
+      provider: ['CVF','JMLR','OpenReview','DBLP','arXiv'].includes(params.get('rp')) ? params.get('rp') : '',
+      year: cleanYear(params.get('ry')),
+    },
+    venue: ['cvpr','iccv','eccv','wacv','iclr','neurips','jmlr','arxiv'].includes(params.get('venue')) ? params.get('venue') : '',
     type: PUBLICATION_TYPES.includes(type) ? type : DEFAULT_URL_STATE.type,
     sort: SORTS.includes(sort) ? sort : DEFAULT_URL_STATE.sort,
+    code: params.get('code') === '1', data: params.get('data') === '1',
+    degree: ['bsc','msc','phd'].includes(params.get('degree')) ? params.get('degree') : '',
+    program: ['cse','eee','business','pharmacy'].includes(params.get('program')) ? params.get('program') : '',
     pdf: params.get('pdf') === '1',
     oa: params.get('oa') === '1',
     from: cleanYear(params.get('from')),
@@ -50,11 +64,20 @@ export function buildUrl(state, pathname = '/') {
   const params = new URLSearchParams();
 
   if (s.view && s.view !== 'discover' && VIEWS.includes(s.view)) params.set('view', s.view);
+  if (s.view === 'radar' && s.radar) {
+    for (const [key, value] of Object.entries({ rq: s.radar.query, rv: s.radar.venue, rr: s.radar.range, rm: s.radar.mode, rp: s.radar.provider, ry: s.radar.year })) {
+      if (value) params.set(key, value);
+    }
+  }
 
   if (!s.view || s.view === 'discover') {
     if (s.q) params.set('q', s.q);
+    if (s.venue) params.set('venue', s.venue);
     if (s.type && s.type !== 'all') params.set('type', s.type);
     if (s.sort && s.sort !== 'relevance') params.set('sort', s.sort);
+    if (s.code) params.set('code', '1'); if (s.data) params.set('data', '1');
+    if (['bsc','msc','phd'].includes(s.degree)) params.set('degree', s.degree);
+    if (['cse','eee','business','pharmacy'].includes(s.program)) params.set('program', s.program);
     if (s.pdf) params.set('pdf', '1');
     if (s.oa) params.set('oa', '1');
     if (s.from) params.set('from', s.from);

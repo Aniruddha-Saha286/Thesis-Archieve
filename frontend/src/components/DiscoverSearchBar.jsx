@@ -23,6 +23,10 @@ export default function DiscoverSearchBar({
   selectedPublicationType = 'all',
   onChangePublicationType,
   hasPdfOnly = false,
+  hasCodeOnly = false,
+  hasDatasetOnly = false,
+  onToggleHasCodeOnly,
+  onToggleHasDatasetOnly,
   onToggleHasPdfOnly,
   isOpenAccessOnly = false,
   onToggleIsOpenAccessOnly,
@@ -33,6 +37,9 @@ export default function DiscoverSearchBar({
   onOpenTopicCheck,
 }) {
   const [inputValue, setInputValue] = useState(searchQuery);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
   const debounceTimerRef = useRef(null);
 
   const [authorCandidates, setAuthorCandidates] = useState([]);
@@ -42,6 +49,17 @@ export default function DiscoverSearchBar({
   const authorSearchTimerRef = useRef(null);
   const authorRequestIdRef = useRef(0);
   const candidateQueryRef = useRef('');
+
+  useEffect(() => {
+    setSuggestions([]); setSuggestionIndex(-1);
+    if (searchMode === 'authors' || inputValue.trim().length < 2 || !showSuggestions) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      axios.get('/api/research/suggestions', { params: { q: inputValue.trim() }, signal: controller.signal })
+        .then(({ data }) => { if (!controller.signal.aborted) setSuggestions(data.suggestions || []); }).catch(() => {});
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [inputValue, searchMode, showSuggestions]);
 
   useEffect(() => {
     return () => {
@@ -54,6 +72,7 @@ export default function DiscoverSearchBar({
     const handleClickOutside = (e) => {
       if (authorDropdownRef.current && !authorDropdownRef.current.contains(e.target)) {
         setShowAuthorDropdown(false);
+        setShowSuggestions(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -76,6 +95,8 @@ export default function DiscoverSearchBar({
   const handleChange = (e) => {
     const val = e.target.value;
     setInputValue(val);
+    setShowSuggestions(true);
+    setSuggestionIndex(-1);
 
     if (searchMode === 'authors') {
       if (authorSearchTimerRef.current) clearTimeout(authorSearchTimerRef.current);
@@ -111,6 +132,10 @@ export default function DiscoverSearchBar({
   const handleSubmit = async (e) => {
     e.preventDefault();
     setShowAuthorDropdown(false);
+    setShowSuggestions(false);
+    if (searchMode !== 'authors' && showSuggestions && suggestionIndex >= 0 && suggestions[suggestionIndex]) {
+      const chosen = suggestions[suggestionIndex]; setInputValue(chosen); triggerSearch(chosen); return;
+    }
     if (searchMode === 'authors') {
       const q = inputValue.trim();
       if (!q) return;
@@ -143,6 +168,7 @@ export default function DiscoverSearchBar({
 
   const handleClear = () => {
     setInputValue('');
+    setShowSuggestions(false);
     authorRequestIdRef.current += 1;
     candidateQueryRef.current = '';
     setLoadingCandidates(false);
@@ -177,9 +203,21 @@ export default function DiscoverSearchBar({
               <input
                 type="text"
                 aria-label={searchMode === 'authors' ? 'Search researchers' : 'Search research papers'}
+                role={searchMode === 'authors' ? undefined : 'combobox'}
+                aria-autocomplete={searchMode === 'authors' ? undefined : 'list'}
+                aria-expanded={searchMode === 'authors' ? undefined : showSuggestions && suggestions.length > 0}
+                aria-controls={showSuggestions && suggestions.length > 0 ? 'paper-search-suggestions' : undefined}
+                aria-activedescendant={showSuggestions && suggestionIndex >= 0 ? `paper-suggestion-${suggestionIndex}` : undefined}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') { setShowSuggestions(false); setSuggestionIndex(-1); setShowAuthorDropdown(false); }
+                  if (showSuggestions && suggestions.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+                    event.preventDefault(); setSuggestionIndex(i => event.key === 'ArrowDown' ? (i + 1) % suggestions.length : (i <= 0 ? suggestions.length - 1 : i - 1));
+                  }
+                }}
                 value={inputValue}
                 onChange={handleChange}
                 onFocus={() => {
+                  if (searchMode !== 'authors') setShowSuggestions(true);
                   if (searchMode === 'authors' && authorCandidates.length > 0) {
                     setShowAuthorDropdown(true);
                   }
@@ -223,6 +261,13 @@ export default function DiscoverSearchBar({
               </div>
             </div>
           </form>
+          {searchMode !== 'authors' && showSuggestions && suggestions.length > 0 && (
+            <ul id="paper-search-suggestions" role="listbox" aria-label="Indexed paper title suggestions" className="absolute top-full left-0 right-0 mt-2 z-50 rounded-xl border bg-white dark:bg-[#201F1C] text-[#1C1B18] dark:text-white shadow-xl overflow-hidden">
+              {suggestions.map((title, index) => <li key={title} id={`paper-suggestion-${index}`} role="option" aria-selected={suggestionIndex === index}>
+                <button type="button" tabIndex={-1} onClick={() => { setInputValue(title); setShowSuggestions(false); triggerSearch(title); }} className={`block w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 dark:hover:bg-emerald-950 ${suggestionIndex === index ? 'bg-emerald-50 dark:bg-emerald-950' : ''}`}>{title}</button>
+              </li>)}
+            </ul>
+          )}
 
           {/* Author Candidates Autocomplete Dropdown */}
           {searchMode === 'authors' && showAuthorDropdown && (
@@ -365,6 +410,8 @@ export default function DiscoverSearchBar({
 
           {/* Secondary Quick Toggles & Controls */}
           <div className="flex items-center gap-3 text-xs text-[#524F47] dark:text-[#B3AFA6] flex-wrap">
+            <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={hasCodeOnly} onChange={e => onToggleHasCodeOnly?.(e.target.checked)} />Has code</label>
+            <label className="flex items-center gap-1.5 cursor-pointer" title="Requires a linked dataset explicitly marked open in the metadata. Unknown access is excluded; verify the repository license."><input type="checkbox" checked={hasDatasetOnly} onChange={e => onToggleHasDatasetOnly?.(e.target.checked)} />Has open dataset</label>
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"

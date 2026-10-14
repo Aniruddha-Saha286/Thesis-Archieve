@@ -3,6 +3,7 @@ const Thesis = require('../models/Thesis');
 const Notification = require('../models/Notification');
 const { getEffectiveEntitlements } = require('./entitlementService');
 const { emitToUser } = require('../socket');
+const { checkDiscoveryAlert } = require('./discoveryAlerts');
 
 let isRunning = false;
 
@@ -32,6 +33,10 @@ async function checkAlertsForUser(userId) {
       break;
     }
     evaluatedAlertsCount++;
+
+    const checkStartedAt = new Date();
+    totalNotificationsCreated += await checkDiscoveryAlert(user, alert, checkStartedAt);
+    if (alert.venueId) continue;
 
     const lastChecked = alert.lastCheckedAt || alert.createdAt || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const regex = new RegExp(alert.topic.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -106,7 +111,7 @@ async function checkAlertsForUser(userId) {
       }
     }
 
-    alert.lastCheckedAt = new Date();
+    alert.lastCheckedAt = checkStartedAt;
   }
 
   await user.save();

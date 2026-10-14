@@ -42,6 +42,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
     publishedYear: new Date().getFullYear(),
     pdfUrl: '',
     datasetUrl: '',
+    isOpenDataset: false,
     datasetSize: '',
     datasetFormat: '',
     codeUrl: '',
@@ -384,6 +385,7 @@ export default function ProposeThesisModal({ isOpen, onClose, onCreated, onSucce
                 placeholder="https://zenodo.org/... or https://dataverse.harvard.edu/..."
                 className="w-full bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] text-xs font-mono-meta"
               />
+              <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={formData.isOpenDataset} onChange={e => setFormData(previous => ({ ...previous, isOpenDataset: e.target.checked }))} />Dataset is publicly downloadable (verify the repository's access and license)</label>
               <p className="text-[11px] text-[#737067] dark:text-[#9C988F] mt-1 font-mono-meta">
                 Must be on a research data site: Zenodo, Harvard Dataverse, Dryad, Figshare, OSF, Kaggle, Hugging Face or GitHub. Links to personal drives are not accepted.
               </p>

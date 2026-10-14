@@ -95,6 +95,7 @@ const userSchema = new mongoose.Schema({
   savedPapers: [{
     paperId: { type: String, required: true },
     title: { type: String, required: true },
+    abstract: { type: String, default: '', maxlength: 12000 },
     doi: { type: String, default: '' },
     authors: { type: String, default: '' },
     year: { type: Number, default: null },
@@ -121,6 +122,7 @@ const userSchema = new mongoose.Schema({
   }],
 
   collections: [{
+    shareToken: { type: String },
     name: { type: String, required: true },
     description: { type: String, default: '' },
     paperIds: [{ type: String }],
@@ -149,9 +151,12 @@ const userSchema = new mongoose.Schema({
 
   topicAlerts: [{
     topic: { type: String, required: true },
+    venueId: { type: String, default: '' },
     category: { type: String, default: 'All Disciplines' },
     active: { type: Boolean, default: true },
     lastCheckedAt: { type: Date, default: null },
+    externalCheckedAt: { type: Date, default: null },
+    externalCheckedId: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now },
   }],
 

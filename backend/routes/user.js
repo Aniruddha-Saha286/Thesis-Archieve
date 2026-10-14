@@ -67,6 +67,7 @@ router.post('/saved-papers', async (req, res) => {
       user.savedPapers.unshift({
         paperId,
         title,
+        abstract: typeof req.body.abstract === 'string' ? req.body.abstract.slice(0, 12000) : '',
         doi: doi || '',
         authors: authors || '',
         year: year ? parseInt(year) : null,
@@ -451,23 +452,39 @@ router.get('/alerts', async (req, res) => {
   }
 });
 
-router.post('/alerts', enforceQuota('topicAlerts'), async (req, res) => {
+router.post('/alerts', async (req, res, next) => {
+  // A duplicate is not a new subscription, even when the allowance is full.
+  const { topic, venueId = '' } = req.body;
+  if (typeof topic !== 'string' || typeof venueId !== 'string') return next();
   try {
-    const { topic, category } = req.body;
-    if (!topic || !topic.trim()) return res.status(400).json({ message: 'Topic is required.' });
+    const user = await User.findById(req.user._id).select('topicAlerts');
+    if (user?.topicAlerts.some(a => a.active && a.topic.toLowerCase() === topic.trim().toLowerCase() && (a.venueId || '') === venueId)) return res.status(409).json({ message: 'You already follow this topic and venue.' });
+    return next();
+  } catch { return res.status(503).json({ message: 'Follows could not be checked. Please try again.' }); }
+}, enforceQuota('topicAlerts'), async (req, res) => {
+  try {
+    const { topic, category, venueId = '' } = req.body;
+    const { VENUES } = require('../services/venueCatalog');
+    if (typeof venueId !== 'string' || (venueId && !VENUES.some(v => v.id === venueId))) return res.status(400).json({ message: 'Invalid venue.' });
+    if (typeof topic !== 'string' || !topic.trim() || topic.length > 150) return res.status(400).json({ message: 'A topic of at most 150 characters is required.' });
 
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    user.topicAlerts.push({
+    if (user.topicAlerts.some(a => a.active && a.topic.toLowerCase() === topic.trim().toLowerCase() && (a.venueId || '') === venueId)) return res.status(409).json({ message: 'You already follow this topic and venue.' });
+    const alert = {
       topic: topic.trim(),
+      venueId,
       category: category || 'All Disciplines',
       active: true,
       createdAt: new Date(),
-    });
-
-    await user.save();
-    return res.status(201).json({ message: 'New-paper topic alert created.', alerts: user.topicAlerts });
+    };
+    const updated = await User.findOneAndUpdate({ _id: req.user._id,
+      topicAlerts: { $not: { $elemMatch: { active: true, topic: { $regex: '^' + topic.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' }, ...(venueId ? { venueId } : { $or: [{ venueId: '' }, { venueId: { $exists: false } }] }) } } },
+      $expr: { $lt: [{ $size: { $ifNull: ['$topicAlerts', []] } }, req.entitlements.quotas.maxTopicAlerts] },
+    }, { $push: { topicAlerts: alert } }, { new: true, runValidators: true }).select('topicAlerts');
+    if (!updated) return res.status(409).json({ message: 'Follow already exists or your alert allowance changed. Refresh your follows.', code: 'FOLLOW_CONFLICT' });
+    return res.status(201).json({ message: 'New-paper topic alert created.', alerts: updated.topicAlerts });
   } catch (err) {
     console.error('[routes/user.js] Failed to create alert:', err);
     return res.status(500).json({ message: 'Failed to create alert.' });

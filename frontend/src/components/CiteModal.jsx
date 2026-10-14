@@ -11,12 +11,15 @@ export default function CiteModal({ thesis, onClose }) {
   const [missingFields, setMissingFields] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [copyError, setCopyError] = useState(null);
 
   const fetchCitations = async () => {
     if (!thesis) return;
     try {
       setLoading(true);
       setError(null);
+      setCopyError(null);
+      setCopied(false);
       const res = await axios.post('/api/thesis/cite', {
         record: thesis,
       });
@@ -43,11 +46,17 @@ export default function CiteModal({ thesis, onClose }) {
 
   const currentContent = citations[activeTab] || '';
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!currentContent) return;
-    navigator.clipboard.writeText(currentContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopyError(null);
+    setCopied(false);
+    try {
+      await navigator.clipboard.writeText(currentContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError('Clipboard access is unavailable. Select and copy the citation below, or download the file.');
+    }
   };
 
   const handleDownload = () => {
@@ -68,7 +77,7 @@ export default function CiteModal({ thesis, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-xl p-6 shadow-2xl relative">
+      <div role="dialog" aria-modal="true" aria-label="Citation export" className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full min-w-0 max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:p-6 shadow-2xl relative">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer"
@@ -147,6 +156,7 @@ export default function CiteModal({ thesis, onClose }) {
         )}
 
         {/* Citation Content Box */}
+        {copyError && <p role="alert" className="text-sm text-rose-800 dark:text-rose-300 mb-3">{copyError}</p>}
         <div className="relative">
           <pre className="p-4 bg-[#FAF9F5] dark:bg-[#141412] border border-[#E2DFD8] dark:border-[#2C2A26] text-xs font-mono-meta text-[#1C1B18] dark:text-[#E8E6E1] whitespace-pre-wrap overflow-x-auto rounded-sm leading-relaxed mb-3 max-h-60 overflow-y-auto">
             {loading ? 'Formatting scholarly citation from verified metadata...' : currentContent}
@@ -165,12 +175,12 @@ export default function CiteModal({ thesis, onClose }) {
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-between gap-2 font-mono-meta text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 font-mono-meta text-xs">
           <div className="text-[11px] text-[#737067] dark:text-[#9C988F]">
             Format: <strong className="uppercase text-[#1C1B18] dark:text-[#F0EDE6]">{activeTab}</strong>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleDownload}
               disabled={loading || !currentContent}

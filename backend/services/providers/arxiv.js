@@ -20,7 +20,7 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
     const cleanQ = (query || 'research').trim();
 
     const words = cleanQ.split(/\s+/).filter(Boolean);
-    const searchQuery = words.length > 1
+    const searchQuery = filters.arxivCategory === 'cs.CV' ? 'cat:cs.CV' : words.length > 1
       ? words.map((w) => `all:${encodeURIComponent(w)}`).join('+AND+')
       : `all:${encodeURIComponent(cleanQ)}`;
 
@@ -92,14 +92,14 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
         authors: authors,
         abstract: entry.summary,
         category: rawCatTerm,
-        publicationType: journalRef ? 'journal-article' : 'preprint',
-        isPeerReviewed: Boolean(journalRef),
+        publicationType: 'preprint',
+        isPeerReviewed: false,
         publicationDate: pubDate,
         publishedYear: pubYear,
         venue: journalRef ? String(journalRef) : 'arXiv Preprints',
         publisher: 'Cornell University / arXiv Open Access',
         isOpenAccess: true,
-        license: 'arXiv Perpetual Non-Exclusive License',
+        license: null,
         pdfUrl: pdfUrl,
         isDirectPdf: true,
         fullTextUrl: `https://arxiv.org/abs/${rawId}`,
@@ -109,6 +109,7 @@ async function searchArxiv({ query = '', page = 1, limit = 20, offset: explicitO
         ],
         source: 'arXiv',
         catalogId: `arXiv:${rawId}`,
+        arxivId: cleanArxivId,
       });
     }).filter(Boolean);
 

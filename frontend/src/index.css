@@ -1,6 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+:where(button, a, input, select, textarea):focus-visible { outline: 2px solid #b47716; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
 /* Spacious research workspace. Keep decorative effects behind readable content. */
 .research-hero {
   background: radial-gradient(ellipse at 90% 10%, #37645a 0%, transparent 55%),
@@ -11,6 +16,18 @@
 }
 .research-header nav button { min-height: 40px; }
 .research-header nav { gap: 4px; }
+@media (max-width: 639px) {
+  .research-shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .research-header nav[aria-label="Main navigation"] {
+    position: fixed; inset: auto 0 0; z-index: 35;
+    background: #fff; border-top: 1px solid #e2dfd8;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 20px #1c1b1808;
+  }
+  .dark .research-header nav[aria-label="Main navigation"] { background: #151413; border-color: #383530; }
+  .research-header nav button { flex: 1; justify-content: center; flex-direction: column; gap: 4px; }
+  .research-header nav button svg { display: block; }
+}
 .research-shell :where(button, a, input, select, textarea):focus-visible {
   outline: 3px solid #c48a28;
   outline-offset: 3px;
@@ -26,6 +43,12 @@
 .filter-panel > section { border-radius: 14px; }
 .filter-panel .font-mono-meta { font-family: 'Inter', system-ui, sans-serif; }
 .dataset-hero { border-top: 4px solid #427967; }
+.dataset-workspace { overflow-wrap: anywhere; }
+.dataset-workspace .grid > * { min-width: 0; }
+.dataset-workspace button, .dataset-workspace a { min-height: 44px; }
+@media (max-width: 639px) {
+  .dataset-workspace input { font-size: 16px; }
+}
 .topic-workspace section { border-radius: 16px; }
 .topic-workspace :is(h2, h3)[id] { scroll-margin-top: 140px; }
 .welcome-page {

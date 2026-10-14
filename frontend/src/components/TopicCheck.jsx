@@ -28,6 +28,11 @@ import {
 } from '../utils/topicAnalysis';
 
 const reportCache = new Map();
+function cachedReport(key) {
+  const report = reportCache.get(key);
+  if (report && Date.now() - (report.cachedAt || 0) < 15 * 60 * 1000) return report;
+  reportCache.delete(key); return null;
+}
 let lastTopicKey = '';
 const HISTORY_KEY = 'thesis_vault_topic_checks';
 const EXAMPLES = [
@@ -47,18 +52,18 @@ const SCALE_STEPS = [
 const topicKeyOf = (text) => String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const paperId = (r) => r?._id || r?.id || r?.paperId;
 
-function readHistory() {
+function readHistory(account = 'guest') {
   try {
-    const raw = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    const raw = JSON.parse(localStorage.getItem(HISTORY_KEY + ':' + account) || '[]');
     return Array.isArray(raw) ? raw.filter((h) => h && typeof h.topic === 'string').slice(0, 5) : [];
   } catch (e) {
     return [];
   }
 }
 
-function writeHistory(list) {
+function writeHistory(list, account = 'guest') {
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 5)));
+    localStorage.setItem(HISTORY_KEY + ':' + account, JSON.stringify(list.slice(0, 5)));
   } catch (e) {
   }
 }
@@ -156,6 +161,7 @@ export default function TopicCheck({
   initialTopic = '',
 }) {
   const { user } = useAuth();
+  const account = String(user?._id || user?.id || 'guest');
   const [university, setUniversity] = useState(user?.university || '');
   const [universitySuggestions, setUniversitySuggestions] = useState([]);
   const contextKey = (topic, universityName = university) => topicKeyOf(topic) + '::' + topicKeyOf(universityName) + '::' + String(user?._id || user?.id || 'guest');
@@ -170,20 +176,28 @@ export default function TopicCheck({
     return () => { clearTimeout(timer); controller.abort(); };
   }, [university]);
   // A topic handed over from Discover is only pre-filled, never run automatically (a check costs a search)
-  const previousReport = reportCache.get(lastTopicKey);
+  const cachedPrevious = cachedReport(lastTopicKey);
+  const previousReport = lastTopicKey.endsWith('::' + String(user?._id || user?.id || 'guest')) ? cachedPrevious : null;
   const seedKey = initialTopic ? contextKey(initialTopic) : previousReport ? contextKey(previousReport.topic) : '';
-  const [input, setInput] = useState(() => (initialTopic ? String(initialTopic).slice(0, 200) : reportCache.get(lastTopicKey)?.topic || ''));
-  const [report, setReport] = useState(() => reportCache.get(seedKey) || null);
+  const [input, setInput] = useState(() => (initialTopic ? String(initialTopic).slice(0, 200) : previousReport?.topic || ''));
+  const [report, setReport] = useState(() => cachedReport(seedKey) || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null); // { message, quota?: boolean }
   const [hint, setHint] = useState('');
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const [history, setHistory] = useState(readHistory);
+  const [history, setHistory] = useState(() => readHistory(account));
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
   const copyTimerRef = useRef(null);
   const resultRef = useRef(null);
+  const appliedSeed = useRef(initialTopic);
+  useEffect(() => {
+    if (!loading && initialTopic && appliedSeed.current !== initialTopic) {
+      appliedSeed.current = initialTopic;
+      setInput(String(initialTopic).slice(0, 200)); setReport(null); setError(null);
+    }
+  }, [initialTopic, loading]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -194,15 +208,16 @@ export default function TopicCheck({
   }, []);
 
   const remember = (rep) => {
+    rep.cachedAt = Date.now();
     const key = contextKey(rep.topic, rep.requestedUniversity || '');
     reportCache.set(key, rep);
     lastTopicKey = key;
     if (reportCache.size > 12) reportCache.delete(reportCache.keys().next().value);
     const next = [
       { topic: rep.topic, verdict: rep.verdict.label, at: Date.now() },
-      ...readHistory().filter((h) => topicKeyOf(h.topic) !== key),
+      ...readHistory(account).filter((h) => topicKeyOf(h.topic) !== topicKeyOf(rep.topic)),
     ].slice(0, 5);
-    writeHistory(next);
+    writeHistory(next, account);
     if (mountedRef.current) setHistory(next);
   };
 
@@ -221,9 +236,9 @@ export default function TopicCheck({
     setHint('');
 
     const key = contextKey(topic);
-    if (reportCache.has(key)) {
+    if (cachedReport(key) && !cachedReport(key).partial) {
       lastTopicKey = key;
-      setReport(reportCache.get(key));
+      setReport(cachedReport(key));
       setLoading(false);
       return;
     }
@@ -248,9 +263,9 @@ export default function TopicCheck({
       const selectedInstitution = universitySuggestions.find((item) => [item.name, ...(item.aliases || []), ...(item.acronyms || [])].some((name) => topicKeyOf(name) === topicKeyOf(university))) || { name: university.trim() };
       const institutionParams = { institutionName: selectedInstitution.name, ...(selectedInstitution.id ? { institutionId: selectedInstitution.id } : {}), ...(data.searchContextId ? { searchContextId: data.searchContextId } : {}) };
       const [thesisRes, datasetRes, universityRes, universityThesisRes] = await Promise.allSettled([
-        axios.get('/api/thesis', {
+        data.searchContextId ? axios.get('/api/thesis', {
           params: { search, publicationType: 'thesis', page: 1, limit: 50, sort: 'relevance', ...(data.searchContextId ? { searchContextId: data.searchContextId } : {}) },
-        }),
+        }) : Promise.resolve({ data: { records: [], totalTechnicalFailure: true } }),
         axios.get('/api/datasets', { params: { q: search, page: 1, limit: 6 } }),
         selectedInstitution.name && data.searchContextId
           ? axios.get('/api/thesis', { params: { search, page: 1, limit: 30, ...institutionParams, institutionMode: 'affiliation' } })
@@ -278,7 +293,8 @@ export default function TopicCheck({
       rep.requestedUniversity = university.trim();
       rep.thesisLookupFailed = thesisRes.status !== 'fulfilled' || Boolean(thesisData.totalTechnicalFailure);
       rep.datasetLookupFailed = datasetRes.status !== 'fulfilled' || Boolean(datasetRes.status === 'fulfilled' && datasetRes.value.data?.hasOutage);
-      rep.partial = Boolean(data.partialResults);
+      rep.partial = Boolean(data.partialResults || rep.thesisLookupFailed || rep.universityLookupFailed || rep.universityLookupPartial);
+      if (rep.partial && rep.close.length === 0) rep.verdict = { ...rep.verdict, label: 'Limited evidence', headline: 'No close match in the available evidence', advice: 'Some sources did not respond. Broaden the search, inspect related work and retry before drawing conclusions about originality.' };
       rep.searchContextId = (!Array.isArray(data) && data.searchContextId) || null;
       rep.searchQuery = search;
       // Saved even if the student has moved to another tab meanwhile: the search was already
@@ -358,11 +374,11 @@ export default function TopicCheck({
               <span>Topic Check</span>
             </div>
             <h1 className="text-2xl md:text-4xl font-serif-title tracking-tight text-[#1C1B18] dark:text-[#FAF9F5]">
-              Has your thesis idea been done before?
+              Explore whether your research idea has already been studied.
             </h1>
             <p className="text-sm text-[#605D55] dark:text-[#9E9A90] leading-relaxed">
               Type your working title. You get the closest existing work, related theses and who supervised them,
-              datasets you could use, and which part of your idea looks different. Take the brief to your supervisor.
+              datasets you could use, and possible directions to investigate. Keyword overlap is a heuristic, not proof of originality. A new check uses one daily paper search; prefilling an idea uses none.
             </p>
           </div>
 
@@ -403,7 +419,7 @@ export default function TopicCheck({
               className="inline-flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-800 dark:bg-indigo-400 dark:hover:bg-indigo-300 text-white dark:text-neutral-950 px-5 py-3 rounded-md text-sm font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait shrink-0"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              <span>{loading ? 'Checking' : 'Check topic'}</span>
+              <span>{loading ? 'Checking' : 'Check my idea'}</span>
             </button>
           </form>
 
@@ -839,7 +855,7 @@ export default function TopicCheck({
                 onClick={() => onSearchInDiscover(report.searchQuery || report.keywords.join(' '), report.searchContextId)}
                 className="inline-flex items-center gap-1.5 bg-white dark:bg-[#1C1A18] hover:bg-[#F2EFE8] dark:hover:bg-[#252320] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#F0EDE6] px-3.5 py-2 rounded-md text-xs font-semibold cursor-pointer transition-colors"
               >
-                <span>See all results in Discover</span>
+                <span>Find supporting papers</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}

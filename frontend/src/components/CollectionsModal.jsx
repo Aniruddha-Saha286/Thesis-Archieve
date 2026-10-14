@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
+import CollectionSharing from './CollectionSharing';
 import { Folder, Plus, Download, Trash2, ArrowRight } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
@@ -273,6 +274,7 @@ export default function CollectionsModal({ isOpen, onClose }) {
               </form>
             ) : selectedCollection ? (
               <div className="space-y-4">
+                <CollectionSharing key={selectedCollection._id} collection={selectedCollection} onChange={applyUpdatedCollection} />
                 <div className="p-4 bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>

@@ -1,14 +1,47 @@
 const dns = require('dns');
-try {
-  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
-} catch (e) {
-  console.warn('DNS server override failed, using system defaults.');
-}
 
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+function configureDns() {
+  if (process.env.DNS_SERVERS) {
+    const servers = process.env.DNS_SERVERS.split(',').map((s) => s.trim()).filter(Boolean);
+    if (servers.length) {
+      try {
+        dns.setServers(servers);
+        return;
+      } catch (err) {
+        console.warn('[server.js] Could not set custom DNS servers:', err.message);
+      }
+    }
+  }
+
+  try {
+    const current = dns.getServers();
+    const isLoopbackOnly = !current || current.length === 0 || (current.length === 1 && current[0] === '127.0.0.1');
+    if (isLoopbackOnly) {
+      let discovered = [];
+      if (process.platform === 'win32') {
+        try {
+          const { execSync } = require('child_process');
+          const out = execSync('netsh interface ipv4 show dnsservers', {
+            encoding: 'utf8',
+            timeout: 2000,
+            stdio: ['pipe', 'pipe', 'ignore'],
+          });
+          discovered = [...new Set(out.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) || [])].filter((ip) => ip !== '127.0.0.1');
+        } catch (_) {}
+      }
+      const candidates = [...new Set([...discovered, '8.8.8.8', '1.1.1.1', '8.8.4.4'])];
+      if (candidates.length) {
+        dns.setServers(candidates);
+      }
+    }
+  } catch (_) {}
+}
+
+configureDns();
 
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
@@ -53,11 +86,6 @@ const ALLOWED_ORIGINS = new Set([
 function isAllowedOrigin(origin) {
   if (!origin) return true;
   if (ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const url = new URL(origin);
-    if (url.hostname.endsWith('.vercel.app')) return true;
-  } catch {
-  }
   return false;
 }
 
@@ -73,7 +101,7 @@ app.use((req, res, next) => {
   }
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' http://localhost:5000 http://localhost:5173 ws://localhost:5000 ws://localhost:5173 https://api.openalex.org https://api.crossref.org https://api.datacite.org https://zenodo.org https://accounts.google.com; frame-src https://accounts.google.com;"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' http://localhost:5000 http://localhost:5173 ws://localhost:5000 ws://localhost:5173 https://api.openalex.org https://api.crossref.org https://api.datacite.org https://zenodo.org https://accounts.google.com; frame-src https://accounts.google.com;"
   );
   next();
 });
@@ -126,6 +154,7 @@ app.use('/api/institutions', institutionsRoutes);
 app.use('/api/authors', authorsRoutes);
 app.use('/api/subjects', subjectsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/research', require('./routes/research'));
 app.use('/api/feedback', feedbackRoutes);
 
 const { searchGlobalDatasets } = require('./services/datasetDiscoveryService');
@@ -174,13 +203,30 @@ initSocket(server);
 async function startServer() {
   console.log('Connecting to database...');
   try {
+    configureDns();
     try {
       await mongoose.connect(process.env.MONGODB_URI);
     } catch (err) {
-      if (err.message && err.message.includes('querySrv')) {
-        console.warn('Local DNS refused SRV resolution. Falling back to Google Public DNS (8.8.8.8)...');
-        dns.setServers(['8.8.8.8', '8.8.4.4']);
-        await mongoose.connect(process.env.MONGODB_URI);
+      const isDnsError = err && err.message && (err.message.includes('querySrv') || err.message.includes('ENOTFOUND') || err.message.includes('ECONNREFUSED'));
+      if (isDnsError) {
+        let connected = false;
+        const fallbackServers = ['202.83.124.254', '10.102.212.249', '8.8.8.8', '1.1.1.1', '8.8.4.4'];
+        try {
+          console.warn('[server.js] Retrying database connection with fallback DNS servers...');
+          dns.setServers(fallbackServers);
+          await mongoose.connect(process.env.MONGODB_URI);
+          connected = true;
+        } catch (_) {}
+
+        if (!connected && process.env.MONGODB_FALLBACK_URI) {
+          console.warn('[server.js] Retrying database connection using MONGODB_FALLBACK_URI...');
+          await mongoose.connect(process.env.MONGODB_FALLBACK_URI);
+          connected = true;
+        }
+
+        if (!connected) {
+          throw err;
+        }
       } else {
         throw err;
       }
@@ -193,6 +239,7 @@ async function startServer() {
       console.log(`✓ Proxy trust: ${trustProxy === false ? 'off (direct connections)' : trustProxy}`);
 
       const { runAllScheduledAlerts } = require('./services/topicAlertService');
+      require('./services/discoveryFeed').startDiscoveryScheduler();
       const ALERT_INTERVAL_MS = 15 * 60 * 1000;
       setInterval(() => {
         runAllScheduledAlerts().catch((err) => console.error('Alerts runner error:', err.message));

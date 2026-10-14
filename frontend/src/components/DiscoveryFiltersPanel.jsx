@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import FilterSection from './FilterSection';
+import { VENUES } from '../utils/venues';
 import {
   Building2,
   Globe,
@@ -22,6 +23,7 @@ const COMMON_COUNTRIES = [
 ];
 
 export default function DiscoveryFiltersPanel({
+  selectedVenue = '', onSelectVenue,
   subjects = [],
   selectedSubjectId = '',
   onSelectSubject,
@@ -168,6 +170,7 @@ export default function DiscoveryFiltersPanel({
 
   return (
     <div className={`space-y-5 text-xs ${className}`}>
+      <label className="block space-y-2"><span className="font-bold">Conference / journal venue</span><select aria-label="Search venue" value={selectedVenue} onChange={e => onSelectVenue?.(e.target.value)} className="w-full rounded-xl border border-[#D5D1C7] dark:border-[#383530] bg-white dark:bg-[#1C1A18] p-2"><option value="">All venues</option>{VENUES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}</select><span className="block text-[#737067] dark:text-[#9E9A90]">Venue is independent of the metadata provider.</span></label>
       {selectedAuthor && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 p-2.5 rounded-sm flex items-center justify-between gap-2">
           <div className="space-y-0.5">

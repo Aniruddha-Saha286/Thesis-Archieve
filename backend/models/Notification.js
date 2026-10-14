@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const notificationSchema = new mongoose.Schema({
+  dedupeKey: { type: String },
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -57,4 +58,5 @@ const notificationSchema = new mongoose.Schema({
   },
 });
 
+notificationSchema.index({ dedupeKey: 1 }, { unique: true, sparse: true });
 module.exports = mongoose.model('Notification', notificationSchema);

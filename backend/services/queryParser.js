@@ -176,6 +176,13 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     };
   }
 
+  for (const key of ['hasCode', 'hasDataset', 'hasOpenDataset']) {
+    if (rawQuery[key] !== undefined && parseStrictBoolean(rawQuery[key]) === null) return { valid: false, status: 400, code: 'INVALID_RESOURCE_FILTER', message: key + ' must be true or false.' };
+  }
+  const degree = typeof rawQuery.degree === 'string' ? rawQuery.degree : '';
+  const program = typeof rawQuery.program === 'string' ? rawQuery.program : '';
+  if (program && !['cse', 'eee', 'business', 'pharmacy'].includes(program)) return { valid: false, status: 400, code: 'INVALID_PROGRAM', message: 'Choose a supported program.' };
+  if (degree && !['bsc', 'msc', 'phd'].includes(degree)) return { valid: false, status: 400, code: 'INVALID_DEGREE', message: 'Choose bsc, msc or phd.' };
   const cleanHasPdf = parseStrictBoolean(hasPdf) === true;
   const cleanIsOpenAccess = parseStrictBoolean(isOpenAccess) === true;
 
@@ -296,6 +303,8 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
 
   const cleanPublisher = typeof publisher === 'string' ? publisher.trim().slice(0, 200) : null;
   const cleanSource = typeof source === 'string' ? source.trim().slice(0, 100) : null;
+  const venue = typeof rawQuery.venue === 'string' ? rawQuery.venue.trim().toLowerCase() : '';
+  if (rawQuery.venue !== undefined && (typeof rawQuery.venue !== 'string' || (venue && !require('./venueCatalog').VENUES.some(v => v.id === venue)))) return { valid: false, status: 400, code: 'INVALID_VENUE', message: 'Choose a supported venue.' };
 
   const cleanSessionId = typeof sessionId === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(sessionId.trim())
     ? sessionId.trim()
@@ -305,6 +314,7 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     : (typeof searchActionId === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(searchActionId.trim()) ? searchActionId.trim() : null);
 
   const filters = {};
+  if (venue) filters.venue = venue;
   if (cleanCategory) filters.category = cleanCategory;
   if (cleanSubjectId) filters.subjectId = cleanSubjectId;
   if (cleanFieldId) filters.fieldId = cleanFieldId;
@@ -312,6 +322,11 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
   if (cleanYearMin) filters.yearMin = cleanYearMin;
   if (cleanYearMax) filters.yearMax = cleanYearMax;
   if (cleanHasPdf) filters.hasPdf = true;
+  if (parseStrictBoolean(rawQuery.hasCode) === true) filters.hasCode = true;
+  if (parseStrictBoolean(rawQuery.hasDataset) === true) filters.hasDataset = true;
+  if (parseStrictBoolean(rawQuery.hasOpenDataset) === true) filters.hasOpenDataset = true;
+  if (degree) filters.degree = degree;
+  if (program) filters.program = program;
   if (cleanIsOpenAccess) filters.isOpenAccess = true;
   if (cleanSource) filters.source = cleanSource;
   if (cleanPublisher) filters.publisher = cleanPublisher;
@@ -323,6 +338,7 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
   if (cleanMinCitations !== null && cleanMinCitations > 0) filters.minCitations = cleanMinCitations;
 
   const isSearchInquiry = Boolean(
+    venue ||
     searchTerm ||
     cleanCategory ||
     cleanSubjectId ||
@@ -330,7 +346,7 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
     (cleanPubType && cleanPubType !== 'all') ||
     cleanYearMin ||
     cleanYearMax ||
-    cleanHasPdf ||
+    cleanHasPdf || filters.hasCode || filters.hasDataset || filters.hasOpenDataset || degree || program ||
     cleanIsOpenAccess ||
     cleanSource ||
     cleanPublisher ||

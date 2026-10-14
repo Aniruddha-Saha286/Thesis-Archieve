@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { getPlanInfo } from '../utils/plan';
 import {
   Compass,
+  Radar,
   Lightbulb,
   Database,
   Bookmark,
@@ -16,10 +17,6 @@ import {
   Globe,
   User,
   CheckCircle2,
-  Menu,
-  X,
-  FileText,
-  Search,
   MessageSquare,
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
@@ -61,6 +58,7 @@ export default function Header({
 
   const totalLibraryItems = (savedPapersCount || 0) + (comparisonCount || 0);
 
+  const destinations = [{ id: 'discover', label: 'Find papers', icon: Compass, description: 'Search the broader scholarly catalog' }, { id: 'radar', label: 'Latest research', icon: Radar, description: 'Browse indexed research updates' }, { id: 'topic', label: 'Check my idea', icon: Lightbulb, description: 'Explore overlap with retrieved literature' }, { id: 'datasets', label: 'Datasets', icon: Database, description: 'Find data for your research' }, { id: 'library', label: 'Library', icon: Bookmark, description: 'Return to saved papers and follows' }];
   const currentTab = activeTab === 'publications' ? 'discover' : activeTab;
 
   const handleTabClick = (tab) => {
@@ -90,73 +88,8 @@ export default function Header({
             </div>
           </button>
 
-          <nav aria-label="Main navigation" className="hidden lg:flex items-center bg-[#FAF9F5] dark:bg-[#1C1A18] p-1 rounded-xl border border-[#D5D1C7] dark:border-[#383530] text-sm">
-            <button
-              type="button"
-              onClick={() => handleTabClick('discover')}
-            aria-current={currentTab === 'discover' ? 'page' : undefined}
-              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-2 cursor-pointer font-bold ${
-                currentTab === 'discover'
-                  ? 'bg-[#1C1B18] text-white dark:bg-[#FAF9F5] dark:text-[#1C1B18] shadow-2xs'
-                  : 'text-[#605D55] dark:text-[#9E9A90] hover:text-[#1C1B18] dark:hover:text-[#FAF9F5]'
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5" />
-              <span>Find papers</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabClick('datasets')}
-            aria-current={currentTab === 'datasets' ? 'page' : undefined}
-              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-2 cursor-pointer font-bold ${
-                currentTab === 'datasets'
-                  ? 'bg-[#2C6B3F] text-white dark:bg-emerald-400 dark:text-neutral-950 shadow-2xs'
-                  : 'text-[#605D55] dark:text-[#9E9A90] hover:text-[#2C6B3F] dark:hover:text-emerald-400'
-              }`}
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>Datasets</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabClick('topic')}
-            aria-current={currentTab === 'topic' ? 'page' : undefined}
-              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-2 cursor-pointer font-bold whitespace-nowrap ${
-                currentTab === 'topic'
-                  ? 'bg-indigo-700 text-white dark:bg-indigo-400 dark:text-neutral-950 shadow-2xs'
-                  : 'text-[#605D55] dark:text-[#9E9A90] hover:text-indigo-700 dark:hover:text-indigo-300'
-              }`}
-            >
-              <Lightbulb className="w-3.5 h-3.5" />
-              <span>Check topic</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabClick('library')}
-            aria-current={currentTab === 'library' ? 'page' : undefined}
-              className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-2 cursor-pointer font-bold ${
-                currentTab === 'library'
-                  ? 'bg-amber-600 text-white dark:bg-amber-400 dark:text-neutral-950 shadow-2xs'
-                  : 'text-[#605D55] dark:text-[#9E9A90] hover:text-amber-700 dark:hover:text-amber-400'
-              }`}
-            >
-              <Bookmark className="w-3.5 h-3.5" />
-              <span>Library</span>
-              {totalLibraryItems > 0 && (
-                <span
-                  className={`text-[11px] px-1.5 py-0.2 rounded-2xs font-mono-meta font-bold ${
-                    currentTab === 'library'
-                      ? 'bg-white text-amber-700 dark:bg-neutral-950 dark:text-amber-300'
-                      : 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
-                  }`}
-                >
-                  {totalLibraryItems}
-                </span>
-              )}
-            </button>
+          <nav aria-label="Main navigation" className="hidden xl:flex items-center bg-[#FAF9F5] dark:bg-[#1C1A18] p-1 rounded-xl border border-[#D5D1C7] dark:border-[#383530] text-sm">
+            {destinations.map(({ id, label, icon: Icon, description }) => <button key={id} type="button" onClick={() => handleTabClick(id)} aria-current={currentTab === id ? 'page' : undefined} title={description} className={`px-3 py-1.5 rounded-lg flex items-center gap-2 font-bold whitespace-nowrap ${currentTab === id ? 'bg-[#2C6B3F] text-white' : 'text-[#605D55] dark:text-[#B3AFA6]'}`}><Icon size={14} />{label}{id === 'library' && totalLibraryItems > 0 && <span className="text-xs">{totalLibraryItems}</span>}</button>)}
           </nav>
 
           <div className="flex items-center gap-2 font-mono-meta text-xs shrink-0">
@@ -352,67 +285,8 @@ export default function Header({
         </div>
 
         {/* Navigation Tabs Row for phones and tablets (the four tabs do not fit beside the logo below 1024px) */}
-        <nav aria-label="Main navigation" className="lg:hidden flex items-center justify-around py-2 border-t border-[#EAE7DF] dark:border-[#252320] text-sm">
-          <button
-            type="button"
-            onClick={() => handleTabClick('discover')}
-            aria-current={currentTab === 'discover' ? 'page' : undefined}
-            className={`px-2 py-1 rounded-lg transition flex items-center gap-1.5 font-bold cursor-pointer ${
-              currentTab === 'discover'
-                ? 'bg-[#1C1B18] text-white dark:bg-[#FAF9F5] dark:text-[#1C1B18]'
-                : 'text-[#605D55] dark:text-[#9E9A90]'
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5 hidden min-[420px]:block" />
-            <span>Find papers</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabClick('datasets')}
-            aria-current={currentTab === 'datasets' ? 'page' : undefined}
-            className={`px-2 py-1 rounded-lg transition flex items-center gap-1.5 font-bold cursor-pointer ${
-              currentTab === 'datasets'
-                ? 'bg-[#2C6B3F] text-white dark:bg-emerald-400 dark:text-neutral-950'
-                : 'text-[#605D55] dark:text-[#9E9A90]'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5 hidden min-[420px]:block" />
-            <span>Datasets</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabClick('topic')}
-            aria-current={currentTab === 'topic' ? 'page' : undefined}
-            className={`px-2 py-1 rounded-lg transition flex items-center gap-1.5 font-bold cursor-pointer whitespace-nowrap ${
-              currentTab === 'topic'
-                ? 'bg-indigo-700 text-white dark:bg-indigo-400 dark:text-neutral-950'
-                : 'text-[#605D55] dark:text-[#9E9A90]'
-            }`}
-          >
-            <Lightbulb className="w-3.5 h-3.5 hidden min-[420px]:block" />
-            <span>Check topic</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabClick('library')}
-            aria-current={currentTab === 'library' ? 'page' : undefined}
-            className={`px-2 py-1 rounded-lg transition flex items-center gap-1.5 font-bold cursor-pointer ${
-              currentTab === 'library'
-                ? 'bg-amber-600 text-white dark:bg-amber-400 dark:text-neutral-950'
-                : 'text-[#605D55] dark:text-[#9E9A90]'
-            }`}
-          >
-            <Bookmark className="w-3.5 h-3.5 hidden min-[420px]:block" />
-            <span>Library</span>
-            {totalLibraryItems > 0 && (
-              <span className="bg-amber-100 text-amber-900 text-[11px] px-1 rounded-lg">
-                {totalLibraryItems}
-              </span>
-            )}
-          </button>
+        <nav aria-label="Main navigation" className="xl:hidden grid grid-cols-5 gap-1 py-2 border-t border-[#EAE7DF] dark:border-[#252320]">
+          {destinations.map(({ id, label, icon: Icon, description }) => <button key={id} type="button" onClick={() => handleTabClick(id)} aria-current={currentTab === id ? 'page' : undefined} title={description} className={`min-w-0 px-1 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold flex flex-col items-center gap-1 ${currentTab === id ? 'bg-[#2C6B3F] text-white' : 'text-[#605D55] dark:text-[#B3AFA6]'}`}><Icon size={15} /><span>{label}</span></button>)}
         </nav>
       </div>
     </header>

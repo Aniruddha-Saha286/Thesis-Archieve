@@ -130,14 +130,14 @@ export const VERDICTS = [
     label: 'Little found',
     headline: 'Almost nothing matching was found',
     advice:
-      'Either this is new ground or the wording is too narrow. Try synonyms or a broader phrase before you rely on this, then ask a supervisor whether the topic is feasible.',
+      'Coverage or wording may be limited. Try synonyms and a broader phrase, inspect other sources and discuss feasibility with a supervisor. Missing matches do not establish originality.',
   },
   {
     key: 'open',
     label: 'Open angle',
-    headline: 'Related work exists, but nothing with your exact combination',
+    headline: 'Related work exists; no close keyword match in this sample',
     advice:
-      'There is literature to build on and no close match in what was checked. Read the related work below and state clearly which part of your combination is new.',
+      'Read the related work below and investigate which parts of your proposed contribution differ. Keyword matching cannot verify novelty.',
   },
   {
     key: 'emerging',

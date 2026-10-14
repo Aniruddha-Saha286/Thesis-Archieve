@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
+import LiteratureExport from './LiteratureExport';
+import { useAuth } from '../context/AuthContext';
+import { cacheOfflineLibrary, offlineLibrary } from '../utils/offlineLibrary';
 import { Bookmark, Trash2, Edit3, Check, FileText, Quote, Scale, ExternalLink, Plus, Search } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
 export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompare, comparisonPaperIds = [] }) {
   useEscapeToClose(onClose, isOpen);
+  const { user } = useAuth();
+  const [offline, setOffline] = useState(false);
   const { showNotice } = useSocket();
   const [savedPapers, setSavedPapers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -13,12 +18,20 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
   const [editNoteText, setEditNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const fetchSavedPapers = async () => {
     try {
       setLoading(true);
+      if (!navigator.onLine) {
+        const cached = offlineLibrary(localStorage, user?.id || user?._id);
+        setOffline(true); setSavedPapers(cached?.papers || []); return;
+      }
+      setOffline(false);
       const res = await axios.get('/api/user/saved-papers');
       setSavedPapers(res.data || []);
+      cacheOfflineLibrary(localStorage, user?.id || user?._id, res.data || []);
+      setSelectedIds(previous => previous.filter(id => (res.data || []).some(p => p.paperId === id)));
     } catch (err) {
       console.error('Failed to load saved papers:', err);
     } finally {
@@ -33,9 +46,12 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
   }, [isOpen]);
 
   const handleDelete = async (paperId) => {
+    if (offline) return showNotice("Reconnect to edit your library.", "info");
     try {
       const res = await axios.delete(`/api/user/saved-papers/${encodeURIComponent(paperId)}`);
       setSavedPapers(res.data.savedPapers || []);
+      setSelectedIds(previous => previous.filter(id => id !== paperId));
+      cacheOfflineLibrary(localStorage, user?.id || user?._id, res.data.savedPapers || []);
       showNotice('Paper removed from saved list.', 'info');
     } catch (err) {
       showNotice('Failed to remove paper.', 'error');
@@ -43,6 +59,7 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
   };
 
   const handleStartEditNote = (paper) => {
+    if (offline) return showNotice("Reconnect to edit notes.", "info");
     setEditingId(paper.paperId);
     setEditNoteText(paper.notes || '');
   };
@@ -53,9 +70,9 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
       await axios.patch(`/api/user/saved-papers/${encodeURIComponent(paperId)}/notes`, {
         notes: editNoteText,
       });
-      setSavedPapers((prev) =>
-        prev.map((p) => (p.paperId === paperId ? { ...p, notes: editNoteText } : p))
-      );
+      const updated = savedPapers.map(p => p.paperId === paperId ? { ...p, notes: editNoteText } : p);
+      setSavedPapers(updated);
+      cacheOfflineLibrary(localStorage, user?.id || user?._id, updated);
       setEditingId(null);
       showNotice('Research notes saved.', 'info');
     } catch (err) {
@@ -98,7 +115,9 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
           </button>
         </div>
 
-        <div className="pt-3 pb-2">
+        <div className="pt-3 pb-2 space-y-3">
+          {offline && <p role="status" className="text-sm">Offline library snapshot (up to 100 papers). Reconnect to edit or load newer changes.</p>}
+          {!offline && <LiteratureExport papers={savedPapers.filter(p => selectedIds.includes(p.paperId))} />}
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-[#8C887E] dark:text-[#5C5950] absolute left-3 top-2.5" />
             <input
@@ -132,10 +151,15 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
                   className="p-4 bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#E2DFD8] dark:border-[#2C2A26] rounded-sm space-y-2 hover:border-[#BDB9AF] dark:hover:border-[#423F3A] transition"
                 >
                   <div className="flex items-start justify-between gap-3">
+                    <input type="checkbox" aria-label={`Select ${paper.title} for literature review export`}
+                      checked={selectedIds.includes(paper.paperId)} disabled={!selectedIds.includes(paper.paperId) && selectedIds.length >= 10}
+                      onChange={e => setSelectedIds(previous => e.target.checked ? [...previous, paper.paperId] : previous.filter(id => id !== paper.paperId))}
+                      className="mt-1 w-4 h-4 shrink-0" />
                     <div className="space-y-1 flex-1">
                       <h3 className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6] leading-snug">
                         {paper.title}
                       </h3>
+                      {paper.abstract && <p className="text-sm leading-relaxed line-clamp-3">{paper.abstract}</p>}
                       <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9A968D] flex items-center gap-2 flex-wrap">
                         <span>{paper.authors || 'Author unrecorded'}</span>
                         {paper.year && (

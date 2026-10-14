@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import useEscapeToClose from '../hooks/useEscapeToClose';
 import axios from 'axios';
+import LiteratureExport from './LiteratureExport';
 import { Scale, Trash2, Save, FileText, Check, Download, X, FolderOpen, Plus, Clock, ExternalLink } from 'lucide-react';
 
 export default function ComparisonMatrixModal({
@@ -58,7 +59,7 @@ export default function ComparisonMatrixModal({
   const handleSaveMatrix = async (saveAsNew = false) => {
     try {
       setSaving(true);
-      const paperIds = comparisonPapers.map((p) => p._id || p.id || p.paperId);
+      const paperIds = comparisonPapers.map((p) => p.paperId || p._id || p.id);
 
       if (currentMatrixId && !saveAsNew) {
         await axios.put(`/api/user/comparisons/${currentMatrixId}`, {
@@ -128,32 +129,6 @@ export default function ComparisonMatrixModal({
     }
   };
 
-  const handleExportCsv = () => {
-    if (comparisonPapers.length === 0) return;
-    const headers = ['Criterion', ...comparisonPapers.map((p) => `"${(p.title || '').replace(/"/g, '""')}"`)];
-    const rows = [
-      ['Authors', ...comparisonPapers.map((p) => `"${p.author || (Array.isArray(p.authors) ? p.authors.map(a => a.name).join(', ') : '') || ''}"`)],
-      ['Year', ...comparisonPapers.map((p) => p.publishedYear || p.year || '')],
-      ['Type', ...comparisonPapers.map((p) => p.publicationType || p.degreeType || 'Article')],
-      ['Venue / Publisher', ...comparisonPapers.map((p) => `"${p.venue || p.publisher || p.university || ''}"`)],
-      ['Methodology', ...comparisonPapers.map((p) => `"${editableNotes[`${p._id || p.id || p.paperId}_methodology`] || (p.abstract?.slice(0, 100) + '...') || ''}"`)],
-      ['Dataset / Benchmark', ...comparisonPapers.map((p) => `"${p.datasetUrl ? 'Empirical Dataset attached' : (editableNotes[`${p._id || p.id || p.paperId}_dataset`] || 'N/A')}"`)],
-      ['Key Findings', ...comparisonPapers.map((p) => `"${editableNotes[`${p._id || p.id || p.paperId}_findings`] || ''}"`)],
-      ['Limitations', ...comparisonPapers.map((p) => `"${editableNotes[`${p._id || p.id || p.paperId}_limitations`] || ''}"`)],
-    ];
-
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const safeTitle = matrixTitle.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30);
-    a.href = url;
-    a.download = `${safeTitle || 'literature_matrix'}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
@@ -206,15 +181,7 @@ export default function ComparisonMatrixModal({
 
             {viewTab === 'matrix' && comparisonPapers.length > 0 && (
               <>
-                <button
-                  type="button"
-                  onClick={handleExportCsv}
-                  className="bg-white dark:bg-[#201F1C] hover:bg-[#F2EFE8] dark:hover:bg-[#2A2824] border border-[#D5D1C7] dark:border-[#383530] text-[#1C1B18] dark:text-[#E8E6E1] px-3 py-1.5 rounded-sm flex items-center gap-1.5 transition cursor-pointer"
-                  title="Export comparison matrix as CSV table"
-                >
-                  <Download className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
-                  <span>Export CSV</span>
-                </button>
+                <LiteratureExport papers={comparisonPapers} title={matrixTitle} criteria={editableNotes} />
 
                 <button
                   type="button"
@@ -368,7 +335,7 @@ export default function ComparisonMatrixModal({
                         Criterion
                       </th>
                       {comparisonPapers.map((paper) => {
-                        const pId = paper._id || paper.id || paper.paperId;
+                        const pId = paper.paperId || paper._id || paper.id;
                         return (
                           <th key={pId} className="p-3 font-serif-title font-normal text-base text-[#1C1B18] dark:text-[#F0EDE6] min-w-[240px] max-w-[320px] border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 relative align-top">
                             <div className="pr-6">
@@ -397,7 +364,7 @@ export default function ComparisonMatrixModal({
                         Primary Authors
                       </td>
                       {comparisonPapers.map((paper) => (
-                        <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#1C1B18] dark:text-[#E8E6E1]">
+                        <td key={paper.paperId || paper._id || paper.id} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#1C1B18] dark:text-[#E8E6E1]">
                           {paper.author || (Array.isArray(paper.authors) ? paper.authors.map(a => a.name).join(', ') : 'Unspecified')}
                         </td>
                       ))}
@@ -409,7 +376,7 @@ export default function ComparisonMatrixModal({
                         Venue / Institution
                       </td>
                       {comparisonPapers.map((paper) => (
-                        <td key={paper._id || paper.id || paper.paperId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#524F47] dark:text-[#B0ACA2]">
+                        <td key={paper.paperId || paper._id || paper.id} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0 text-[#524F47] dark:text-[#B0ACA2]">
                           {paper.venue || paper.publisher || paper.university || 'Source not recorded'}
                         </td>
                       ))}
@@ -421,13 +388,13 @@ export default function ComparisonMatrixModal({
                         Methodological Approach
                       </td>
                       {comparisonPapers.map((paper) => {
-                        const pId = paper._id || paper.id || paper.paperId;
+                        const pId = paper.paperId || paper._id || paper.id;
                         const key = `${pId}_methodology`;
                         return (
                           <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
                             <textarea
                               rows="3"
-                              value={editableNotes[key] !== undefined ? editableNotes[key] : (paper.abstract ? paper.abstract.slice(0, 150) + '...' : '')}
+                              value={editableNotes[key] !== undefined ? editableNotes[key] : ''}
                               onChange={(e) => handleNoteChange(pId, 'methodology', e.target.value)}
                               placeholder="Synthesize methodology (e.g. Quasi-experiment, Transformer, LSTM, Case study)..."
                               className="w-full bg-[#FAF9F5] dark:bg-[#24221E] border border-[#D5D1C7] dark:border-[#383530] p-2 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F] font-mono-meta"
@@ -443,13 +410,13 @@ export default function ComparisonMatrixModal({
                         Empirical Dataset / Benchmark
                       </td>
                       {comparisonPapers.map((paper) => {
-                        const pId = paper._id || paper.id || paper.paperId;
+                        const pId = paper.paperId || paper._id || paper.id;
                         const key = `${pId}_dataset`;
                         return (
                           <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
                             {paper.datasetUrl && (
                               <div className="mb-1 text-[11px] text-[#2C6B3F] dark:text-emerald-400 font-mono-meta font-bold">
-                                ✓ Raw Dataset Available ({paper.datasetFormat || 'CSV'})
+                                ✓ Dataset linked ({paper.datasetFormat || 'format not recorded'})
                               </div>
                             )}
                             <textarea
@@ -470,7 +437,7 @@ export default function ComparisonMatrixModal({
                         Key Findings & Contributions
                       </td>
                       {comparisonPapers.map((paper) => {
-                        const pId = paper._id || paper.id || paper.paperId;
+                        const pId = paper.paperId || paper._id || paper.id;
                         const key = `${pId}_findings`;
                         return (
                           <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">
@@ -492,7 +459,7 @@ export default function ComparisonMatrixModal({
                         Limitations & Research Gaps
                       </td>
                       {comparisonPapers.map((paper) => {
-                        const pId = paper._id || paper.id || paper.paperId;
+                        const pId = paper.paperId || paper._id || paper.id;
                         const key = `${pId}_limitations`;
                         return (
                           <td key={pId} className="p-3 border-r border-[#E2DFD8] dark:border-[#2C2A26] last:border-r-0">

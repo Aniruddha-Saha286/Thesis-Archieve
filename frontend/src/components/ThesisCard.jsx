@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import axios from 'axios';
+import { safeResourceLink } from '../utils/resourceLinks';
 
 export default function ThesisCard({
   thesis,
@@ -115,6 +116,7 @@ export default function ThesisCard({
         await axios.post('/api/user/saved-papers', {
           paperId: thesis._id || thesis.id,
           title: thesis.title,
+          abstract: thesis.abstract || "",
           doi: thesis.doi || '',
           authors: thesis.author || (Array.isArray(thesis.authors) ? thesis.authors.map((a) => a.name).join(', ') : ''),
           year: thesis.publishedYear,
@@ -179,6 +181,8 @@ export default function ThesisCard({
     : 'bg-emerald-500 dark:bg-emerald-400';
 
   const sourceLabel = thesis.source || thesis.sources?.[0]?.provider || '';
+  const codeLink = safeResourceLink(thesis.codeUrl, ['github.com', 'gitlab.com', 'bitbucket.org', 'codeberg.org']);
+  const datasetLink = safeResourceLink(thesis.datasetUrl);
 
   const isDirectPdf = Boolean(
     thesis.isDirectPdf ||
@@ -362,6 +366,10 @@ export default function ThesisCard({
           <p className="text-sm text-[#4A4740] dark:text-[#A8A49C] leading-relaxed line-clamp-2 max-w-4xl">
             {thesis.abstract || 'No abstract is available for this record.'}
           </p>
+          {(codeLink || datasetLink || thesis.hasDataset) && <div className="flex flex-wrap gap-2 text-xs">
+            {codeLink && <a href={codeLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full px-3 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"><Code className="w-3 h-3" />Code available</a>}
+            {datasetLink ? <a href={datasetLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full px-3 py-1 bg-purple-50 dark:bg-purple-950 text-purple-800 dark:text-purple-300"><Database className="w-3 h-3" />Dataset linked</a> : thesis.hasDataset && <button type="button" onClick={() => onViewDetail?.(thesis)} className="rounded-full px-3 py-1 bg-purple-50 dark:bg-purple-950 text-purple-800 dark:text-purple-300 cursor-pointer">Dataset linked · details</button>}
+          </div>}
         </div>
 
         {/* Three main actions; everything else is under More */}

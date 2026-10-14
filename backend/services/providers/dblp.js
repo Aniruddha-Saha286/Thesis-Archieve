@@ -279,7 +279,8 @@ async function searchDblp({
   }
 
   const params = new URLSearchParams();
-  params.append('q', sanitizeQuery(query));
+  const venueQuery = safeFilters.venue && safeFilters.venue !== 'arxiv' ? ` venue:${safeFilters.venue === 'jmlr' ? 'J. Mach. Learn. Res.' : safeFilters.venue.toUpperCase()}:` : '';
+  params.append('q', sanitizeQuery(query) + venueQuery);
   params.append('format', 'json');
   params.append('h', String(pageSize));
   params.append('f', String(offset));

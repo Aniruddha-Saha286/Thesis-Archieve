@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { cacheOfflineSession, offlineSession, clearOfflineData } from '../utils/offlineLibrary';
 
 const AuthContext = createContext();
 
@@ -25,7 +26,13 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       const res = await axios.get('/api/auth/me');
       setUser(res.data.user);
+      cacheOfflineSession(localStorage, res.data.user);
     } catch (err) {
+      if (!navigator.onLine || !err.response) {
+        const cached = await offlineSession(localStorage);
+        if (cached) { setUser(cached); return; }
+      }
+      clearOfflineData(localStorage);
       console.warn('Session expired or invalid token:', err.message);
       setToken(null);
       setUser(null);
@@ -45,6 +52,12 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setLoading(false);
     }
+  }, [token]);
+
+  useEffect(() => {
+    const reconnect = () => { if (token) fetchCurrentUser(); };
+    window.addEventListener('online', reconnect);
+    return () => window.removeEventListener('online', reconnect);
   }, [token]);
 
   const login = async (email, password) => {
@@ -70,6 +83,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    localStorage.removeItem('thesis_vault_token');
+    clearOfflineData(localStorage);
     setToken(null);
     setUser(null);
   };

@@ -53,9 +53,10 @@ async function runLiveSmokeTests() {
 
     assert(res, 'Search result should be defined');
     assert(Array.isArray(res.records), 'Records should be an array');
+    assert(res.records.length > 0, 'Live paper search must return real records, not just a valid empty response');
     assert(res.pagination, 'Pagination should be present');
     assert(res.providerStatus, 'Provider telemetry should be reported');
-    console.log(`    Retrieved ${res.records.length} records. Provider telemetry:`, Object.keys(res.providerStatus));
+    console.log(`    Retrieved ${res.records.length} records. Provider telemetry:`, res.providerStatus);
   });
 
   await test('Live Dataset Discovery: retrieves real open science datasets from DataCite and Zenodo', async () => {
@@ -66,6 +67,8 @@ async function runLiveSmokeTests() {
     });
 
     assert(Array.isArray(dsRes.datasets), 'Datasets should be an array');
+    assert(dsRes.datasets.length > 0, 'Live dataset search must return real datasets');
+    assert(!dsRes.hasOutage, 'Dataset sources must not all be unavailable');
     console.log(`    Retrieved ${dsRes.datasets.length} datasets. Outage status: ${dsRes.hasOutage}`);
   });
 
