@@ -17,6 +17,10 @@ const ALLOWED_ORIGINS = new Set([
 function isAllowedOrigin(origin) {
   if (!origin) return true;
   if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname.endsWith('.vercel.app')) return true;
+  } catch {}
   return false;
 }
 
