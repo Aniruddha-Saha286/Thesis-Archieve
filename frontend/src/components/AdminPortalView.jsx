@@ -41,6 +41,7 @@ import PublicationDetailModal from './PublicationDetailModal';
 import DocumentViewerModal from './DocumentViewerModal';
 import ManualGrantModal from './ManualGrantModal';
 import EditorManagementModal from './EditorManagementModal';
+import AdminPresencePanel from './AdminPresencePanel';
 
 const ROSTER_PAGE_SIZE = 25;
 
@@ -81,6 +82,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
 
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [rosterError, setRosterError] = useState('');
   const [searchStudent, setSearchStudent] = useState('');
   const [rosterFilter, setRosterFilter] = useState('all');
   const [actionLoading, setActionLoading] = useState(null);
@@ -147,8 +149,10 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
       setLoadingStudents(true);
       const res = await axios.get('/api/admin/students');
       setStudents(res.data);
+      setRosterError('');
     } catch (err) {
       console.error('Error fetching students:', err);
+      setRosterError('The student roster could not be refreshed. Any displayed records may be out of date.');
     } finally {
       setLoadingStudents(false);
     }
@@ -892,6 +896,8 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
 
       {/* Main Container */}
       <main className="tta-light-panel max-w-7xl mx-auto px-4 sm:px-6 py-5 w-full flex-1">
+        {canViewStudents && <AdminPresencePanel />}
+        {rosterError && canViewStudents && <div role="alert" className="mb-4 p-4 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 flex flex-wrap gap-3 items-center justify-between"><span>{rosterError}</span><button type="button" onClick={fetchStudents} className="underline font-semibold cursor-pointer">Retry roster</button></div>}
         
         {/* TAB 1: PENDING APPLICANTS */}
         {activeTab === 'pending' && canViewStudents && (
@@ -920,7 +926,7 @@ export default function AdminPortalView({ onSwitchToStudentPreview }) {
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto text-neutral-800 mb-2" />
                 Loading candidate applications...
               </div>
-            ) : pendingStudents.length === 0 ? (
+            ) : rosterError && students.length === 0 ? null : pendingStudents.length === 0 ? (
               <div className="p-12 text-center text-xs font-mono-meta text-[#737067] bg-white border border-[#E2DFD8] rounded-sm space-y-2">
                 <CheckCircle className="w-8 h-8 text-emerald-600 mx-auto" />
                 <p className="font-bold text-[#1C1B18]">All candidate applications evaluated</p>

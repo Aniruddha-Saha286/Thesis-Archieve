@@ -47,6 +47,9 @@ function escapeRegex(str) {
 }
 
 function parseAndValidateThesisQuery(rawQuery = {}) {
+  for (const key of ['search', 'query', 'category', 'subjectId', 'fieldId', 'publicationType', 'source', 'publisher', 'institutionId', 'institutionName', 'institutionMode', 'authorId', 'degree', 'program', 'venue', 'sort']) {
+    if (rawQuery[key] !== undefined && typeof rawQuery[key] !== 'string') return { valid: false, status: 400, code: 'INVALID_FILTER', message: `${key} must be a single text value.` };
+  }
   const {
     search,
     query,
@@ -79,8 +82,8 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
   const rawSearch = search !== undefined ? search : query;
   const searchTerm = typeof rawSearch === 'string' ? rawSearch.trim().slice(0, 250) : '';
 
-  const parsedPage = parseInt(page, 10);
-  if (isNaN(parsedPage) || parsedPage < 1) {
+  const parsedPage = Number(page);
+  if (!/^\d+$/.test(String(page)) || !Number.isSafeInteger(parsedPage) || parsedPage < 1) {
     return {
       valid: false,
       status: 400,
@@ -178,6 +181,9 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
 
   for (const key of ['hasCode', 'hasDataset', 'hasOpenDataset']) {
     if (rawQuery[key] !== undefined && parseStrictBoolean(rawQuery[key]) === null) return { valid: false, status: 400, code: 'INVALID_RESOURCE_FILTER', message: key + ' must be true or false.' };
+  }
+  for (const [key, value] of [['hasPdf', hasPdf], ['isOpenAccess', isOpenAccess]]) {
+    if (value !== undefined && parseStrictBoolean(value) === null) return { valid: false, status: 400, code: 'INVALID_RESOURCE_FILTER', message: key + ' must be true or false.' };
   }
   const degree = typeof rawQuery.degree === 'string' ? rawQuery.degree : '';
   const program = typeof rawQuery.program === 'string' ? rawQuery.program : '';
@@ -289,8 +295,9 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
 
   let cleanMinCitations = null;
   if (minCitations !== undefined && minCitations !== null && String(minCitations).trim() !== '') {
-    const parsedMinC = parseInt(String(minCitations).trim(), 10);
-    if (isNaN(parsedMinC) || parsedMinC < 0 || parsedMinC > 1000000) {
+    const citationText = String(minCitations).trim();
+    const parsedMinC = Number(citationText);
+    if (!/^\d+$/.test(citationText) || !Number.isSafeInteger(parsedMinC) || parsedMinC < 0 || parsedMinC > 1000000) {
       return {
         valid: false,
         status: 400,

@@ -4,12 +4,20 @@ const Notification = require('../models/Notification');
 const { getEffectiveEntitlements } = require('./entitlementService');
 const { emitToUser } = require('../socket');
 const { checkDiscoveryAlert } = require('./discoveryAlerts');
+const { checkOnlinePapers } = require('./onlinePaperAlerts');
 
 let isRunning = false;
 
-async function checkAlertsForUser(userId) {
+const pendingChecks = new Map();
+function checkAlertsForUser(userId) {
+  const key = String(userId);
+  if (!pendingChecks.has(key)) pendingChecks.set(key, evaluateAlertsForUser(userId).finally(() => pendingChecks.delete(key)));
+  return pendingChecks.get(key);
+}
+
+async function evaluateAlertsForUser(userId) {
   const user = await User.findById(userId);
-  if (!user || !Array.isArray(user.topicAlerts) || user.topicAlerts.length === 0) {
+  if (!user || user.status !== 'approved' || !Array.isArray(user.topicAlerts) || user.topicAlerts.length === 0) {
     return { notificationsCreated: 0 };
   }
 
@@ -36,6 +44,7 @@ async function checkAlertsForUser(userId) {
 
     const checkStartedAt = new Date();
     totalNotificationsCreated += await checkDiscoveryAlert(user, alert, checkStartedAt);
+    totalNotificationsCreated += await checkOnlinePapers(user, alert, checkStartedAt);
     if (alert.venueId) continue;
 
     const lastChecked = alert.lastCheckedAt || alert.createdAt || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -58,6 +67,7 @@ async function checkAlertsForUser(userId) {
         },
       ],
     };
+    if (alert.publicationType === 'thesis') filter.publicationType = { $in: ['thesis', 'dissertation'] };
 
     if (alert.category && alert.category !== 'All Disciplines') {
       filter.category = alert.category;
@@ -95,7 +105,7 @@ async function checkAlertsForUser(userId) {
           type: 'topic_alert',
           title: notifTitle,
           message: notifMsg,
-          link: `/?search=${encodeURIComponent(alert.topic)}`,
+          link: `/?q=${encodeURIComponent(alert.topic)}`,
           data: {
             alertId: String(alert._id),
             topic: alert.topic,
@@ -114,8 +124,15 @@ async function checkAlertsForUser(userId) {
     alert.lastCheckedAt = checkStartedAt;
   }
 
-  await user.save();
-  return { notificationsCreated: totalNotificationsCreated };
+  // Update only cursors, so scans cannot resurrect deleted follows or overwrite
+  // a profile/membership edit that happened while a provider was answering.
+  for (const alert of user.topicAlerts) {
+    const fields = ['lastCheckedAt', 'externalCheckedAt', 'externalCheckedId', 'onlineCheckedAt', 'onlineCheckStatus'];
+    const values = Object.fromEntries(fields.filter(f => alert[f] != null).map(f => [`topicAlerts.$.${f}`, alert[f]]));
+    if (Object.keys(values).length) await User.updateOne({ _id: user._id, 'topicAlerts._id': alert._id }, { $set: values });
+  }
+  return { notificationsCreated: totalNotificationsCreated,
+    sourceWarnings: user.topicAlerts.filter(a => a.active && a.onlineCheckStatus === 'unavailable').map(a => a.topic) };
 }
 
 async function runAllScheduledAlerts() {
@@ -126,10 +143,12 @@ async function runAllScheduledAlerts() {
   try {
     const usersWithAlerts = await User.find({
       'topicAlerts.active': true,
+      status: 'approved',
     }).select('_id');
 
     for (const u of usersWithAlerts) {
-      await checkAlertsForUser(u._id);
+      try { await checkAlertsForUser(u._id); }
+      catch (err) { console.error('Topic alert check failed for a member:', err.message); }
     }
   } catch (err) {
     console.error('Error running scheduled topic alerts:', err);

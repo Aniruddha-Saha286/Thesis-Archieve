@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { authenticateToken, getJwtSecret } = require('../middleware/auth');
+const { authenticateToken, identifyAccount, getJwtSecret } = require('../middleware/auth');
 const { authLimiter, loginLimiter } = require('../middleware/rateLimit');
 const { emitStudentProfileUpdated } = require('../socket');
 const {
@@ -144,7 +144,8 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
-router.get('/me', authenticateToken, async (req, res) => {
+router.get('/me', identifyAccount, async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
   return res.json({
     user: toSanitizedUserDto(req.user),
   });

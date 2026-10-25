@@ -85,7 +85,12 @@ async function syncDiscovery({ env = process.env, fetcher = fetchJob, persist = 
       }
       await new Promise(r => setTimeout(r, 1000));
     }
-    cache.clear(); return { results };
+    cache.clear();
+    if (results.some(result => result.accepted > 0)) {
+      // Deliver indexed-paper alerts as soon as a sync finishes.
+      await require('./topicAlertService').runAllScheduledAlerts();
+    }
+    return { results };
   } finally { running = false; }
 }
 function parseFeedQuery(raw = {}, now = new Date()) {
@@ -160,6 +165,7 @@ function startDiscoveryScheduler(env = process.env) {
   const interval = Math.max(5, Math.min(1440, Number(env.RADAR_INTERVAL_MINUTES) || 60)) * 60000;
   // No network calls until explicitly enabled; never run ingestion during test startup.
   const tick = () => syncDiscovery({ env }).catch(() => console.error('Discovery sync failed.'));
+  tick();
   const timer = setInterval(tick, interval); timer.unref(); return timer;
 }
 module.exports = { jobsFor, fetchJob, upsertPaper, syncDiscovery, parseFeedQuery, readFeed, feedHealth, startDiscoveryScheduler };

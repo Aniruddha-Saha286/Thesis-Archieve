@@ -5,6 +5,8 @@ import axios from 'axios';
 import Header from './components/Header';
 import LocalDiscoveryShortcuts from './components/LocalDiscoveryShortcuts';
 import TopicTrendRadar from './components/TopicTrendRadar';
+import SearchLaunchpad from './components/SearchLaunchpad';
+import { safeResourceLink } from './utils/resourceLinks';
 import PaperSkeletons from './components/PaperSkeletons';
 import { cacheOfflineLibrary, offlineLibrary } from './utils/offlineLibrary';
 import AdminDesk from './components/AdminDesk';
@@ -131,20 +133,20 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null);
   // After a refresh the same search keeps its id, so it is not counted against the daily limit again
   const [searchContextId, setSearchContextId] = useState(() => recallSearchContext(safeSessionStorage(), initialUrl.q));
-  const [selectedCategory, setSelectedCategory] = useState('All Disciplines');
-  const [selectedSubjectId, setSelectedSubjectId] = useState('');
-  const [selectedFieldId, setSelectedFieldId] = useState('');
-  const [selectedFieldName, setSelectedFieldName] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(initialUrl.category);
+  const [selectedSubjectId, setSelectedSubjectId] = useState(initialUrl.subjectId);
+  const [selectedFieldId, setSelectedFieldId] = useState(initialUrl.fieldId);
+  const [selectedFieldName, setSelectedFieldName] = useState(initialUrl.fieldName);
   const [subjectsList, setSubjectsList] = useState(DEFAULT_CATEGORIES);
-  const [selectedInstitution, setSelectedInstitution] = useState(null);
-  const [institutionMode, setInstitutionMode] = useState('affiliation');
-  const [academicOnly, setAcademicOnly] = useState(true);
-  const [selectedCountries, setSelectedCountries] = useState([]);
-  const [minCitations, setMinCitations] = useState('');
+  const [selectedInstitution, setSelectedInstitution] = useState(initialUrl.institution);
+  const [institutionMode, setInstitutionMode] = useState(initialUrl.institutionMode);
+  const [academicOnly, setAcademicOnly] = useState(initialUrl.academicOnly);
+  const [selectedCountries, setSelectedCountries] = useState(initialUrl.countries);
+  const [minCitations, setMinCitations] = useState(initialUrl.citations);
   const [sortOrder, setSortOrder] = useState(initialUrl.sort);
-  const [selectedAuthorFilter, setSelectedAuthorFilter] = useState(null);
+  const [selectedAuthorFilter, setSelectedAuthorFilter] = useState(initialUrl.author);
   const [inspectingAuthor, setInspectingAuthor] = useState(null);
-  const [selectedPublisher, setSelectedPublisher] = useState('');
+  const [selectedPublisher, setSelectedPublisher] = useState(initialUrl.publisher);
   const [selectedVenue, setSelectedVenue] = useState(initialUrl.venue || '');
   const [selectedPublicationType, setSelectedPublicationType] = useState(initialUrl.type);
   useEffect(() => { if (user?.offline) setActiveTab('library'); }, [user?.offline]);
@@ -187,6 +189,7 @@ export default function App() {
   const [isCollectionsOpen, setIsCollectionsOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isTopicAlertsOpen, setIsTopicAlertsOpen] = useState(false);
+  const [alertTopicSeed, setAlertTopicSeed] = useState('');
   const [isProposeOpen, setIsProposeOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [citingThesis, setCitingThesis] = useState(null);
@@ -674,6 +677,9 @@ export default function App() {
         venue: selectedVenue,
         type: selectedPublicationType,
         sort: sortOrder,
+        subjectId: selectedSubjectId, category: selectedCategory, fieldId: selectedFieldId, fieldName: selectedFieldName,
+        publisher: selectedPublisher, institution: selectedInstitution, institutionMode, countries: selectedCountries,
+        author: selectedAuthorFilter, citations: minCitations, academicOnly,
         code: hasCodeOnly, data: hasDatasetOnly, degree: degreeFilter, program: programFilter,
         pdf: hasPdfOnly,
         oa: isOpenAccessOnly,
@@ -706,7 +712,7 @@ export default function App() {
     } else {
       window.history.pushState(selectedDetailThesis ? { ttaPaper: true } : null, '', next);
     }
-  }, [isApproved, activeTab, radarFilters, searchQuery, selectedVenue, selectedPublicationType, sortOrder, hasCodeOnly, hasDatasetOnly, degreeFilter, programFilter, hasPdfOnly, isOpenAccessOnly, yearMin, yearMax, selectedDetailThesis]);
+  }, [isApproved, activeTab, radarFilters, searchQuery, selectedVenue, selectedPublicationType, sortOrder, hasCodeOnly, hasDatasetOnly, degreeFilter, programFilter, hasPdfOnly, isOpenAccessOnly, yearMin, yearMax, selectedDetailThesis, selectedSubjectId, selectedCategory, selectedFieldId, selectedFieldName, selectedPublisher, selectedInstitution, institutionMode, selectedCountries, selectedAuthorFilter, minCitations, academicOnly]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -717,7 +723,9 @@ export default function App() {
       if (target.view === 'discover') {
         const changed =
           target.q !== searchQuery || target.venue !== selectedVenue || target.type !== selectedPublicationType || target.sort !== sortOrder ||
-          target.code !== hasCodeOnly || target.data !== hasDatasetOnly || target.degree !== degreeFilter || target.program !== programFilter || target.pdf !== hasPdfOnly || target.oa !== isOpenAccessOnly || target.from !== yearMin || target.to !== yearMax;
+          target.code !== hasCodeOnly || target.data !== hasDatasetOnly || target.degree !== degreeFilter || target.program !== programFilter || target.pdf !== hasPdfOnly || target.oa !== isOpenAccessOnly || target.from !== yearMin || target.to !== yearMax ||
+          target.subjectId !== selectedSubjectId || target.category !== selectedCategory || target.fieldId !== selectedFieldId || target.fieldName !== selectedFieldName || target.publisher !== selectedPublisher || target.citations !== minCitations ||
+          target.institution?.id !== selectedInstitution?.id || target.institution?.name !== selectedInstitution?.name || target.institutionMode !== institutionMode || target.countries.join(',') !== [...selectedCountries].sort().join(',') || target.author?.id !== selectedAuthorFilter?.id;
         if (changed) {
           setSessionId(null);
           setSearchContextId(recallSearchContext(safeSessionStorage(), target.q));
@@ -731,7 +739,11 @@ export default function App() {
           setIsOpenAccessOnly(target.oa);
           setYearMin(target.from);
           setYearMax(target.to);
+          setSelectedSubjectId(target.subjectId); setSelectedCategory(target.category); setSelectedFieldId(target.fieldId); setSelectedFieldName(target.fieldName);
+          setSelectedPublisher(target.publisher); setSelectedInstitution(target.institution); setInstitutionMode(target.institutionMode);
+          setSelectedCountries(target.countries); setSelectedAuthorFilter(target.author); setMinCitations(target.citations);
         }
+        setAcademicOnly(target.academicOnly);
       }
       const openId = selectedDetailThesis ? String(selectedDetailThesis._id || selectedDetailThesis.id) : '';
       if (target.paper !== openId) {
@@ -801,31 +813,21 @@ export default function App() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleThesisCreated = (newThesis) => {
+    // Re-run the filtered search: live records may not satisfy the current selection.
+    const refreshCatalog = () => {
       if (isApproved) {
-        setTheses((prev) => [
-          newThesis,
-          ...prev.filter((t) => (t._id || t.id) !== (newThesis._id || newThesis.id)),
-        ]);
+        setSessionId(null);
+        setCurrentPage(1);
+        setSearchRevision(n => n + 1);
       }
     };
-
-    const handleThesisUpdated = (updatedThesis) => {
-      setTheses((prev) =>
-        prev.map((t) =>
-          ((t._id || t.id) === (updatedThesis._id || updatedThesis.id) ? { ...t, ...updatedThesis } : t)
-        )
-      );
-    };
-
-    const handleThesisPinned = ({ thesisId, isPinned }) => {
-      setTheses((prev) =>
-        prev.map((t) => ((t._id || t.id) === thesisId ? { ...t, isPinned } : t))
-      );
-    };
+    const handleThesisCreated = refreshCatalog;
+    const handleThesisUpdated = refreshCatalog;
+    const handleThesisPinned = refreshCatalog;
 
     const handleThesisDeleted = ({ thesisId }) => {
       setTheses((prev) => prev.filter((t) => (t._id || t.id) !== thesisId));
+      refreshCatalog();
     };
 
     const handleAdminUpdate = () => {
@@ -940,6 +942,7 @@ export default function App() {
     setSelectedFieldName('');
     setSelectedInstitution(null);
     setInstitutionMode('affiliation');
+    setAcademicOnly(true);
     setSelectedCountries([]);
     setSelectedAuthorFilter(null);
     setMinCitations('');
@@ -1146,9 +1149,11 @@ export default function App() {
           onCite={setCitingThesis} onReportIssue={setReportingThesis}
           onSavedChange={fetchUserSavedCount} onOpenMembership={() => setIsMembershipOpen(true)} onOpenAlerts={() => setIsTopicAlertsOpen(true)}
         /></Suspense></div>}
-        {activeTab === 'library' && (
+        {visitedTools.has('library') && (
+          <div hidden={activeTab !== 'library'}>
           <Suspense fallback={<PartLoading />}>
           <LibraryHub
+            active={activeTab === 'library'}
             savedPapersCount={savedPapersCount}
             onOpenSavedPapers={() => setIsSavedPapersOpen(true)}
             onOpenCollections={() => setIsCollectionsOpen(true)}
@@ -1158,12 +1163,17 @@ export default function App() {
             onOpenPropose={() => setIsProposeOpen(true)}
             onOpenMembership={() => setIsMembershipOpen(true)}
             membershipPlan={membershipPlan}
+            onReadPaper={(paper) => {
+              setSelectedDetailThesis({ ...paper, id: paper.paperId, _id: paper.paperId, pdfUrl: safeResourceLink(paper.pdfUrl), authorDisplay: paper.authors, authors: [{ name: paper.authors || 'Author not recorded' }], publishedYear: paper.year, isExternal: !isArchiveId(paper.paperId) });
+              setDetailInitialTab('overview');
+            }}
             onSwitchToDiscover={() => {
               setActiveTab('discover');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
           </Suspense>
+          </div>
         )}
 
         {/* Topic Check: is my thesis idea already done, and is it feasible? */}
@@ -1468,6 +1478,7 @@ export default function App() {
               filtersOpen={mobileFilterOpen}
               activeFilterCount={activeFilterCount}
               onOpenCoverage={() => setIsCoverageOpen(true)}
+              onFollowSearch={(typed) => { setAlertTopicSeed(typed); setIsTopicAlertsOpen(true); }}
               onOpenTopicCheck={(typed) => {
                 setTopicSeed(typed || searchQuery || '');
                 setActiveTab('topic');
@@ -1476,6 +1487,10 @@ export default function App() {
               }}
             />
 
+            {searchMode === 'publications' && !searchQuery && <SearchLaunchpad onSearch={query => {
+              resetAllFilters(); setSearchQuery(query); setSearchRevision(n => n + 1);
+              setSessionId(null); setSearchContextId(null); setCurrentPage(1);
+            }} />}
             <div className={`discovery-layout max-w-7xl mx-auto px-4 md:px-6 py-6 grid grid-cols-1 ${mobileFilterOpen ? 'md:grid-cols-4' : ''} gap-6`}>
             {/* Left Column: Grouped Filters */}
             <aside
@@ -1536,7 +1551,6 @@ export default function App() {
                             setSelectedCategory(sub.label);
                             setSelectedFieldId('');
                             setSelectedFieldName('');
-                            setSelectedPublisher('');
                             setSessionId(null);
                             setCurrentPage(1);
                           }}
@@ -1986,8 +2000,14 @@ export default function App() {
 
             {/* Active Filter Chips */}
             {hasAnyActiveFilter && (
-              <div className="p-2.5 bg-[#FAF9F5] dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm text-xs font-mono-meta flex items-center gap-1.5 flex-wrap">
+              <div className="active-filter-chips p-2.5 bg-[#FAF9F5] dark:bg-[#161513] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm text-xs font-mono-meta flex items-center gap-1.5 flex-wrap">
                 <span className="text-[11px] text-[#737067] dark:text-[#9A968D] mr-1">Filters on:</span>
+                {[
+                  [hasCodeOnly && 'Has code', () => setHasCodeOnly(false), 'Remove code filter'],
+                  [hasDatasetOnly && 'Has open dataset', () => setHasDatasetOnly(false), 'Remove dataset filter'],
+                  [degreeFilter && `Degree: ${degreeFilter.toUpperCase()}`, () => setDegreeFilter(''), 'Remove degree filter'],
+                  [programFilter && `Program: ${programFilter.toUpperCase()}`, () => setProgramFilter(''), 'Remove program filter'],
+                ].filter(([label]) => label).map(([label, clear, name]) => <button key={name} type="button" aria-label={name} onClick={() => { clear(); setSessionId(null); setCurrentPage(1); }} className="inline-flex items-center gap-1 border border-[#D5D1C7] dark:border-[#38352F] rounded-lg px-2 py-1"><span>{label}</span><X size={12} /></button>)}
                 {selectedVenue && <button type="button" onClick={() => { setSelectedVenue(''); setSessionId(null); setCurrentPage(1); }} aria-label="Remove venue filter" className="border rounded-lg px-2 py-1">Venue: {selectedVenue.toUpperCase()} ×</button>}
                 {searchQuery && (
                   <span className="inline-flex items-center gap-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-0.5 rounded-xs text-[#1C1B18] dark:text-[#F0EDE6]">
@@ -2288,6 +2308,7 @@ export default function App() {
       {isTopicAlertsOpen && (
         <TopicAlertsModal
           isOpen={isTopicAlertsOpen}
+          initialTopic={alertTopicSeed}
           onClose={() => setIsTopicAlertsOpen(false)}
         />
       )}

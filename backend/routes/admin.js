@@ -55,11 +55,16 @@ if (hasCloudinary) {
 
 router.use(authenticateToken);
 
+router.get('/presence', requirePermission(PERMISSIONS.STUDENTS_VIEW), (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.json(require('../services/presenceService').presence.snapshot());
+});
+
 
 router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req, res) => {
   try {
     const students = await User.find({ role: { $in: ['student', 'editor'] } })
-      .select('-password -savedPapers -collections -comparisons -searchHistory')
+      .select('-password -savedPapers -collections -comparisons -searchHistory -researchPlan')
       .sort({ createdAt: -1 });
 
     const now = new Date();
@@ -152,7 +157,7 @@ router.get('/students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req
 router.get('/pending-students', requirePermission(PERMISSIONS.STUDENTS_VIEW), async (req, res) => {
   try {
     const pendingStudents = await User.find({ role: 'student', status: 'pending', isProfileComplete: true })
-      .select('-password -savedPapers -collections -comparisons -searchHistory')
+      .select('-password -savedPapers -collections -comparisons -searchHistory -researchPlan')
       .sort({ createdAt: -1 });
 
     const sanitized = pendingStudents.map((s) => {
@@ -246,6 +251,10 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
       return res.status(404).json({ message: 'Student application not found or target is not a student.' });
     }
 
+    if (student.status === 'banned') {
+      return res.status(409).json({ message: 'Reinstate this account before reviewing its verification.' });
+    }
+
     if (decision === 'approve' && !student.isProfileComplete) {
       return res.status(400).json({
         message: 'This student has not finished the registration form yet, so there is nothing to verify. Approval becomes available once they submit it.',
@@ -257,10 +266,6 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
     student.verifiedAt = new Date();
     student.verifiedBy = req.user._id;
     await student.save();
-
-    if (decision === 'reject') {
-      revokeUserSocketPrivileges(student._id);
-    }
 
     emitStudentStatusChanged(student._id, {
       status: student.status,
@@ -277,6 +282,8 @@ router.post('/verify-student/:id', requirePermission(PERMISSIONS.STUDENTS_VERIFY
         hasVerificationDocument: Boolean(student.idCardProof),
       },
     });
+
+    syncUserSocketRooms(student._id, student);
 
     if (decision === 'approve') {
       try {
@@ -321,6 +328,10 @@ router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND),
     const { reason } = req.body;
     const studentId = req.params.id;
 
+    if (reason != null && (typeof reason !== 'string' || reason.trim().length > 500)) {
+      return res.status(400).json({ message: 'Suspension reason must be text of at most 500 characters.' });
+    }
+
     if (String(req.user._id) === String(studentId)) {
       return res.status(400).json({ message: 'Self-suspension is prohibited.' });
     }
@@ -330,11 +341,10 @@ router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND),
       return res.status(404).json({ message: 'Student not found or account is not an eligible student target.' });
     }
 
+    if (student.status !== 'banned') student.statusBeforeBan = student.status;
     student.status = 'banned';
-    student.banReason = (reason || 'Administrative suspension').trim();
+    student.banReason = reason?.trim() || 'Administrative suspension';
     await student.save();
-
-    revokeUserSocketPrivileges(student._id);
 
     emitStudentStatusChanged(student._id, {
       status: 'banned',
@@ -348,6 +358,10 @@ router.post('/student/:id/ban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND),
         banReason: student.banReason,
       },
     });
+
+    revokeUserSocketPrivileges(student._id);
+    await AuditEvent.create({ actor: req.user._id, action: 'STUDENT_SUSPENDED', targetType: 'User',
+      targetId: String(student._id), metadata: { reason: student.banReason }, ipAddress: req.ip || '' });
 
     return res.json({
       message: `Student account ${student.name} has been suspended.`,
@@ -376,20 +390,29 @@ router.post('/student/:id/unban', requirePermission(PERMISSIONS.STUDENTS_SUSPEND
       return res.status(404).json({ message: 'Student not found or target is not a student.' });
     }
 
-    student.status = 'approved';
+    if (student.status !== 'banned') {
+      return res.status(409).json({ message: 'Only suspended accounts can be reinstated.' });
+    }
+    student.status = student.statusBeforeBan || (student.verifiedAt && student.isProfileComplete ? 'approved' : 'pending');
+    student.statusBeforeBan = null;
     student.banReason = '';
     await student.save();
 
     emitStudentStatusChanged(student._id, {
-      status: 'approved',
+      status: student.status,
+      verifiedAt: student.verifiedAt,
       student: {
         id: student._id,
         _id: student._id,
         name: student.name,
         email: student.email,
-        status: 'approved',
+        status: student.status,
       },
     });
+
+    syncUserSocketRooms(student._id, student);
+    await AuditEvent.create({ actor: req.user._id, action: 'STUDENT_REINSTATED', targetType: 'User',
+      targetId: String(student._id), metadata: { status: student.status }, ipAddress: req.ip || '' });
 
     return res.json({
       message: `Student account ${student.name} reinstated.`,
@@ -417,12 +440,11 @@ router.delete('/student/:id', requireAdmin, adminActionLimiter, async (req, res)
       return res.status(404).json({ message: 'Student not found or account is not an eligible student target.' });
     }
 
-    revokeUserSocketPrivileges(student._id);
-
     emitStudentStatusChanged(student._id, {
       status: 'deleted',
       studentId: String(student._id),
     });
+    revokeUserSocketPrivileges(student._id);
 
     return res.json({ message: `Student account for ${student.name} permanently removed.` });
   } catch (err) {
@@ -468,7 +490,7 @@ router.get('/stats', requireStaff, async (req, res) => {
 router.get('/editors', requireAdmin, async (req, res) => {
   try {
     const staff = await User.find({ role: { $in: ['admin', 'editor'] } })
-      .select('-password -savedPapers -collections -comparisons -searchHistory')
+      .select('-password -savedPapers -collections -comparisons -searchHistory -researchPlan')
       .populate('roleChangedBy', 'name email')
       .sort({ role: 1, createdAt: 1 });
 

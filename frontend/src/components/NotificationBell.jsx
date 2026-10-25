@@ -33,6 +33,13 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
   }, [load, notificationTick]);
 
   useEffect(() => {
+    const refresh = () => { if (document.visibilityState !== 'hidden') load(); };
+    const timer = setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [load]);
+
+  useEffect(() => {
     if (!open) return undefined;
     const handleOutside = (e) => {
       if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
@@ -52,6 +59,7 @@ export default function NotificationBell({ onOpenFeedback, onOpenMembership, onO
     try {
       await axios.put(`/api/user/notifications/${id}/read`);
     } catch (err) {
+      load();
     }
   };
 

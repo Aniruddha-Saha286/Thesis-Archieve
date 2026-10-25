@@ -2,13 +2,37 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Notification = require('../models/Notification');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, requireApproved } = require('../middleware/auth');
 const { batchExportCitations } = require('../services/citationGenerator');
 const { checkAlertsForUser } = require('../services/topicAlertService');
 const { enforceQuota } = require('../middleware/entitlements');
 const { getEffectiveEntitlements } = require('../services/entitlementService');
 
 router.use(authenticateToken);
+
+router.get('/research-plan', requireApproved, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('researchPlan');
+    if (!user) return res.status(404).json({ message: 'Account not found.' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({ plan: user.researchPlan || require('../services/researchPlan').initialPlan() });
+  } catch {
+    return res.status(503).json({ message: 'Your roadmap could not be loaded. Please try again.' });
+  }
+});
+
+router.put('/research-plan', requireApproved, async (req, res) => {
+  try {
+    const plan = require('../services/researchPlan').validatePlan(req.body);
+    const updated = await User.findOneAndUpdate({ _id: req.user._id,
+      $or: [{ 'researchPlan.version': plan.version }, ...(plan.version === 0 ? [{ 'researchPlan.version': { $exists: false } }] : [])],
+    }, { $set: { researchPlan: { ...plan, version: plan.version + 1, updatedAt: new Date() } } }, { new: true, runValidators: true }).select('researchPlan');
+    if (!updated) return res.status(409).json({ message: 'Your roadmap changed in another tab. Reload the saved version before editing again.', code: 'PLAN_CONFLICT' });
+    return res.json({ plan: updated.researchPlan });
+  } catch (error) {
+    return res.status(error.status === 400 ? 400 : 503).json({ message: error.status === 400 ? error.message : 'Your roadmap could not be saved. Your edits are still here.' });
+  }
+});
 
 router.get('/saved-papers', async (req, res) => {
   try {
@@ -463,7 +487,8 @@ router.post('/alerts', async (req, res, next) => {
   } catch { return res.status(503).json({ message: 'Follows could not be checked. Please try again.' }); }
 }, enforceQuota('topicAlerts'), async (req, res) => {
   try {
-    const { topic, category, venueId = '' } = req.body;
+    const { topic, category, venueId = '', publicationType = '' } = req.body;
+    if (!['', 'thesis'].includes(publicationType)) return res.status(400).json({ message: 'Choose all papers or theses only.' });
     const { VENUES } = require('../services/venueCatalog');
     if (typeof venueId !== 'string' || (venueId && !VENUES.some(v => v.id === venueId))) return res.status(400).json({ message: 'Invalid venue.' });
     if (typeof topic !== 'string' || !topic.trim() || topic.length > 150) return res.status(400).json({ message: 'A topic of at most 150 characters is required.' });
@@ -475,6 +500,7 @@ router.post('/alerts', async (req, res, next) => {
     const alert = {
       topic: topic.trim(),
       venueId,
+      publicationType,
       category: category || 'All Disciplines',
       active: true,
       createdAt: new Date(),

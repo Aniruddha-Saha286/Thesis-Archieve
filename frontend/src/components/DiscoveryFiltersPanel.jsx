@@ -60,14 +60,17 @@ export default function DiscoveryFiltersPanel({
   const [instSuggestions, setInstSuggestions] = useState([]);
   const [loadingInst, setLoadingInst] = useState(false);
   const [showInstDropdown, setShowInstDropdown] = useState(false);
+  const [instError, setInstError] = useState('');
+  const [instIndex, setInstIndex] = useState(-1);
   const instDropdownRef = useRef(null);
-  const instTimerRef = useRef(null);
+  const instRequestRef = useRef(0), instFocusedRef = useRef(false);
 
   const [customCountryInput, setCustomCountryInput] = useState('');
 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (instDropdownRef.current && !instDropdownRef.current.contains(e.target)) {
+        instFocusedRef.current = false;
         setShowInstDropdown(false);
       }
     };
@@ -76,33 +79,27 @@ export default function DiscoveryFiltersPanel({
   }, []);
 
   const handleInstInputChange = (val) => {
-    setInstInput(val);
-    if (instTimerRef.current) clearTimeout(instTimerRef.current);
-
-    if (val.trim().length >= 2) {
-      instTimerRef.current = setTimeout(async () => {
-        try {
-          setLoadingInst(true);
-          const res = await axios.get('/api/institutions/suggest', {
-            params: {
-              q: val.trim(),
-              academic_only: effectiveAcademicOnly,
-              limit: 7,
-            },
-          });
-          setInstSuggestions(res.data || []);
-          setShowInstDropdown(true);
-        } catch (err) {
-          console.error('Institution suggest error:', err);
-        } finally {
-          setLoadingInst(false);
-        }
-      }, 300);
-    } else {
-      setInstSuggestions([]);
-      setShowInstDropdown(false);
-    }
+    ++instRequestRef.current; instFocusedRef.current = true;
+    setInstInput(val); setInstSuggestions([]); setShowInstDropdown(false); setInstIndex(-1); setInstError('');
   };
+
+  useEffect(() => {
+    const query = instInput.trim();
+    if (query.length < 2 || effectiveInstitution) { setLoadingInst(false); return; }
+    const request = ++instRequestRef.current, controller = new AbortController();
+    setInstSuggestions([]); setInstIndex(-1); setInstError('');
+    const timer = setTimeout(async () => {
+      setLoadingInst(true);
+      try {
+        const { data } = await axios.get('/api/institutions/suggest', { params: { q: query, academic_only: effectiveAcademicOnly, limit: 7 }, signal: controller.signal });
+        if (controller.signal.aborted || request !== instRequestRef.current) return;
+        setInstSuggestions(Array.isArray(data) ? data : []); setShowInstDropdown(instFocusedRef.current);
+      } catch {
+        if (!controller.signal.aborted && request === instRequestRef.current) { setInstError('University suggestions are unavailable. Edit your search to retry.'); setShowInstDropdown(false); }
+      } finally { if (!controller.signal.aborted && request === instRequestRef.current) setLoadingInst(false); }
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [instInput, effectiveAcademicOnly, effectiveInstitution]);
 
   const handleSelectInstItem = (inst) => {
     if (onSelectInstitution) {
@@ -111,6 +108,7 @@ export default function DiscoveryFiltersPanel({
     setInstInput('');
     setInstSuggestions([]);
     setShowInstDropdown(false);
+    ++instRequestRef.current; instFocusedRef.current = false; setInstIndex(-1);
   };
 
   const handleClearInstitution = () => {
@@ -249,6 +247,18 @@ export default function DiscoveryFiltersPanel({
               <input
                 type="text"
                 value={instInput}
+                aria-label="Search universities"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showInstDropdown}
+                aria-controls={showInstDropdown ? 'institution-options' : undefined}
+                aria-activedescendant={showInstDropdown && instIndex >= 0 ? `institution-option-${instIndex}` : undefined}
+                onFocus={() => { instFocusedRef.current = true; if (instSuggestions.length) setShowInstDropdown(true); }}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') { instFocusedRef.current = false; setShowInstDropdown(false); setInstIndex(-1); }
+                  if (showInstDropdown && instSuggestions.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setInstIndex(index => event.key === 'ArrowDown' ? (index + 1) % instSuggestions.length : index <= 0 ? instSuggestions.length - 1 : index - 1); }
+                  if (event.key === 'Enter' && showInstDropdown && instIndex >= 0 && instSuggestions[instIndex]) { event.preventDefault(); handleSelectInstItem(instSuggestions[instIndex]); }
+                }}
                 onChange={(e) => handleInstInputChange(e.target.value)}
                 placeholder="Search university: e.g. Harvard, BUET, MIT..."
                 className="w-full bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2.5 py-1.5 pr-7 text-xs rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 font-sans text-[#1C1B18] dark:text-[#F0EDE6]"
@@ -262,18 +272,20 @@ export default function DiscoveryFiltersPanel({
               </div>
             </div>
 
+            {instError && <p role="alert" className="text-xs text-amber-800 dark:text-amber-300 mt-2">{instError}</p>}
+
             {showInstDropdown && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm shadow-lg z-40 max-h-56 overflow-y-auto divide-y divide-[#F2EFE8] dark:divide-[#2C2A26]">
+              <div id="institution-options" role="listbox" aria-label="University suggestions" className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] rounded-sm shadow-lg z-40 max-h-56 overflow-y-auto divide-y divide-[#F2EFE8] dark:divide-[#2C2A26]">
                 {instSuggestions.length === 0 ? (
                   <div className="p-3 text-center text-[11px] font-mono-meta text-[#737067] dark:text-[#9A968D]">
                     {loadingInst ? 'Searching global institutions...' : 'No institution found.'}
                   </div>
                 ) : (
-                  instSuggestions.map((inst) => (
-                    <div
+                  instSuggestions.map((inst, index) => (
+                    <button type="button" role="option" id={`institution-option-${index}`} aria-selected={instIndex === index} tabIndex={-1}
                       key={inst.id}
                       onClick={() => handleSelectInstItem(inst)}
-                      className="p-2 hover:bg-[#FAF9F5] dark:hover:bg-[#282622] cursor-pointer transition text-left"
+                      className={`w-full p-2 hover:bg-[#FAF9F5] dark:hover:bg-[#282622] cursor-pointer transition text-left ${instIndex === index ? 'bg-amber-50 dark:bg-amber-950/50' : ''}`}
                     >
                       <div className="font-medium text-[#1C1B18] dark:text-[#F0EDE6] text-xs leading-snug">
                         {inst.name}
@@ -289,7 +301,7 @@ export default function DiscoveryFiltersPanel({
                           <span>({inst.acronyms[0]})</span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -342,7 +354,7 @@ export default function DiscoveryFiltersPanel({
               }}
               className="rounded-none border-[#D5D1C7] dark:border-[#38352F] text-[#1C1B18] focus:ring-0 cursor-pointer accent-amber-500"
             />
-            <span>Academic institutions only</span>
+            <span>Academic institutions only (suggestions)</span>
           </label>
         </div>
       </FilterSection>
@@ -366,6 +378,7 @@ export default function DiscoveryFiltersPanel({
                 <button
                   type="button"
                   onClick={() => handleToggleCountryCode(code)}
+                  aria-label={`Remove country ${code} filter`}
                   className="hover:text-amber-300 dark:hover:text-red-900 cursor-pointer"
                 >
                   ✕
@@ -389,6 +402,7 @@ export default function DiscoveryFiltersPanel({
                     : 'bg-[#FAF9F5] dark:bg-[#201F1C] border-[#D5D1C7] dark:border-[#38352F] text-[#524F47] dark:text-[#A8A49C] hover:border-[#1C1B18] dark:hover:border-amber-400'
                 }`}
                 title={`Filter by ${c.name} (${c.code})`}
+                aria-pressed={isSelected}
               >
                 {c.code}
               </button>
@@ -403,6 +417,7 @@ export default function DiscoveryFiltersPanel({
             value={customCountryInput}
             onChange={(e) => setCustomCountryInput(e.target.value.toUpperCase())}
             placeholder="ISO (e.g. FR)"
+            aria-label="Country code"
             className="w-20 bg-[#FAF9F5] dark:bg-[#1E1D1A] border border-[#D5D1C7] dark:border-[#38352F] px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400 font-mono-meta uppercase text-[#1C1B18] dark:text-[#F0EDE6]"
           />
           <button
@@ -428,7 +443,7 @@ export default function DiscoveryFiltersPanel({
 
         <div className="space-y-1">
           <span className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9A968D] block">
-            Minimum Citations (OpenAlex):
+            Minimum recorded citations:
           </span>
           <div className="flex items-center gap-1 flex-wrap">
             {citationPresets.map((p) => {

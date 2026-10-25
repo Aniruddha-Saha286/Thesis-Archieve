@@ -36,7 +36,7 @@ npm run dev                 # http://localhost:5173
 
 Check the server: open `http://localhost:5000/api/health`.
 
-Run the server tests (no database or internet needed): `cd backend && npm test`. The last line should read `ALL 32 DETERMINISTIC TEST SUITES PASSED`.
+Run the server tests (no database or internet needed): `cd backend && npm test`. The last line should read `ALL 35 DETERMINISTIC TEST SUITES PASSED`. Install development dependencies for the real local Socket.IO tests. Frontend checks: `cd frontend && npm test`, `npm run test:e2e`, and `npm run build`.
 
 ## 3. Settings
 
@@ -172,11 +172,23 @@ Live verification on 2026-10-08 found unrelated age-bias/blog results in a Bangl
 
 ## Research workspace tools
 
+### Personal research studio
+
+Library now includes an account-saved thesis roadmap, a reading shelf, a focus timer and a downloadable text progress brief. The roadmap supports a working title, research goal, optional target date and up to 24 custom milestones. Select **Save roadmap** to retain edits across devices. Switching tabs keeps the current draft; reloading with unsaved edits triggers the browser's normal draft warning. Concurrent edits receive a conflict message and an explicit option to replace the draft with the saved version. The roadmap is private and excluded from general account/staff queries. It requires an approved account and does not require a paid plan.
+
+The reading shelf uses existing saved-paper status records; changing status does not call an AI provider or consume a search credit. The 15/25/45-minute focus timer follows an absolute deadline while the workspace remains open, including navigation to other site tabs; reloading resets it. The progress brief is a local text download containing the current roadmap and loaded reading progress. Unsaved draft inclusion is disclosed after download. Nothing is sent to a supervisor automatically.
+
+The collapsible search builder on Find papers offers review, methodology and dataset-oriented searches for a supplied topic. These are query starters, not generated findings or evidence of novelty. Queries run only after selecting a card and use ordinary search rules and quotas.
+
+The layout stacks on phones, uses an intermediate tablet layout, and places companion tools beside the roadmap on wider screens. Both server and frontend must be deployed for roadmap persistence. The new private `researchPlan` field has defaults for existing accounts; no bulk migration or background external service is needed. Offline roadmap editing/sync is not implemented; failed saves retain the in-memory draft and show a retryable error. Existing offline saved-library viewing is unchanged.
+
 - **Literature review matrix:** In Library, select up to 10 saved papers, or open the comparison matrix. Choose Excel (.xlsx), CSV or Markdown and export. Personal structured notes and comparison edits take precedence over cached English analyses. Existing membership rules still govern access to cached analysis. Exporting never calls an AI provider or consumes an AI credit. Missing information stays marked; supporting excerpts, source coverage and field provenance travel with the table. Review them before writing a thesis claim.
 - **Resource filters:** Has code requires a supported repository link. Has open dataset requires a dataset link and an explicit `isOpenDataset: true` metadata declaration; unknown access is excluded. A link alone does not establish a license or open access. Depositors can declare public dataset availability; older archive records need reviewed metadata before matching this filter.
 - **Research trail:** Paper details → Citations → Explore citation tree shows up to 20 indexed references, 20 citing papers and recommended similar works. OpenAlex or Semantic Scholar identifiers (or a DOI for OpenAlex lookup) are required. Any returned paper can become the next seed. This is a limited neighborhood, not a complete bibliography; provider failures and missing coverage are displayed.
 - **Read & notes:** The details tab places a directly linked PDF beside personal library notes and existing analysis. Small screens stack the panels. Publisher embedding restrictions and mobile PDF support vary; an external-reader fallback is provided. No PDF is downloaded for offline storage.
 - **Local discovery:** Expand Bangladesh university & program shortcuts for institution chips and recorded degree/department filters. Affiliation is distinct from the institution awarding a thesis. Unknown degree or department metadata does not match a selected shortcut.
+- **Filter consistency:** Catalog URLs preserve discipline, field, publisher, institution/mode, countries, author, citations, resources, degree/program, year range and sort across reloads and browser history. Live archive changes re-run the selected search rather than injecting unfiltered records. Local archive resource, degree/program, publisher aliases and citation constraints narrow the database query before pagination; citation sorting also runs before pagination. Has a PDF requires a usable direct-PDF URL declaration or recognizable PDF path, rather than a flag without a URL. This does not guarantee that an external host will currently serve the file.
+- **Filter regression coverage:** `backend/tests/filterAudit.test.js` checks positive, conflicting and unknown metadata through 17 filter paths, combined authorship constraints, publication types, sorting and malformed requests. `frontend/e2e/filters.spec.js` checks combinations, individual removal, reset, reload/history, pagination, live updates, Radar editions and filter layouts at 320/390/768/1440 pixels in both themes using synthetic records. External-provider availability and production data quality require separate live verification.
 - **Public collections:** Enable sharing inside a collection to obtain a read-only link. The collection name, description and paper metadata become visible to anyone with that link. Notes and account details are excluded. Turn off sharing to revoke the link; enabling it again creates a new token.
 - **Topic activity:** The collapsed monthly radar counts approved papers added to this archive by category. It is hidden when no data exists and does not claim global topic popularity.
 

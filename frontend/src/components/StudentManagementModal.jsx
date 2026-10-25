@@ -7,7 +7,7 @@ import { useSocket } from '../context/SocketContext';
 
 export default function StudentManagementModal({ isOpen, onClose, onRefreshStats }) {
   useEscapeToClose(onClose, isOpen);
-  const { showNotice } = useSocket();
+  const { showNotice, socket } = useSocket();
   const [students, setStudents] = useState([]);
   const [filterTab, setFilterTab] = useState('all');
   const [search, setSearch] = useState('');
@@ -26,6 +26,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
       setStudents(res.data);
     } catch (err) {
       console.error('Failed to load students:', err);
+      showNotice('The student roster could not be loaded. Close and reopen this panel to retry.', 'error');
     } finally {
       setLoading(false);
     }
@@ -36,6 +37,14 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
       fetchStudents();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !socket) return;
+    const refresh = () => fetchStudents();
+    socket.on('admin:student_updated', refresh);
+    socket.on('admin:new_student_application', refresh);
+    return () => { socket.off('admin:student_updated', refresh); socket.off('admin:new_student_application', refresh); };
+  }, [isOpen, socket]);
 
   const handleVerify = async (id, decision) => {
     try {
@@ -120,7 +129,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
       (filterTab === 'pending' && s.status === 'pending') ||
       (filterTab === 'banned' && s.status === 'banned');
 
-    const searchLower = search.toLowerCase();
+    const searchLower = search.trim().toLowerCase();
     const matchesSearch =
       !search ||
       s.name?.toLowerCase().includes(searchLower) ||
@@ -208,6 +217,7 @@ export default function StudentManagementModal({ isOpen, onClose, onRefreshStats
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, ID, university..."
+              aria-label="Search student roster"
               className="w-full bg-[#FAF9F5] dark:bg-neutral-800 border border-[#D5D1C7] dark:border-neutral-700 px-3 py-1.5 pl-8 text-xs text-[#1C1B18] dark:text-neutral-100 rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-amber-400"
             />
             <Search className="w-3.5 h-3.5 text-[#8C887E] dark:text-neutral-400 absolute left-2.5 top-2.5" />

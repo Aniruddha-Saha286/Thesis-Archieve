@@ -52,6 +52,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  statusBeforeBan: { type: String, enum: ['pending', 'approved', 'rejected'], default: null },
   isProfileComplete: {
     type: Boolean,
     default: false,
@@ -121,6 +122,19 @@ const userSchema = new mongoose.Schema({
     savedAt: { type: Date, default: Date.now },
   }],
 
+  researchPlan: {
+    select: false,
+    type: new mongoose.Schema({
+      title: { type: String, maxlength: 180, default: '' },
+      goal: { type: String, maxlength: 1200, default: '' },
+      targetDate: { type: String, default: '' },
+      tasks: { type: [new mongoose.Schema({ id: String, title: { type: String, maxlength: 120 }, done: Boolean }, { _id: false })], default: () => require('../services/researchPlan').initialPlan().tasks },
+      version: { type: Number, default: 0 },
+      updatedAt: { type: Date, default: null },
+    }, { _id: false }),
+    default: () => ({}),
+  },
+
   collections: [{
     shareToken: { type: String },
     name: { type: String, required: true },
@@ -157,6 +171,9 @@ const userSchema = new mongoose.Schema({
     lastCheckedAt: { type: Date, default: null },
     externalCheckedAt: { type: Date, default: null },
     externalCheckedId: { type: String, default: '' },
+    publicationType: { type: String, enum: ['', 'thesis'], default: '' },
+    onlineCheckedAt: { type: Date, default: null },
+    onlineCheckStatus: { type: String, enum: ['ok', 'limited', 'unavailable', 'disabled'], default: 'ok' },
     createdAt: { type: Date, default: Date.now },
   }],
 

@@ -86,7 +86,7 @@ export default function SavedPapersModal({ isOpen, onClose, onCite, onAddToCompa
 
   const filteredPapers = savedPapers.filter((p) => {
     if (!searchFilter.trim()) return true;
-    const term = searchFilter.toLowerCase();
+    const term = searchFilter.trim().toLowerCase();
     return (
       (p.title && p.title.toLowerCase().includes(term)) ||
       (p.authors && p.authors.toLowerCase().includes(term)) ||

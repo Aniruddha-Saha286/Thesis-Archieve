@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { cachedProvider } = require('./researchCache');
-const { matchesResources } = require('./resourceLinks');
+const { matchesResources, hasDirectPdf } = require('./resourceLinks');
+const { PUBLISHER_ALIASES } = require('./publisherFilters');
 const { queryMatch } = require('./queryRelevance');
 const { searchLocal } = require('./providers/local');
 const searchOpenAlex = cachedProvider("searchOpenAlex", require('./providers/openalex').searchOpenAlex);
@@ -46,7 +47,7 @@ const PROVIDER_CAPABILITIES = {
     supportsSubject: true,
     supportsField: true,
     supportsPublisher: true,
-    supportsMinCitations: false,
+    supportsMinCitations: true,
     supportsAwardingInstitution: true,
   },
   openalex: {
@@ -252,18 +253,6 @@ function cleanPublisherForMatching(str) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
-const PUBLISHER_ALIASES = [
-  ['ieee', 'institute of electrical and electronics engineers'],
-  ['acm', 'association for computing machinery'],
-  ['iet', 'institution of engineering and technology'],
-  ['aaai', 'association for the advancement of artificial intelligence'],
-  ['acl', 'association for computational linguistics'],
-  ['mdpi', 'multidisciplinary digital institute'],
-  ['iop', 'institute of physics'],
-  ['oup', 'oxford university'],
-  ['cup', 'cambridge university'],
-];
 
 function withPublisherAliases(clean) {
   if (!clean) return clean;
@@ -925,16 +914,7 @@ async function executeSearchSessionLocked(session, {
           }
 
           if (filters.hasPdf) {
-            const hasValidPdf = Boolean(
-              record.isDirectPdf ||
-              (record.pdfUrl && (
-                record.pdfUrl.endsWith('.pdf') ||
-                record.pdfUrl.includes('/pdf/') ||
-                record.pdfUrl.includes('pmc.ncbi.nlm.nih.gov') ||
-                record.pdfUrl.includes('/servlets/purl')
-              ))
-            );
-            if (!hasValidPdf) {
+            if (!hasDirectPdf(record)) {
               continue;
             }
           }

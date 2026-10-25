@@ -24,14 +24,28 @@ export const SocketProvider = ({ children }) => {
 
     s.on('connect', () => {
       setIsConnected(true);
-      if (token) {
-        s.emit('auth:authenticate', token);
-      }
+      setNotificationTick(n => n + 1);
+      sendPresence();
+      s.emit('presence:subscribe');
+      if (token && refreshUser) refreshUser();
     });
 
-    s.on('disconnect', () => {
+    s.on('disconnect', (reason) => {
       setIsConnected(false);
+      if (reason === 'io server disconnect') s.connect();
     });
+
+    let lastInteraction = Date.now();
+    const sendPresence = () => {
+      if (s.connected && token) s.emit('presence:heartbeat', {
+        active: document.visibilityState !== 'hidden' && Date.now() - lastInteraction < 120000,
+      });
+    };
+    const interact = () => { lastInteraction = Date.now(); };
+    const visibility = () => { if (document.visibilityState !== 'hidden') interact(); sendPresence(); };
+    const timer = setInterval(sendPresence, 25000);
+    for (const event of ['pointerdown', 'keydown', 'scroll']) window.addEventListener(event, interact, { passive: true });
+    document.addEventListener('visibilitychange', visibility);
 
     s.on('user:status_changed', (payload) => {
       if (!user) return;
@@ -107,6 +121,9 @@ export const SocketProvider = ({ children }) => {
     });
 
     return () => {
+      clearInterval(timer);
+      for (const event of ['pointerdown', 'keydown', 'scroll']) window.removeEventListener(event, interact);
+      document.removeEventListener('visibilitychange', visibility);
       s.disconnect();
       setSocket(null);
     };

@@ -9,7 +9,7 @@ const getJwtSecret = () => {
   return secret;
 };
 
-const authenticateToken = async (req, res, next) => {
+const authenticateSession = (allowSuspended = false) => async function authenticateToken(req, res, next) {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -26,7 +26,7 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ message: 'User not found or session expired.' });
     }
 
-    if (user.status === 'banned') {
+    if (user.status === 'banned' && !allowSuspended) {
       return res.status(403).json({
         message: 'Account Suspended: Your access has been revoked by administration.',
         status: 'banned',
@@ -44,6 +44,9 @@ const authenticateToken = async (req, res, next) => {
     return res.status(401).json({ message: 'Invalid or expired token.' });
   }
 };
+const authenticateToken = authenticateSession();
+// Suspended members may see their own account status, but cannot use protected features.
+const identifyAccount = authenticateSession(true);
 
 const optionalAuth = async (req, res, next) => {
   try {
@@ -109,6 +112,7 @@ const requireAdmin = (req, res, next) => {
 
 module.exports = {
   authenticateToken,
+  identifyAccount,
   optionalAuth,
   requireApproved,
   requireAdmin,

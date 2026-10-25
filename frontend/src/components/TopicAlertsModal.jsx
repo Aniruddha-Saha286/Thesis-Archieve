@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import useEscapeToClose from '../hooks/useEscapeToClose';
+import { useSocket } from '../context/SocketContext';
 import axios from 'axios';
-import { Bell, Plus, Trash2, CheckCircle, Clock, RefreshCw, ExternalLink, Sparkles } from 'lucide-react';
+import { Bell, Plus, Trash2, RefreshCw, Sparkles, X } from 'lucide-react';
 
-export default function TopicAlertsModal({ isOpen, onClose }) {
+export default function TopicAlertsModal({ isOpen, onClose, initialTopic = '' }) {
   useEscapeToClose(onClose, isOpen);
   const [alerts, setAlerts] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -11,6 +12,8 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
   const [checkingAlerts, setCheckingAlerts] = useState(false);
   const [topic, setTopic] = useState('');
   const [category, setCategory] = useState('All Disciplines');
+  const [publicationType, setPublicationType] = useState('');
+  const { notificationTick, isConnected } = useSocket();
   const [creating, setCreating] = useState(false);
   const [checkStatus, setCheckStatus] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -28,7 +31,7 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
         axios.get('/api/user/notifications'),
       ]);
       setAlerts(alertsRes.data || []);
-      setNotifications(notifsRes.data || []);
+      setNotifications((notifsRes.data || []).filter(n => n.type === 'topic_alert'));
     } catch (err) {
       showNotice('Follows could not be loaded. Reopen this panel to retry.', 'error');
     } finally {
@@ -40,7 +43,9 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
     if (isOpen) {
       fetchAlertsAndNotifications();
     }
-  }, [isOpen]);
+  }, [isOpen, notificationTick]);
+
+  useEffect(() => { if (isOpen) setTopic(initialTopic); }, [isOpen, initialTopic]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -51,6 +56,7 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
       const res = await axios.post('/api/user/alerts', {
         topic: topic.trim(),
         category,
+        publicationType,
       });
       setAlerts(res.data.alerts || []);
       setTopic('');
@@ -77,13 +83,15 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
       setCheckingAlerts(true);
       setCheckStatus(null);
       const res = await axios.post('/api/user/alerts/check');
-      setCheckStatus(res.data.notificationsCreated > 0
+      setCheckStatus(res.data.sourceWarnings?.length
+        ? `Some online sources could not be checked (${res.data.sourceWarnings.join(', ')}). Other available matches were saved. Try again shortly.`
+        : res.data.notificationsCreated > 0
         ? `Found new papers! Generated ${res.data.notificationsCreated} notification(s).`
         : 'Scan complete: no new matches in the available index. Source delays may limit coverage.'
       );
-      fetchAlertsAndNotifications();
+      await fetchAlertsAndNotifications();
     } catch (err) {
-      setCheckStatus('Error running alert check.');
+      setCheckStatus(err.response?.data?.message || 'The scan could not finish. Please try again.');
     } finally {
       setCheckingAlerts(false);
     }
@@ -104,27 +112,28 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm w-full max-w-xl p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
-          <div className="flex items-center gap-2">
-            <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            <div>
+      <div role="dialog" aria-modal="true" aria-label="Topic alerts" className="topic-alert-dialog bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-2xl w-full max-w-xl p-5 sm:p-6 shadow-2xl relative max-h-[90dvh] flex flex-col">
+        <div className="flex items-center justify-between gap-3 shrink-0 pb-3 border-b border-[#E2DFD8] dark:border-[#2C2A26]">
+          <div className="flex items-center gap-2 min-w-0">
+            <Bell className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="min-w-0">
               <h2 className="text-xl font-serif-title text-[#1C1B18] dark:text-[#F0EDE6]">Topic alerts</h2>
               <span className="text-xs font-mono-meta text-[#737067] dark:text-[#9C988F]">
-                Get a notice when new papers match a topic you follow
+                New research, in your inbox.
               </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] font-mono-meta text-xs cursor-pointer"
+            aria-label="Close topic alerts"
+            className="shrink-0 w-10 flex items-center justify-center text-[#737067] dark:text-[#9C988F] hover:text-[#1C1B18] dark:hover:text-[#F0EDE6] cursor-pointer"
           >
-            [✕ CLOSE]
+            <X size={18} />
           </button>
         </div>
 
         {notice && (
-          <div className={`mt-3 px-3 py-2 text-xs font-mono-meta flex items-center justify-between rounded-sm border ${
+          <div role="status" className={`mt-3 px-3 py-2 text-xs font-mono-meta flex items-center justify-between shrink-0 rounded-sm border ${
             notice.type === 'error'
               ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
               : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300'
@@ -135,16 +144,22 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4">
+          <div className="rounded-xl bg-[#EAF3ED] dark:bg-[#1c3025] p-4 border border-emerald-800/10">
+            <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-serif-title text-2xl text-[#254B40] dark:text-emerald-200">Your next paper. Found for you.</h3><span className="text-xs text-emerald-800 dark:text-emerald-300">{isConnected ? 'Live delivery connected' : 'Inbox refreshes every minute'}</span></div>
+            <p className="text-xs leading-relaxed text-[#456350] dark:text-emerald-100/80 mt-2">We check followed topics every 15 minutes and deliver notifications here. Online scans sample up to 50 recent OpenAlex publications from the past 30 days, plus the archive and indexed venues. Coverage and source delays vary.</p>
+          </div>
           {/* Add New Alert Form */}
           <form onSubmit={handleCreate} className="p-3.5 bg-[#FAF9F5] dark:bg-[#201F1C] border border-[#D5D1C7] dark:border-[#2C2A26] rounded-sm space-y-3 text-xs">
             <div className="font-bold text-[#1C1B18] dark:text-[#F0EDE6] font-mono-meta text-[11px] uppercase tracking-wider">
-              Subscribe to New Topic Inquiry
+              Follow a research topic
             </div>
             <div>
-              <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Inquiry Keyword / Search Query *</label>
+              <label htmlFor="alert-topic" className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Topic or keywords</label>
               <input
                 type="text"
+                id="alert-topic"
+                maxLength={150}
                 required
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
@@ -152,24 +167,31 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
                 className="w-full bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none focus:border-[#1C1B18] dark:focus:border-[#9C988F]"
               />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Discipline Filter</label>
+            <div>
+              <label htmlFor="alert-paper-type" className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Publication type</label>
+              <select id="alert-paper-type" value={publicationType} onChange={event => setPublicationType(event.target.value)} className="w-full bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#383530] px-3 py-2 rounded-lg">
+                <option value="">All papers and theses</option><option value="thesis">Theses and dissertations only</option>
+              </select>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <label htmlFor="alert-discipline" className="block font-medium text-[#1C1B18] dark:text-[#E8E6E1] mb-1">Discipline filter</label>
                 <select
                   value={category}
+                  id="alert-discipline"
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full bg-white dark:bg-[#1A1916] border border-[#D5D1C7] dark:border-[#383530] px-3 py-1.5 text-xs text-[#1C1B18] dark:text-[#F0EDE6] rounded-sm focus:outline-none"
                 >
                   <option value="All Disciplines">All Disciplines</option>
-                  <option value="Computer Science & NLP">Computer Science & NLP</option>
+                  <option value="Artificial Intelligence and Machine Learning">AI & machine learning</option>
+                  <option value="Natural Language Processing">Natural language processing</option>
                   <option value="Renewable Energy & Materials">Renewable Energy & Materials</option>
-                  <option value="Biomedical & Neural Engineering">Biomedical & Neural Engineering</option>
-                  <option value="Economics & Development">Economics & Development</option>
-                  <option value="Other Disciplines">Other Disciplines</option>
+                  <option value="Biomedical & Clinical Science">Biomedical & clinical science</option>
+                  <option value="Development Economics">Development economics</option>
                 </select>
               </div>
 
-              <div className="pt-5">
+              <div>
                 <button
                   type="submit"
                   disabled={creating}
@@ -218,14 +240,18 @@ export default function TopicAlertsModal({ isOpen, onClose }) {
                   >
                     <div className="space-y-0.5">
                       <div className="font-serif-title text-base text-[#1C1B18] dark:text-[#F0EDE6]">{al.topic}</div>
+                      {!al.venueId && <p className={`text-xs ${al.onlineCheckStatus === 'unavailable' ? 'text-amber-700 dark:text-amber-300' : 'text-[#737067] dark:text-[#9C988F]'}`}>
+                        {al.onlineCheckStatus === 'unavailable' ? 'OpenAlex unavailable. Retrying on the next scan.' : al.onlineCheckStatus === 'disabled' ? 'Online scans are disabled in offline mode.' : al.onlineCheckedAt ? `Online checked: ${new Date(al.onlineCheckedAt).toLocaleString()}${al.onlineCheckStatus === 'limited' ? ' · Newest 50 source results' : ''}` : 'Waiting for the first online scan.'}
+                      </p>}
                       {al.venueId && <p>Venue: {al.venueId.toUpperCase()} · External indexed papers</p>}
-                      <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex items-center gap-2">
+                      <div className="text-[11px] font-mono-meta text-[#737067] dark:text-[#9C988F] flex flex-wrap items-center gap-2">
                         <span>Discipline: <strong>{al.category}</strong></span>
                         <span>•</span>
                         <span>Last index scan: {al.externalCheckedAt ? new Date(al.externalCheckedAt).toLocaleDateString() : 'Pending first scan'}</span>
                       </div>
                     </div>
 
+                    {al.publicationType === 'thesis' && <span className="text-xs text-emerald-800 dark:text-emerald-300">Theses only</span>}
                     <button
                       onClick={() => handleDelete(al._id)}
                       className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 font-mono-meta text-xs flex items-center gap-1 cursor-pointer"

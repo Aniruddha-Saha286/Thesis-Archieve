@@ -2,30 +2,16 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { getJwtSecret } = require('./middleware/auth');
 const User = require('./models/User');
+const { presence } = require('./services/presenceService');
+const { isAllowedOrigin } = require('./utils/allowedOrigins');
 
 let io = null;
 
-const ALLOWED_ORIGINS = new Set([
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:3000',
-  ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim()) : []),
-  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map((o) => o.trim()) : []),
-]);
-
-function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const url = new URL(origin);
-    if (url.hostname.endsWith('.vercel.app')) return true;
-  } catch {}
-  return false;
-}
-
 function assignSocketRooms(socket, user) {
   if (!socket || !user) return;
+  for (const room of socket.rooms) {
+    if (room.startsWith('user:') || room.startsWith('role:') || room.startsWith('perm:')) socket.leave(room);
+  }
   socket.join(`user:${user.id}`);
 
   socket.leave('role:admin');
@@ -60,6 +46,7 @@ function assignSocketRooms(socket, user) {
 
 function initSocket(httpServer) {
   io = new Server(httpServer, {
+    allowRequest: (req, callback) => callback(null, isAllowedOrigin(req.headers.origin)),
     cors: {
       origin: (origin, callback) => {
         if (isAllowedOrigin(origin)) {
@@ -86,12 +73,14 @@ function initSocket(httpServer) {
           const decoded = jwt.verify(rawToken, secret);
           if (decoded && decoded.id) {
             const dbUser = await User.findById(decoded.id).select('role status permissions name email');
-            if (dbUser && dbUser.status !== 'banned') {
+            if (dbUser) {
               socket.user = {
                 id: String(dbUser._id),
                 role: dbUser.role,
                 status: dbUser.status,
                 permissions: dbUser.permissions || [],
+                name: dbUser.name,
+                expiresAt: decoded.exp * 1000,
               };
             } else {
               socket.user = null;
@@ -112,7 +101,20 @@ function initSocket(httpServer) {
   io.on('connection', (socket) => {
     if (socket.user) {
       assignSocketRooms(socket, socket.user);
+      presence.touch(socket.id, socket.user, false);
     }
+
+    socket.on('presence:heartbeat', (payload = {}) => {
+      if (socket.user?.expiresAt <= Date.now()) { socket.disconnect(true); return; }
+      if (socket.user) presence.touch(socket.id, socket.user, payload?.active === true);
+    });
+
+    socket.on('presence:subscribe', () => {
+      const u = socket.user;
+      if (u?.status === 'approved' && (u.role === 'admin' || (u.role === 'editor' && u.permissions.includes('students.view')))) {
+        socket.emit('admin:presence', presence.snapshot());
+      }
+    });
 
     socket.on('auth:authenticate', async (token) => {
       try {
@@ -122,7 +124,7 @@ function initSocket(httpServer) {
         if (!decoded || !decoded.id) return;
 
         const dbUser = await User.findById(decoded.id).select('role status permissions name email');
-        if (!dbUser || dbUser.status === 'banned') {
+        if (!dbUser) {
           socket.user = null;
           revokeUserSocketPrivileges(decoded.id);
           socket.emit('auth:error', { message: 'Account suspended or invalid.' });
@@ -135,9 +137,12 @@ function initSocket(httpServer) {
           role: dbUser.role,
           status: dbUser.status,
           permissions: dbUser.permissions || [],
+          name: dbUser.name,
+          expiresAt: decoded.exp * 1000,
         };
 
         assignSocketRooms(socket, socket.user);
+        presence.touch(socket.id, socket.user, false);
 
         socket.emit('auth:authenticated', {
           userId: socket.user.id,
@@ -146,14 +151,30 @@ function initSocket(httpServer) {
         });
       } catch (err) {
         socket.emit('auth:error', { message: 'Invalid socket authentication token.' });
+        socket.disconnect(true);
       }
     });
 
     socket.on('disconnect', () => {
+      presence.remove(socket.id);
+      broadcastPresence();
     });
   });
 
+  const timer = setInterval(() => {
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.user?.expiresAt <= Date.now()) socket.disconnect(true);
+    }
+    broadcastPresence();
+  }, 15000);
+  timer.unref();
+  io.engine.on('close', () => clearInterval(timer));
+
   return io;
+}
+
+function broadcastPresence() {
+  if (io) io.to('perm:students.view').emit('admin:presence', presence.snapshot());
 }
 
 function getIO() {
@@ -165,7 +186,7 @@ function revokeUserSocketPrivileges(userId) {
   const sId = String(userId);
   const room = io.sockets.adapter.rooms.get(`user:${sId}`);
   if (room) {
-    for (const socketId of room) {
+    for (const socketId of [...room]) {
       const sock = io.sockets.sockets.get(socketId);
       if (sock) {
         sock.leave('role:admin');
@@ -194,7 +215,7 @@ function syncUserSocketRooms(userId, user) {
   const sId = String(userId);
   const room = io.sockets.adapter.rooms.get(`user:${sId}`);
   if (room) {
-    for (const socketId of room) {
+    for (const socketId of [...room]) {
       const sock = io.sockets.sockets.get(socketId);
       if (sock) {
         if (sock.user) {

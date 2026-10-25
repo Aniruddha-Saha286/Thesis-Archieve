@@ -1,0 +1,827 @@
+===============================================================
+  PROJECT PANTHER / THE THESIS ARCHIVE - VERIFICATION SUITE   
+  Deterministic Offline Test Suite & Release Gates            
+===============================================================
+
+Testing: Priority 0 Security Enforcements & Data Protection...
+Γ£ô All Security & Data Protection tests passed successfully.
+
+Testing: Normalized Scholarly Record & Metadata Mapping...
+Γ£ô All Scholarly Record & Metadata Mapping tests passed successfully.
+
+Testing: Cross-Provider Deduplication & Metadata Fusion...
+Γ£ô All Deduplication & Metadata Fusion tests passed successfully.
+
+Testing: Citation Generation (BibTeX, RIS, APA)...
+Γ£ô All Citation Generation tests passed successfully.
+
+Testing: Search Orchestration, Pagination & Provider Resilience...
+Γ£ô All Search Orchestration, Pagination & Provider Resilience tests passed successfully.
+
+Testing Phase 1 A Search Session Pagination Architecture...
+Page 1 returned: 20 records
+Page 2 returned: 20 records
+Page 3 returned: 20 records
+Page 4 returned: 20 records
+Page 5 returned: 20 records
+Page 6 returned: 20 records
+Γ£ô Phase 1 A Acceptance Case PASSED: All 120 papers reachable across 6 pages without duplicates or empty pages!
+
+Testing: Search Correctness & Session Stability Regression Suite...
+  Γ£ô [PASS] Complementary PDF, dataset, and source provenance preserved on deduplication
+  Γ£ô [PASS] Unicode-aware title matching correctly normalizes international accents
+  Γ£ô [PASS] degreeType preserved through scholarly normalization
+  Γ£ô [PASS] Collection export explains omissions instead of emitting fabricated placeholder citations
+  Γ£ô [PASS] Legitimate papers with "Paper" in title are preserved in citation exports
+  Γ£ô [PASS] Frozen page boundaries prevent served page re-sorting and duplicate pagination
+  Γ£ô [PASS] Source filtering restricts providers and correctly computes hasMore from eligible providers
+Γ£ô All Search Correctness Regression Tests PASSED.
+
+
+===============================================================
+  TEST SUITE: MEMBERSHIP, BKASH, QUOTAS & DHAKA CALENDAR DATES 
+===============================================================
+
+--- 1. Asia/Dhaka Calendar Month Date Math & Clamping ---
+  Γ£ô [PASS] Aug 31 + 6 calendar months clamps to Feb 28 (or Feb 29 in leap year), not Mar 3
+  Γ£ô [PASS] Mar 31 + 6 calendar months clamps to Sep 30, never spills into October
+  Γ£ô [PASS] Jan 31 + 1 calendar month clamps to end of February
+  Γ£ô [PASS] 6 calendar months is NEVER substituted with a naive 180-day addition
+  Γ£ô [PASS] 7-Day trial calculation adds exactly 7 continuous 24-hour periods
+
+--- 2. Free vs Premium Quota Limits ---
+  Γ£ô [PASS] Free tier allows max 10 saved papers and blocks 11th
+  Γ£ô [PASS] Premium tier unlocks 1,000 saved papers and 50 collections with bulk export
+
+--- 3. 7-Day Trial Eligibility & Single-Use Rules ---
+  Γ£ô [PASS] Unverified student status="pending" cannot activate trial
+  Γ£ô [PASS] Verified student status="approved" can activate trial once
+  Γ£ô [PASS] Student with prior paid membership period is ineligible for free trial
+
+--- 4. Manual bKash Payment & TrxID Normalization ---
+  Γ£ô [PASS] Order creation generates immutable snapshot with αº│500 / 50000 paisa for 6 months
+  Γ£ô [PASS] TrxID normalization converts mixed-case and trims whitespace
+  Γ£ô [PASS] Duplicate normalized TrxID is rejected by duplicate guard
+
+--- 5. Admin Verification & Active Renewal Extension ---
+  Γ£ô [PASS] Approval without merchant statement verification is rejected
+  Γ£ô [PASS] Active renewal extends existing expiration date by 6 calendar months without losing days
+  Γ£ô [PASS] Expired renewal starts 6 calendar months from approval date
+
+--- 6. Admin Membership Cancellation & Revocation ---
+  Γ£ô [PASS] Admin cancellation requires mandatory non-empty reason
+  Γ£ô [PASS] Admin cancellation immediately revokes active membership periods and expires trial
+
+--- 7. User Self-Service Subscription Cancellation & Data Preservation ---
+  Γ£ô [PASS] User can self-cancel active paid Premium subscription at any time
+  Γ£ô [PASS] User can self-cancel active 7-Day trial at any time
+  Γ£ô [PASS] User cancellation safely preserves 100% of saved papers, annotations, and collections
+  Γ£ô [PASS] Attempting to self-cancel with no active subscription returns 400 error
+  Γ£ô [PASS] Self-cancellation immediately switches effective entitlements to free plan
+
+--- 8. Dataset Access Restrictions & 10 Daily Search Quota Enforcement ---
+  Γ£ô [PASS] Free tier quota specifies canAccessPaperDatasets: false and dailySearchLimit: 10
+  Γ£ô [PASS] Premium, Pro Max, Trial v2, and Grandfathered Trial v1 quotas reflect plan catalog rules
+  Γ£ô [PASS] Free tier user is blocked on 11th daily search with SEARCH_QUOTA_EXCEEDED
+  Γ£ô [PASS] Premium user has unlimited daily searches beyond 10
+  Γ£ô [PASS] Free tier user cannot access dataset of each file (FEATURE_LOCKED 403)
+  Γ£ô [PASS] Premium tier user has full access to datasets of each file
+
+--- 9. Trial v2 Daily Dataset Lookup Quota ---
+  Γ£ô [PASS] Trial v2 user enforces 5 daily dataset lookups and blocks 6th
+
+--- 10. Pro Max Annual Plan Catalog & Clamping ---
+  Γ£ô [PASS] Pro Max Annual snapshot defines αº│850 / 85000 paisa, 12 months, and 15% savings note
+  Γ£ô [PASS] Pro Max 12-month calendar calculation correctly advances 1 year and clamps leap year
+
+--- 11. Payment Approval Idempotency Guard ---
+  Γ£ô [PASS] Admin approval idempotency guard prevents double-extension on replay
+
+--- 12. Topic Alert Batch Scanning & Per-Paper Deduplication ---
+  Γ£ô [PASS] Topic alert runner does not stop at 5 papers and checks per-paper deduplication
+
+===============================================================
+  ALL 34/34 MEMBERSHIP & BKASH TESTS PASSED (100% SUCCESS)
+===============================================================
+
+
+Testing: Institution Discovery, Author Metrics & Subject Catalog Regression Suite...
+  Γ£ô [PASS] Subject catalog contains 15 canonical disciplines with verified OpenAlex concept mappings
+  Γ£ô [PASS] Institutional discovery returns verified universities with country codes and ROR metadata
+  Γ£ô [PASS] Author search and profile retrieval include verified citations, h-index, and OpenAlex attribution
+  Γ£ô [PASS] Search session hashing accurately isolates institution, country, author, citation, and sort states
+  Γ£ô [PASS] Strict coauthor isolation, institution-country conjunction, and citation filters verified
+  Γ£ô [PASS] Citation metric provenance is honest: null counts remain null and are never fabricated
+
+===============================================================
+  ALL AUTHOR, INSTITUTION & SUBJECT REGRESSION TESTS PASSED   
+===============================================================
+
+===============================================================
+  TEST SUITE: GROUNDED QUICK SUMMARY & SECURITY ENFORCEMENTS   
+===============================================================
+
+  Γ£ô [PASS] Feature flag disabled: returns enabled: false without executing generation
+  Γ£ô [PASS] Honesty guard: returns unavailable if abstract is missing or too short, never hallucinates
+  Γ£ô [PASS] Abstract-only grounding: parses objective, methodology, dataset, and findings directly from text
+  Γ£ô [PASS] Bengali language output: formats grounded sections with Bangla localization
+  Γ£ô [PASS] Cache deduplication: subsequent identical request returns cached result with cached: true
+  Γ£ô [PASS] Quota enforcement: blocks generation when daily limit is reached and returns 429 quota payload
+  Γ£ô [PASS] Security guard: Free plan user receives FEATURE_LOCKED (403) and cannot read cached summary
+  Γ£ô [PASS] Security guard: Unauthenticated guest receives FEATURE_LOCKED (403)
+  Γ£ô [PASS] Paid tier entitlement: Premium and Pro Max have unlimited daily summaries
+  Γ£ô [PASS] Author limitation extraction: detects contrastive "however" and "challenges remain" markers accurately
+  Γ£ô [PASS] Contextual inferred limitations: generates substantive domain and sample bounds when author unstated in abstract
+  Γ£ô [PASS] Full-text limitation section extraction: pulls directly from verified fullTextSections
+  Γ£ô [PASS] SSRF protection: rejects loopback, RFC1918 private IPs, AWS/GCP metadata, and invalid protocols
+  Γ£ô [PASS] Dataset repository URL validation: accepts trusted repositories, rejects malicious protocols
+
+All 14/14 Paper Summary & Security tests passed!
+
+
+===============================================================
+  TEST SUITE: INSTITUTION RESEARCH LANDSCAPE & ANALYTICS       
+===============================================================
+
+  Γ£ô [PASS] Feature flag disabled: returns enabled: false when INSTITUTION_ANALYTICS_ENABLED is false
+  Γ£ô [PASS] ID validation: normalizes canonical OpenAlex IDs and rejects invalid formats
+  Γ£ô [PASS] Year range validation: rejects fromYear > toYear with 400 INVALID_YEAR_RANGE
+  Γ£ô [PASS] Top fields aggregation: restricts to max 7 slices (top 6 + Other) with exact mathematical sum
+  Γ£ô [PASS] Year trend aggregation: filters to requested range and sorts ascending
+  Γ£ô [PASS] Landscape schema: returns strict affiliation scope note, metadata, and deterministic fixture data
+  Γ£ô [PASS] Analytics cache: returns cached result on subsequent query with cacheAgeSeconds
+  Γ£ô [PASS] Offline identity suggestions: bibliometrics must be null and marked offline identity
+
+All 8/8 Institution Research Landscape tests passed!
+
+
+===============================================================
+  TEST SUITE: SEARCH HARDENING, CANONICAL PARSER & CAPABILITIES
+===============================================================
+  Γ£ô [PASS] Canonical query parser rigorously enforces validation, clamping, and inquiry detection
+  Γ£ô [PASS] Publisher normalization strips legal suffixes and performs accurate token matching
+  Γ£ô [PASS] Provider capability matrix correctly restricts federated providers without false queries
+  Γ£ô [PASS] Search session hashing is deterministic, pagination-invariant, and stored durably
+  Γ£ô [PASS] Country code resolution accurately maps institutions and preserves null honesty for unknown entities
+
+===============================================================
+  ALL SEARCH HARDENING & REGRESSION TESTS PASSED (100% OK)
+===============================================================
+
+
+Testing: Dataset Discovery & SSRF Security Regression Suite...
+  Γ£ô [PASS] SSRF security guard blocks malicious/private targets while allowing public repositories
+  Γ£ô [PASS] Dataset enrichment strictly distinguishes Linked from Related datasets with honest formats
+  Γ£ô [PASS] Global dataset discovery returns verified DataCite, Zenodo, Figshare & Dryad open science resources
+  Γ£ô [PASS] Database schema prevents double-grant via unique partial index on paymentSubmission
+  Γ£ô [PASS] Cross-paper dataset isolation guard ensures datasets for Paper 1 never leak to other papers
+Γ£ô All Dataset Discovery & Security Regression Tests PASSED.
+
+
+===============================================================
+  TEST SUITE: UNIFIED GOOGLE AUTH, RBAC & ADMIN CONTROLS      
+===============================================================
+
+--- 1. Primary Admin Environment Fail-Closed Validation ---
+  Γ£ô [PASS] Valid standard email passes getValidatedPrimaryAdminEmail
+  Γ£ô [PASS] Missing, undefined, or empty PRIMARY_ADMIN_GOOGLE_EMAIL returns null (fail closed)
+  Γ£ô [PASS] Placeholder "ΓÇö" or containing "ΓÇö" fails closed and returns null
+  Γ£ô [PASS] Syntactically invalid emails (comma typo, missing domain) return null
+--- 2. Google Credential Verification Rules ---
+  Γ£ô [PASS] verifyGoogleCredential rejects missing or empty credentials
+  Γ£ô [PASS] verifyGoogleCredential rejects audience mismatch
+  Γ£ô [PASS] verifyGoogleCredential rejects invalid issuer
+  Γ£ô [PASS] verifyGoogleCredential rejects expired tokens
+  Γ£ô [PASS] verifyGoogleCredential rejects unverified email addresses
+  Γ£ô [PASS] verifyGoogleCredential rejects missing subject (sub) claim
+  Γ£ô [PASS] verifyGoogleCredential succeeds with verified payload
+--- 3. Authoritative DTO Sanitization ---
+  Γ£ô [PASS] toSanitizedUserDto never exposes raw storage keys or credentials
+  Γ£ô [PASS] toSanitizedUserDto correctly reflects missing verification document
+--- 4. RBAC Capability & Middleware Enforcements ---
+  Γ£ô [PASS] Admin implicitly passes all granular permission checks
+  Γ£ô [PASS] Editor with assigned permission passes requirePermission
+  Γ£ô [PASS] Editor without assigned permission receives 403 INSUFFICIENT_PERMISSIONS
+  Γ£ô [PASS] Student receives 403 FORBIDDEN_ROLE on staff permission checks
+  Γ£ô [PASS] Banned / suspended user is immediately blocked with 403 ACCOUNT_SUSPENDED
+  Γ£ô [PASS] requireAdmin strictly allows only Admin and rejects Editor with 403 ADMIN_REQUIRED
+  Γ£ô [PASS] getCapabilities computes authoritative permission matrix
+--- 5. Verification Document Security & Signed URLs ---
+  Γ£ô [PASS] Document inspection endpoint requires documents.view permission
+  Γ£ô [PASS] Document signing helper generates short-lived URL with 600s TTL and private caching
+--- 6. Manual Premium Timestamp Grants & Overlap Handling ---
+  Γ£ô [PASS] Manual grant start_now sets start to now and applies exact calendar duration
+  Γ£ô [PASS] Manual grant extend_from_current_expiry builds upon existing active end date
+  Γ£ô [PASS] Manual grant schedule uses specified future start date
+  Γ£ô [PASS] Manual grant idempotency key prevents duplicate replay
+--- 7. Team & Access Editor Lifecycle & Immunities ---
+  Γ£ô [PASS] Primary admin cannot be appointed as editor, demoted, or revoked
+  Γ£ô [PASS] Editor appointment filters out invalid permissions and sets audit fields
+  Γ£ô [PASS] Editor revocation resets role to student and clears permissions
+--- 8. Local Depository Moderation & Mandatory Rejection Reasons ---
+  Γ£ô [PASS] Local thesis moderation approval sets approved status and records approvedBy
+  Γ£ô [PASS] Local thesis moderation rejection enforces mandatory reason
+  Γ£ô [PASS] Local depository deletion returns 404 when document not found in local store
+--- 9. Student Depository Submission Verification Gate ---
+  Γ£ô [PASS] requireApproved allows approved students to submit theses
+  Γ£ô [PASS] requireApproved rejects pending student with 403 PENDING_APPROVAL
+--- 10. Break-Glass Legacy Password Authentication Gate ---
+  Γ£ô [PASS] Legacy password login is disabled by default (returns 404)
+  Γ£ô [PASS] Legacy password login matches only configured primary admin email
+--- 11. Test Membership Revocation, Honest Custom Labels & Editor Management ---
+  Γ£ô [PASS] Membership revocation cancels all active periods, expires trials, and returns user to free
+  Γ£ô [PASS] Manual test grant computes honest non-commercial label instead of commercial pricing
+  Γ£ô [PASS] Editor pre-provisioning accepts any email and assigns requested permissions
+  Γ£ô [PASS] Editor revocation allows demoting any appointed editor back to student role
+
+===============================================================
+  ALL 40/40 RBAC & GOOGLE AUTH TESTS PASSED (100% SUCCESS)
+===============================================================
+
+
+---------------------------------------------------------
+Running End-to-End Scholarly Discovery & Workspace Tests
+---------------------------------------------------------
+1. Verifying Public Guest Search...
+   Γ£ô [OFFLINE] Live network search skipped in deterministic runner (verified in runLiveSmoke.js).
+2. Verifying Retraction Notice & Metadata Integrity...
+   Γ£ô Retracted records accurately identified with authentic notice link.
+3. Verifying Multi-Format Citation Generation (BibTeX, RIS, APA)...
+   Γ£ô BibTeX, RIS, and APA generated faithfully.
+4. Verifying Batch Collection Export for Reference Managers...
+   Γ£ô Batch collections export valid bibliography files for Zotero/Mendeley.
+5. Verifying Direct PDF vs Publisher Page Differentiation...
+   Γ£ô Direct PDF and publisher landing page strictly distinguished.
+---------------------------------------------------------
+ALL END-TO-END SCHOLARLY DISCOVERY INTEGRATION TESTS PASSED
+---------------------------------------------------------
+
+===============================================================
+  TEST SUITE: ARCHIVE REVIEW REPAIRS & REGRESSION (ALL DEFECTS)
+===============================================================
+--- 1. Field and Topic Metadata Persistence & Filtering ---
+  Γ£ô [PASS] Field, subfield, and topic IDs preserved through record normalization
+--- 2. Academic Country Resolver Regex & Substring Disambiguation ---
+  Γ£ô [PASS] Country resolver strictly enforces boundaries and rejects false acronym matches
+--- 3. Institution Matching: Empty Strings & Conflicting Canonical IDs ---
+  Γ£ô [PASS] Institution matching guards against empty inputs, conflicting IDs, and enforces country conjunction
+--- 4. Verification Document WebP Magic Byte Validation ---
+  Γ£ô [PASS] WebP magic byte inspection strictly enforces RIFF + WEBP header
+--- 5. MembershipPeriod Schema Enum Alignment ---
+  Γ£ô [PASS] MembershipPeriod schema supports all manual grant types including custom
+--- 6. Author Works Continuation & Curated Attribution Honesty ---
+  Γ£ô [PASS] Curated author metrics are explicitly marked as offline reference fallback
+--- 7. Institution Research Landscape & Donut Slice Metrics ---
+  Γ£ô [PASS] Institution analytics separates lifetime vs range totals with exact unclassified tracking
+--- 8. Sparse Filtering Pagination Continuity ---
+  Γ£ô [PASS] Sparse pagination calculates contiguous startIndex from actual emitted page boundaries
+--- 9. Unapproved Local Thesis Visibility Control ---
+  Γ£ô [PASS] Unapproved local thesis returns 404 for guests and unauthorized students
+--- 10. Staff Boundary Enforcement on Admin Stats ---
+  Γ£ô [PASS] Admin stats endpoint strictly enforces staff role (admin or editor)
+--- 11. Payment State Transition Atomicity & Guard Against Reopening ---
+  Γ£ô [PASS] Payment state transition guards prevent approved payments from being reopened
+
+===============================================================
+  ALL ARCHIVE REVIEW REGRESSION TESTS PASSED (11/11 PASS)
+===============================================================
+
+
+
+===============================================================
+  TEST SUITE: FAIL-SAFE EMAIL NOTIFICATION SYSTEM             
+===============================================================
+
+--- 1. Admin Notification Recipient Resolution ---
+  Γ£ô [PASS] Resolves default admin email to sahaaniruddha2004@gmail.com
+  Γ£ô [PASS] Respects ADMIN_NOTIFICATION_EMAIL override if explicitly set
+  Γ£ô [PASS] Fails closed to fallback if primary admin email is placeholder or missing
+--- 2. HTML Injection Escaping & Template Security ---
+  Γ£ô [PASS] escapeHtml escapes dangerous XSS script and tag characters
+--- 3. Offline Mode & In-Memory Capturing ---
+  Γ£ô [PASS] Emails in test mode are captured in memory and mock flag is true
+--- 4. Admin Email Triggers ---
+  Γ£ô [PASS] Trigger: notifyAdminNewVerification dispatches complete student dossier to admin
+  Γ£ô [PASS] Trigger: notifyAdminNewPayment alerts admin on initial bKash claim with order details
+  Γ£ô [PASS] Trigger: notifyAdminNewPayment highlights resubmission when corrected
+  Γ£ô [PASS] Trigger: notifyAdminNewReport delivers grievance details to admin
+--- 5. User Email Triggers ---
+  Γ£ô [PASS] Trigger: notifyUserVerificationRequested sends receipt to the requesting student
+  Γ£ô [PASS] Trigger: notifyUserPaymentSubmitted sends submission receipt to paying researcher
+  Γ£ô [PASS] Trigger: notifyUserReportSubmitted acknowledges receipt of publication grievance to user
+  Γ£ô [PASS] Trigger: notifyUserPaymentApproved sends activation receipt to the specific user
+  Γ£ô [PASS] Trigger: notifyUserMembershipGranted sends access notice to specific user
+  Γ£ô [PASS] Trigger: notifyUserVerificationApproved alerts student that identity is verified
+  Γ£ô [PASS] Trigger: notifyUserEditorAppointed alerts user of Editorial Board appointment and permissions
+  Γ£ô [PASS] Trigger: notifyUserEditorPermissionsUpdated alerts editor when permissions change
+--- 6. Fail-Safe & Non-blocking Boundary Resilience ---
+  Γ£ô [PASS] sendEmail returns structured failure and never throws when recipient is invalid or empty
+
+===============================================================
+  ALL 18/18 EMAIL NOTIFICATION TESTS PASSED (100% OK)
+===============================================================
+
+
+[EmailService] Invalid or missing recipient email: "". Email skipped.
+[EmailService] Invalid or missing recipient email: "invalid-email-no-at". Email skipped.
+[EmailService] Missing email subject. Email skipped.
+Testing: Federated Upstream Provider Integration Suite...
+--- 1. Semantic Scholar Provider Adapter ---
+  Γ£ô [PASS] Semantic Scholar offline mode returns deterministic normalized records
+  Γ£ô [PASS] Semantic Scholar 200 OK accurately maps fields and normalized record structures
+  Γ£ô [PASS] Semantic Scholar 429 rate limit safely handled without throwing
+  Γ£ô [PASS] Semantic Scholar single retry succeeds when Retry-After is <= 2s
+  Γ£ô [PASS] Semantic Scholar 500 upstream failure isolated without unhandled rejection
+  Γ£ô [PASS] Semantic Scholar 401 and 403 responses handled gracefully
+  Γ£ô [PASS] Semantic Scholar malformed JSON handled cleanly
+  Γ£ô [PASS] Semantic Scholar zero results handled properly
+--- 2. OpenAIRE Graph API V3 Provider Adapter ---
+  Γ£ô [PASS] OpenAIRE Graph V3 offline mode returns deterministic normalized records
+  Γ£ô [PASS] OpenAIRE Graph V3 accurately targets v3 endpoints, extracts instances, and handles pagination
+  Γ£ô [PASS] OpenAIRE 500 upstream failure isolated gracefully
+  Γ£ô [PASS] OpenAIRE 400 bad query handled without crash
+  Γ£ô [PASS] OpenAIRE zero results handled cleanly
+
+===============================================================
+  ALL 13/13 PROVIDER INTEGRATION TESTS PASSED (100% OK)
+===============================================================
+
+Testing: Admin-Controlled Maintenance Mode & Invariants Suite...
+  Γ£ô [PASS] Cached maintenance status returns authoritative default shape
+  Γ£ô [PASS] When maintenance is disabled, student requests proceed without disruption
+  Γ£ô [PASS] When maintenance is enabled, student requests are blocked with HTTP 503 and custom notice
+  Γ£ô [PASS] Essential health, system status, and authentication routes remain reachable during maintenance
+  Γ£ô [PASS] Administrator role bypass allows full access during maintenance
+  Γ£ô [PASS] Admin endpoints pass through maintenance middleware to trigger strict RBAC validation
+  Γ£ô [PASS] Zero quota consumption invariant verified (requests rejected before quota middleware)
+  Γ£ô [PASS] RBAC strictly restricts maintenance toggle to Admin (Editor and Student rejected with 403)
+
+===============================================================
+  ALL 8/8 MAINTENANCE MODE TESTS PASSED (100% OK)
+===============================================================
+
+Testing: Local Archive Multi-Word Text Matching...
+  Γ£ô [PASS] Empty or blank query adds no text filter
+  Γ£ô [PASS] Single-word query keeps the original shape (7 fields, one regex each)
+  Γ£ô [PASS] Exact phrase still matches, in any searchable field
+  Γ£ô [PASS] Words in a different order now match (previously missed)
+  Γ£ô [PASS] Words may be spread across title and abstract
+  Γ£ô [PASS] Two-word query needs both words
+  Γ£ô [PASS] Longer queries tolerate a missing word but not most of them
+  Γ£ô [PASS] Unrelated records are not pulled in
+  Γ£ô [PASS] Filler and very short words are ignored when counting
+  Γ£ô [PASS] Regex special characters in the query are treated as plain text
+  Γ£ô [PASS] Query size is bounded (at most 6 words considered)
+  Γ£ô [PASS] Bangla-script queries are tokenised correctly
+
+===============================================================
+  ALL 12/12 LOCAL TEXT SEARCH TESTS PASSED (100% OK)
+===============================================================
+
+Testing: Report Categories, Safe Search Text & Proxy Setting...
+  Γ£ô [PASS] Every canonical report category passes through unchanged and has a label
+  Γ£ô [PASS] Names the old report form sent are mapped instead of rejected
+  Γ£ô [PASS] Unknown, empty or odd values become "other" so the report is still saved
+  Γ£ô [PASS] The Report model accepts every category and rejects only invented ones
+  Γ£ô [PASS] Search text with regex characters no longer throws and matches literally
+  Γ£ô [PASS] Proxy setting: on in production, off in development, by default
+  Γ£ô [PASS] Proxy setting: explicit values are respected and "true" never trusts every hop
+  7 checks passed.
+
+
+===============================================================
+  TEST SUITE: USER FEEDBACK TO THE TEAM                        
+===============================================================
+
+--- 1. Helper rules (utils/feedbackFields.js) ---
+  Γ£ô [PASS] Categories and statuses are exactly the agreed lists, each with a readable label
+  Γ£ô [PASS] Category: known names pass through, also with capitals or spaces around them
+  Γ£ô [PASS] Category: unknown, empty or odd values become "other" and never throw
+  Γ£ô [PASS] Status check is strict: only the four stored values are accepted
+  Γ£ô [PASS] Message: trims, keeps paragraphs, and tidies line endings, tabs and extra blank lines
+  Γ£ô [PASS] Message: invisible control and text-direction characters are removed
+  Γ£ô [PASS] Message: Bangla text, its joiner marks, emoji and symbols are kept untouched
+  Γ£ô [PASS] Message: too short is refused with a plain sentence; 5 characters is enough
+  Γ£ô [PASS] Message: too long is refused (not silently cut); exactly 2000 characters is allowed
+  Γ£ô [PASS] Message: values that are not text are refused without throwing
+  Γ£ô [PASS] Reply: a short reply is fine, an empty or over-long one is refused
+  Γ£ô [PASS] Page context: normal values pass, odd ones are cleaned, cut to 120 or dropped
+  Γ£ô [PASS] Preview: one line, at most 160 characters plus "ΓÇª", and never half an emoji
+  Γ£ô [PASS] Queue filters: defaults, "open", paging limits, and unknown or hostile values ignored
+--- 2. Feedback model and notification types ---
+  Γ£ô [PASS] Model: a minimal message is valid and gets the agreed defaults
+  Γ£ô [PASS] Model: the user and the message are required; the message is trimmed and 5 to 2000 long
+  Γ£ô [PASS] Model: every listed category and status is accepted and invented ones are refused
+  Γ£ô [PASS] Model: page context over 120 and reply over 2000 characters are refused
+  Γ£ô [PASS] Model: keeps created/updated times, links to User, and indexes user and status
+  Γ£ô [PASS] Notification model accepts the two feedback types and still refuses invented ones
+--- 3. Emails ---
+  Γ£ô [PASS] Email to admin: right recipient and subject, user text escaped, paragraphs kept
+  Γ£ô [PASS] Email to user: goes to the user with the reply and their own message, safely escaped
+  Γ£ô [PASS] Emails never throw: missing input, no address, bad address, odd values
+--- 4. Who may use the endpoints ---
+  Γ£ô [PASS] The router loads as an Express router and declares exactly the five endpoints
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Without a valid sign-in every endpoint answers 401 and nothing is stored
+  Γ£ô [PASS] A banned account is refused with 403 on every endpoint
+--- 5. POST / (send a message) ---
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] A student still waiting for approval can send a message (201, agreed response shape)
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Unknown category becomes "other"; the sender cannot set status, reply or owner themselves
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] A missing, too short, too long or non-text message gets 400 with a plain sentence; nothing is stored
+  Γ£ô [PASS] On success: stored notification for each admin, live pushes like the report route, and one admin email
+  Γ£ô [PASS] Email or notification trouble never fails or delays the saved message
+  Γ£ô [PASS] With no live server running (the normal state in tests) sending still works
+  Γ£ô [PASS] A database failure answers 500 with a plain sentence, logs the real error, and leaks nothing
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Rate limit: 5 messages per user, the 6th gets 429 with a plain sentence, others are unaffected
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Rate limit: messages refused for being too short do not use up the allowance
+--- 6. GET /mine and PUT /:id/seen ---
+  Γ£ô [PASS] GET /mine returns only the caller's own messages, newest first, at most 50
+  Γ£ô [PASS] PUT /:id/seen marks the caller's own reply as read and returns the updated message
+  Γ£ô [PASS] PUT /:id/seen answers 404 for someone else's message, an unknown id and a malformed id (never 500)
+--- 7. GET /admin (staff queue) ---
+  Γ£ô [PASS] Staff endpoints: students and editors without the reports permission get 403
+  Γ£ô [PASS] Staff endpoints: an admin and an editor holding reports.moderate are both let in
+  Γ£ô [PASS] GET /admin: agreed shape, newest first, 20 per page by default, never more than 50
+  Γ£ô [PASS] GET /admin: status, "open" and category filters; counts stay steady across status tabs
+--- 8. PUT /admin/:id (status and reply) ---
+  Γ£ô [PASS] PUT /admin/:id: malformed or unknown id gives 404; an empty or invalid request gives 400
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Status only: the status changes and the user is not notified or emailed
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Reply only: saves the reply and who wrote it, marks it unread, sets "answered", notifies and emails the user
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] A short reply is sent whole; a reply with a status keeps the status that was chosen
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] Reply side effects failing (notification store, email) never fail the saved reply
+  Γ£ô [PASS] When saving the reply fails the answer is 500, and the user is not notified or emailed
+--- 9. Full round trip ---
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+(node:14792) [MONGOOSE] Warning: Mongoose: `Document.prototype.validateSync()` is deprecated and will be removed in Mongoose 10. Use `Document.prototype.validate()` instead.
+  Γ£ô [PASS] User writes, staff see it and reply, user sees an unread reply and marks it read
+
+===============================================================
+  ALL 49/49 USER FEEDBACK TESTS PASSED (100% OK)
+===============================================================
+
+Testing: New Federated Providers (CORE and DBLP)...
+--- 1. CORE Provider Adapter ---
+  Γ£ô [PASS] CORE request uses the v3 search endpoint, a cleaned query, a time limit and no key by default
+  Γ£ô [PASS] CORE sends CORE_API_KEY as a Bearer token and works without it
+  Γ£ô [PASS] CORE thesis record maps every field (title, author, year, type, links, language, provenance)
+  Γ£ô [PASS] CORE article decodes HTML entities, strips tags, fixes author name order and cleans the publisher
+  Γ£ô [PASS] CORE handles missing, empty and oddly shaped fields without inventing data
+  Γ£ô [PASS] CORE applies year range, publication type and PDF filters to the returned records
+  Γ£ô [PASS] CORE pagination: capped page size, offsets, hasMore, last page, empty page and zero results
+  Γ£ô [PASS] CORE 429: clean error, one short retry at most, and no further calls while told to wait
+  Γ£ô [PASS] CORE network failure, timeout, 4xx/5xx and malformed answers become an error result, never a crash
+  Γ£ô [PASS] CORE keeps working if the service refuses the "exclude full text" request
+  Γ£ô [PASS] CORE offline mode returns deterministic records with paging and no network call
+--- 2. DBLP Provider Adapter ---
+  Γ£ô [PASS] DBLP request uses the publication search endpoint, JSON format, a cleaned query and a time limit
+  Γ£ô [PASS] DBLP journal article maps every field (title, authors, venue, year, type, DOI, links, access)
+  Γ£ô [PASS] DBLP authors: single object, list, plain text, homonym numbers and HTML entities
+  Γ£ô [PASS] DBLP types (journal, conference, preprint, thesis, book, unknown) and links (ee, DOI, arXiv PDF)
+  Γ£ô [PASS] DBLP handles missing, empty and oddly shaped fields without inventing data
+  Γ£ô [PASS] DBLP applies year range, publication type and PDF filters to the returned records
+  Γ£ô [PASS] DBLP pagination: capped page size, offsets, hasMore, last page, empty page and zero results
+  Γ£ô [PASS] DBLP 429: clean error, one short retry at most, and no further calls while told to wait
+  Γ£ô [PASS] DBLP network failure, timeout, 4xx/5xx and malformed answers become an error result, never a crash
+  Γ£ô [PASS] DBLP offline mode returns deterministic records with paging and no network call
+--- 3. CORE and DBLP inside a search session ---
+  Γ£ô [PASS] CORE and DBLP are registered with display names and capabilities
+  Γ£ô [PASS] A session search reports CORE and DBLP, uses their records and tracks their paging position
+  Γ£ô [PASS] The source filter selects CORE or DBLP alone, and their records page without repeats
+  Γ£ô [PASS] An older saved session without CORE/DBLP entries is repaired instead of crashing
+  Γ£ô [PASS] The same paper from CORE and DBLP is merged into one record crediting both
+  Γ£ô [PASS] A rate-limited or unreachable CORE/DBLP is reported as degraded and the rest of the search goes on
+
+===============================================================
+  ALL 27/27 NEW PROVIDER TESTS PASSED (100% OK)
+===============================================================
+
+Testing: New Dataset Sources (Hugging Face, Harvard Dataverse, ScholeXplorer) & Open Access Finder...
+--- 1. Hugging Face datasets ---
+  Γ£ô [PASS] Hugging Face: sends search/limit/full/sort/direction and maps id, card data, tags, downloads, likes and dates
+  Γ£ô [PASS] Hugging Face: pages by slicing, ignores DOI-only calls, and refuses unsafe ids and private datasets
+--- 2. Harvard Dataverse ---
+  Γ£ô [PASS] Harvard Dataverse: sends q/type/per_page/start and maps name, description, DOI, publisher, date, authors, subjects, file count
+  Γ£ô [PASS] Harvard Dataverse: verifies links by related-publication DOI, cleans the query, drops unsafe links, treats a bot challenge as a failure
+--- 3. OpenAIRE ScholeXplorer ---
+  Γ£ô [PASS] ScholeXplorer: asks for dataset links of the paper DOI, keeps datasets only, merges repeats, strongest relation first
+  Γ£ô [PASS] ScholeXplorer: skips invalid DOIs and keyword calls, pages from 0, honours SCHOLEXPLORER_API_URL, drops unsafe links
+--- 4. Global search and paper enrichment ---
+  Γ£ô [PASS] Global search: six sources in a fixed order, same record fields, original four sources unchanged
+  Γ£ô [PASS] Global search: a dataset returned by two sources is listed once
+  Γ£ô [PASS] Failure isolation: HTTP 429, 5xx, bad JSON, network errors and timeouts in one source leave the others working
+  Γ£ô [PASS] Caching: repeated searches are served from memory as safe copies, a total outage is never cached
+  Γ£ô [PASS] Paper enrichment: ScholeXplorer links are filed as linked, duplicates are merged and promoted, Hugging Face is not asked
+  Γ£ô [PASS] Paper enrichment: failing sources are reported per source, original linked/related rules are unchanged
+--- 5. Offline mode ---
+  Γ£ô [PASS] Offline mode: all three new sources answer from fixtures through the real mapping code, with no network use
+--- 6. Open Access Finder (Unpaywall) ---
+  Γ£ô [PASS] Finder reason 'not_configured': no address (or a refused one) means no lookup and no caching
+  Γ£ô [PASS] Finder reason 'invalid_doi': anything that is not a DOI is refused without calling out
+  Γ£ô [PASS] Finder found: prefers best_oa_location.url_for_pdf, normalises the DOI, builds a safe request address
+  Γ£ô [PASS] Finder found: falls back to another location with a PDF, then to a free-to-read landing page
+  Γ£ô [PASS] Finder safety: private, local, credential-carrying and non-http links are never returned
+  Γ£ô [PASS] Finder reason 'no_open_copy': a known paper with no free copy
+  Γ£ô [PASS] Finder reason 'not_found': Unpaywall does not know the DOI (HTTP 404)
+  Γ£ô [PASS] Finder reason 'rate_limited': HTTP 429 pauses all lookups for the time asked (capped), then resumes
+  Γ£ô [PASS] Finder reason 'unavailable': server errors, network errors, bad bodies and timeouts never throw and are not cached
+  Γ£ô [PASS] Finder cache: positive and negative answers are remembered, expire on time, and the cache size is capped
+  Γ£ô [PASS] Finder offline mode: deterministic fixture answers with no network use and no configuration
+Γ£ô All 24/24 New Dataset Source & Open Access Finder Tests PASSED.
+
+
+Testing: Repository Harvester (OAI-PMH parsing, mapping, save rules, polite paging)...
+  Γ£ô [PASS] Parses a real-shape DSpace "dim" page: several records, several fields each
+  Γ£ô [PASS] Parses a page with a single record, single fields and a different namespace prefix
+  Γ£ô [PASS] Parses the oai_dc version of the same real record (unlabelled contributors and dates)
+  Γ£ô [PASS] Recognises a deleted header (no metadata) without dropping it
+  Γ£ô [PASS] Reads the resumption token: present, empty on the last page, absent on a short list
+  Γ£ô [PASS] Reports OAI <error> elements by code (noRecordsMatch, badResumptionToken)
+  Γ£ô [PASS] Malformed, truncated, empty and non-OAI input comes back as an error, never a throw
+  Γ£ô [PASS] Maps the real-shape thesis (dim) to a complete Thesis object
+  Γ£ô [PASS] oai_dc fallback finds the same advisor, department, abstract, year and link without labels
+  Γ£ô [PASS] Keeps theses and dissertations, skips every other kind of record
+  Γ£ô [PASS] Skips records with a missing required field instead of inventing text
+  Γ£ô [PASS] Optional fields that are missing stay honest: no advisor, placeholder department, neutral degree
+  Γ£ô [PASS] Cleans HTML entities, tags and whitespace without damaging "<" and ">" in real text
+  Γ£ô [PASS] Maps the degree level only when it is stated
+  Γ£ô [PASS] Chooses the year the thesis was issued, not the year it was uploaded
+  Γ£ô [PASS] Links back to the original record through its handle
+  Γ£ô [PASS] Assigns a discipline only on a clear keyword match, otherwise the neutral category
+  Γ£ô [PASS] A mapped record satisfies the real Thesis model and keeps its fingerprint through Mongoose
+  Γ£ô [PASS] Upsert inserts a new harvested record as approved, with its bookkeeping fields
+  Γ£ô [PASS] Upsert leaves an unchanged record alone (no write at all)
+  Γ£ô [PASS] Upsert updates a record that changed at the source, and nothing but its content
+  Γ£ô [PASS] Do-not-overwrite: a record an admin edited by hand is never overwritten
+  Γ£ô [PASS] Do-not-overwrite: an admin-rejected record stays rejected and is not re-created
+  Γ£ô [PASS] Do-not-overwrite: a thesis deposited on this site is never touched
+  Γ£ô [PASS] Dry run reports the same decisions and writes nothing
+  Γ£ô [PASS] A record deleted at the source is hidden, not destroyed, and returns if the source restores it
+  Γ£ô [PASS] Pages with the resumption token and pauses one second between requests
+  Γ£ô [PASS] Sends an honest User-Agent with the site name and the contact address
+  Γ£ô [PASS] The pause between requests is configurable (option, then registry, then default)
+  Γ£ô [PASS] Honours HTTP 503 Retry-After, then carries on
+  Γ£ô [PASS] Gives up after the retry limit and reports where to resume
+  Γ£ô [PASS] Retries network errors and timeouts, but not a 404
+  Γ£ô [PASS] Stops at maxRecords and returns a token that is safe to resume from
+  Γ£ô [PASS] Treats noRecordsMatch as "nothing new", other OAI errors and broken pages as failures
+  Γ£ô [PASS] Falls back to oai_dc when the repository does not offer the richer format
+  Γ£ô [PASS] Dry run through the whole loop writes nothing and returns a few mapped samples
+  Γ£ô [PASS] The loop hides records the source deleted and survives one failing record
+  Γ£ô [PASS] Registry: BRAC University is enabled on its confirmed endpoint; unverified entries are disabled
+  Γ£ô [PASS] Command line: refuses a disabled repository without --force, rejects unknown options
+Γ£ô All Repository Harvester tests passed successfully (39 checks).
+
+===============================================================
+  TEST SUITE: FULL-TEXT READER (AUTHORS' OWN KEY SECTIONS)    
+===============================================================
+
+  -- Download guard --
+  Γ£ô [PASS] IP check: private, loopback, link-local, CGNAT, multicast, metadata and IPv6 forms are not public
+  Γ£ô [PASS] Refuses anything that is not a plain http(s) URL, without touching DNS or the network
+  Γ£ô [PASS] Refuses internal hosts written as names, IPv4, IPv6 or numbers, before any request is made
+  Γ£ô [PASS] Refuses a public-looking name whose DNS answer is (or includes) an internal address
+  Γ£ô [PASS] Downloads a PDF: honest User-Agent, manual redirects, checked addresses handed to the transport
+  Γ£ô [PASS] Follows redirects itself (relative ones too) and reports the final address
+  Γ£ô [PASS] A redirect to a private address is refused on that hop, and never requested
+  Γ£ô [PASS] Gives up after 4 redirects
+  Γ£ô [PASS] Size cap: a declared length over the limit is refused before the body is read
+  Γ£ô [PASS] Size cap: a body that keeps coming is cut off as soon as it passes the limit
+  Γ£ô [PASS] Size cap comes from FULLTEXT_MAX_MB (default 15 MB)
+  Γ£ô [PASS] A sign-in page served from a .pdf address is reported as not_pdf
+  Γ£ô [PASS] Timeout covers a server that never answers, a body that stalls and a DNS lookup that hangs
+  Γ£ô [PASS] HTTP errors, connection errors and DNS failures get their own reasons
+  Γ£ô [PASS] Built-in transport connects to the checked address, not to whatever the name resolves to later
+  Γ£ô [PASS] Whole download path over real sockets (loopback server): redirect, size cap, stalled body, sign-in page
+
+  -- Lines from text positions --
+  Γ£ô [PASS] Two-column page: left column is read before the right one; the full-width title stays on top
+  Γ£ô [PASS] Words on one baseline become one line with spaces from the gaps; small capitals are joined
+  Γ£ô [PASS] Line numbers printed in the margin of a review manuscript are not glued to the text
+
+  -- Headings and sections --
+  Γ£ô [PASS] Numbered headings are found, in order, with the right kind
+  Γ£ô [PASS] "Limitations and Future Work" serves both purposes
+  Γ£ô [PASS] Running header, footer and page numbers are removed from the text
+  Γ£ô [PASS] A section runs across a page break, and words split by a line-end hyphen are joined
+  Γ£ô [PASS] A sentence that starts with "Table 2 shows" stays in the text; reference entries are not headings
+  Γ£ô [PASS] IEEE style: roman numerals, lettered sub-headings and unnumbered known headings at text size
+  Γ£ô [PASS] Not headings: list items, captions, a sentence about limitations, author initials in references
+  Γ£ô [PASS] Thesis: contents entries (dot leaders + page number) are neither headings nor text
+  Γ£ô [PASS] Thesis: "Chapter 6: ..." on one line, "Chapter 7" + title on the next line, larger ALL-CAPS line
+  Γ£ô [PASS] "Summary" depends on where it stands: abstract at the front, chapter ending in the middle
+  Γ£ô [PASS] Skipped pages end the open section instead of gluing unrelated text to it
+  Γ£ô [PASS] Input that is empty, odd or without sizes does not break the splitter
+
+  -- Key sections --
+  Γ£ô [PASS] Dedicated sections are returned whole, with title, page and source own_section
+  Γ£ô [PASS] A combined heading is used for both: future work starts at the first sentence about the future
+  Γ£ô [PASS] No Limitations heading: the limitation sentences inside Discussion are returned as within_section
+  Γ£ô [PASS] "We did not ..." alone is a finding, not a limitation; Results, References and Acknowledgements are never searched
+  Γ£ô [PASS] Nothing to find gives nulls for every part, also for empty or broken input
+  Γ£ô [PASS] Long text is cut at about 1,400 characters, at the end of a sentence, and flagged as truncated
+  Γ£ô [PASS] Sub-sections belong to their section; the closing section of an ordinary chapter is not "the conclusion"
+  Γ£ô [PASS] Availability statements inside other sections are found; borrowed data sets are not mistaken for them
+
+  -- Code and dataset links --
+  Γ£ô [PASS] Finds code and dataset links, joins a link broken over two lines, strips sentence punctuation
+  Γ£ô [PASS] Sorts hosts into code, dataset and other; recognises data DOIs and links printed without https://
+  Γ£ô [PASS] Links in the reference list are skipped, unless the entry says it holds the data of this work
+  Γ£ô [PASS] At most 15 links are returned
+
+  -- Cache and queue --
+  Γ£ô [PASS] Orchestrator returns the documented shape and remembers the result (one download for two calls)
+  Γ£ô [PASS] Successes are kept 24 hours, failures 30 minutes
+  Γ£ô [PASS] The cache holds 40 papers and forgets the one used longest ago
+  Γ£ô [PASS] One PDF is parsed at a time, three may wait, the next caller is told "busy" at once
+  Γ£ô [PASS] Two requests for the same paper at the same moment share one download and one parse
+  Γ£ô [PASS] Never throws: bad input, a crashing reader and unreadable results all come back as { ok: false, reason }
+  Γ£ô [PASS] Without pdfjs-dist the reader answers reader_not_installed, does not crash and does not cache that answer
+
+  -- Reading the fixture PDFs --
+  Γ£ô [PASS] IEEE two-column paper: columns are read left then right, and every heading is found
+  Γ£ô [PASS] IEEE paper: limitations section, conclusion and future work from the combined heading, both availability parts
+  Γ£ô [PASS] IEEE paper: Zenodo and GitHub links found (the GitHub one re-joined), links of the reference list ignored
+  Γ£ô [PASS] Thesis: the contents page is not mistaken for headings, and its lines are in no section
+  Γ£ô [PASS] Thesis: running header and page numbers removed, hyphenated word joined, section continues over the page break
+  Γ£ô [PASS] Thesis: key sections come from chapter 5; no availability statement is invented
+  Γ£ô [PASS] Thesis: the OSF link in the appendix is found, the GitHub link in the reference list is ignored
+  Γ£ô [PASS] Long thesis (90 pages): first 60 + last 15 are read, plus the conclusion chapter found through the bookmarks
+  Γ£ô [PASS] Long thesis: limitations, future work and conclusion are found although they lie outside the normal window
+  Γ£ô [PASS] Long thesis without bookmarks: walking backwards from the last pages still reaches the conclusion
+  Γ£ô [PASS] maxPages limits the work: 10 pages means the first 8 and the last 2
+  Γ£ô [PASS] Paper without a Limitations heading: sentences from Discussion and Conclusion, marked within_section
+  Γ£ô [PASS] LaTeX-typeset paper: abstract across both columns, table floating inside a paragraph, footnote, "Limitations." paragraph heading
+  Γ£ô [PASS] Paper with none of the wanted sections: every part is null, nothing is guessed
+  Γ£ô [PASS] Scanned PDF -> no_text_layer, password-protected -> encrypted, damaged or not a PDF -> unreadable
+  Γ£ô [PASS] The caller's buffer is left intact (the reader works on its own copy)
+  Γ£ô [PASS] Reading prints nothing: no font or library warnings reach the log
+  Γ£ô [PASS] End to end: readPaperFullText on the IEEE paper and the thesis, through the (stubbed) download
+  Γ£ô [PASS] End to end: scanned and password-protected PDFs give their reason, and the answer is cached
+
+All 69/69 Full-Text Reader tests passed!
+
+
+Testing: Thesis PDF Storage, Full-Text Messages, JSON Compression & Citation Levels...
+  Γ£ô [PASS] Upload size limit: 20 MB by default, kept between 1 and 50
+  Γ£ô [PASS] Only a file that really starts with %PDF- counts as a PDF
+  Γ£ô [PASS] A stored-file address is accepted only for this account and this exact file
+  Γ£ô [PASS] Upload stores a raw PDF under a random name and returns its address
+  Γ£ô [PASS] Upload refuses a non-PDF and reports missing storage clearly
+  Γ£ô [PASS] Removing a stored PDF never throws and ignores references that are not ours
+  Γ£ô [PASS] An uploaded file belongs to the member who uploaded it
+  Γ£ô [PASS] A stored PDF is removed only when no thesis record still uses it
+  Γ£ô [PASS] Report types: odd values become "other" instead of an error
+  Γ£ô [PASS] Full paper: a line of any length is handled at once
+  Γ£ô [PASS] Full paper: a failure that may pass (host down, slow) is tried again, a lasting one is remembered
+  Γ£ô [PASS] Full paper: a small file that unpacks into a huge one is stopped, and the site keeps answering
+  Γ£ô [PASS] Every full-text reason has a plain message, with no technical words
+  Γ£ô [PASS] Only passing problems are offered a "Try again"
+  Γ£ô [PASS] Accept-Encoding is read correctly
+  Γ£ô [PASS] A large answer is gzip-compressed and unpacks to the same JSON
+  Γ£ô [PASS] A small answer and a client without gzip are left alone
+  Γ£ô [PASS] Status codes and Bangla text survive compression
+  Γ£ô [PASS] Request limits count a signed-in member by account and a visitor by address
+  Γ£ô [PASS] Publisher filter: "IEEE" finds the long name and the short one, without false matches
+  Γ£ô [PASS] Citations state the degree level the record states, and nothing more
+  21 checks passed.
+AI paper analysis: grounding, caching, concurrent reuse, quota refunds, entitlement and PDF-source checks passed.
+Search relevance and university matching checks passed: off-topic results, wrong dataset types, aliases, DOI matching, affiliations and duplicate evidence.
+Research tools: cache isolation/expiry, resource filters, export escaping/XLSX, citation relationships, offline account separation and sharing ownership/revocation passed.
+Offline app: navigation fallback, static asset caching, API/private-data exclusion and install manifest passed.
+Research Radar: venue identity, provenance, dates, cursors, idempotent upserts, alert deduplication, partial ingestion failure and protected route access passed.
+
+===============================================================
+  ALL 32 DETERMINISTIC TEST SUITES PASSED (original 31 plus Research Radar)
+===============================================================

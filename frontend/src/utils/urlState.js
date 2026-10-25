@@ -9,6 +9,8 @@ export const DEFAULT_URL_STATE = Object.freeze({
   venue: '',
   type: 'all',
   sort: 'relevance',
+  subjectId: '', category: 'All Disciplines', fieldId: '', fieldName: '', publisher: '',
+  institution: null, institutionMode: 'affiliation', countries: [], author: null, citations: '', academicOnly: true,
   code: false, data: false, degree: "", program: "",
   pdf: false,
   oa: false,
@@ -27,11 +29,20 @@ function cleanText(value, max) {
   return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 }
 
+function cleanId(value) {
+  const id = cleanText(value, 200).split('/').pop();
+  return /^[a-zA-Z0-9_-]{2,50}$/.test(id) ? id : '';
+}
+
 export function parseUrlState(search) {
   const params = new URLSearchParams(typeof search === 'string' ? search : '');
   const view = params.get('view');
   const type = params.get('type');
   const sort = params.get('sort');
+  const institutionId = cleanId(params.get('institution'));
+  const institutionName = cleanText(params.get('institutionName'), 200);
+  const authorId = cleanId(params.get('author'));
+  const citations = params.get('citations') || '';
 
   return {
     view: VIEWS.includes(view) ? view : DEFAULT_URL_STATE.view,
@@ -47,6 +58,17 @@ export function parseUrlState(search) {
     venue: ['cvpr','iccv','eccv','wacv','iclr','neurips','jmlr','arxiv'].includes(params.get('venue')) ? params.get('venue') : '',
     type: PUBLICATION_TYPES.includes(type) ? type : DEFAULT_URL_STATE.type,
     sort: SORTS.includes(sort) ? sort : DEFAULT_URL_STATE.sort,
+    subjectId: cleanId(params.get('subject')).toLowerCase(),
+    category: cleanText(params.get('category'), 100) || 'All Disciplines',
+    fieldId: /^\d{1,10}$/.test(params.get('field') || '') ? params.get('field') : '',
+    fieldName: cleanText(params.get('fieldName'), 100),
+    publisher: cleanText(params.get('publisher'), 200),
+    institution: institutionId || institutionName ? { ...(institutionId ? { id: institutionId } : {}), name: institutionName || institutionId, ...(/^[A-Z]{2}$/.test(params.get('institutionCountry') || '') ? { countryCode: params.get('institutionCountry') } : {}) } : null,
+    institutionMode: params.get('institutionMode') === 'awarding' ? 'awarding' : 'affiliation',
+    countries: [...new Set((params.get('countries') || '').toUpperCase().split(',').filter(code => /^[A-Z]{2}$/.test(code)))].sort(),
+    author: authorId ? { id: authorId, name: cleanText(params.get('authorName'), 200) || authorId } : null,
+    citations: /^\d{1,7}$/.test(citations) && Number(citations) > 0 && Number(citations) <= 1000000 ? String(Number(citations)) : '',
+    academicOnly: params.get('academic') !== '0',
     code: params.get('code') === '1', data: params.get('data') === '1',
     degree: ['bsc','msc','phd'].includes(params.get('degree')) ? params.get('degree') : '',
     program: ['cse','eee','business','pharmacy'].includes(params.get('program')) ? params.get('program') : '',
@@ -75,6 +97,12 @@ export function buildUrl(state, pathname = '/') {
     if (s.venue) params.set('venue', s.venue);
     if (s.type && s.type !== 'all') params.set('type', s.type);
     if (s.sort && s.sort !== 'relevance') params.set('sort', s.sort);
+    for (const [key, value] of Object.entries({ subject: s.subjectId, category: s.category !== 'All Disciplines' ? s.category : '', field: s.fieldId, fieldName: s.fieldName, publisher: s.publisher, institution: s.institution?.id, institutionName: s.institution?.name, institutionCountry: s.institution?.countryCode, author: s.author?.id, authorName: s.author?.name, citations: s.citations })) {
+      if (value) params.set(key, String(value));
+    }
+    if (s.institutionMode === 'awarding') params.set('institutionMode', 'awarding');
+    if (s.countries?.length) params.set('countries', [...new Set(s.countries)].sort().join(','));
+    if (s.academicOnly === false) params.set('academic', '0');
     if (s.code) params.set('code', '1'); if (s.data) params.set('data', '1');
     if (['bsc','msc','phd'].includes(s.degree)) params.set('degree', s.degree);
     if (['cse','eee','business','pharmacy'].includes(s.program)) params.set('program', s.program);

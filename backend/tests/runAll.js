@@ -99,9 +99,12 @@ async function main() {
     await runResearchFeaturesTests();
     await runOfflineShellTests();
     await runDiscoveryRadarTests();
+    await require('./realtimeControls.test').runRealtimeControlsTests();
+    await require('./researchPlan.test').runResearchPlanTests();
+    await require('./filterAudit.test').runFilterAuditTests();
     
     console.log('\n===============================================================');
-    console.log('  ALL 32 DETERMINISTIC TEST SUITES PASSED (original 31 plus Research Radar)');
+    console.log('  ALL 35 DETERMINISTIC TEST SUITES PASSED');
     console.log('===============================================================');
     process.exit(0);
   } catch (err) {

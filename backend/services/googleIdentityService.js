@@ -37,6 +37,7 @@ function toSanitizedUserDto(user) {
     email: user.email,
     role: user.role,
     status: user.status,
+    banReason: user.status === 'banned' ? user.banReason || 'Administrative suspension' : '',
     permissions: Array.isArray(user.permissions) ? user.permissions : [],
     capabilities: getCapabilities(user),
     isProfileComplete: Boolean(user.isProfileComplete),

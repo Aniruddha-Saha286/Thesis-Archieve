@@ -3,6 +3,8 @@ const Thesis = require('../../models/Thesis');
 const { createNormalizedRecord } = require('../scholarlyRecord');
 const { SUBJECT_CATALOG, getSubjectById, mapToCanonicalSubject } = require('../subjectCatalog');
 const { CURATED_INSTITUTIONS } = require('../institutionService');
+const { publisherPatterns } = require('../publisherFilters');
+const { DEGREE_PATTERNS, PROGRAM_PATTERNS, hasDirectPdf } = require('../resourceLinks');
 
 const TEXT_SEARCH_FIELDS = ['title', 'abstract', 'author', 'university', 'department', 'publisher', 'catalogId'];
 const QUERY_STOPWORDS = new Set([
@@ -165,8 +167,16 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
     }
 
     if (filters.publisher && filters.publisher.trim()) {
-      andClauses.push({ publisher: new RegExp(filters.publisher.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+      andClauses.push({ $or: publisherPatterns(filters.publisher).map(pattern => ({ publisher: pattern })) });
     }
+
+    // Narrow before pagination, rather than exhausting batches of unrelated local records.
+    if (filters.degree && DEGREE_PATTERNS[filters.degree]) andClauses.push({ degreeType: DEGREE_PATTERNS[filters.degree] });
+    if (filters.program && PROGRAM_PATTERNS[filters.program]) andClauses.push({ department: PROGRAM_PATTERNS[filters.program] });
+    if (filters.hasCode) andClauses.push({ codeUrl: /^https:\/\/(?:[a-z0-9-]+\.)*(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)\//i });
+    if (filters.hasDataset || filters.hasOpenDataset) andClauses.push({ datasetUrl: /^https:\/\//i });
+    if (filters.hasOpenDataset) andClauses.push({ isOpenDataset: true });
+    if (Number(filters.minCitations) > 0) andClauses.push({ $or: [{ 'citationMetrics.count': { $gte: Number(filters.minCitations) } }, { citationCount: { $gte: Number(filters.minCitations) } }] });
 
     if (filters.publicationType && filters.publicationType !== 'all') {
       if (filters.publicationType === 'thesis' || filters.publicationType === 'dissertation') {
@@ -199,7 +209,9 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
 
     const mongoFilter = andClauses.length === 1 ? andClauses[0] : { $and: andClauses };
 
-    const sortOption = sort === 'newest' ? { publishedYear: -1, createdAt: -1 } : { isPinned: -1, upvotes: -1 };
+    const sortOption = sort === 'newest' ? { publishedYear: -1, createdAt: -1 }
+      : sort === 'citations' ? { 'citationMetrics.count': -1, createdAt: -1 }
+      : { isPinned: -1, upvotes: -1 };
     const skip = typeof explicitOffset === 'number' ? explicitOffset : (page - 1) * limit;
 
     const [totalCount, rawTheses] = await Promise.all([
@@ -211,7 +223,7 @@ async function searchLocal({ query = '', page = 1, limit = 20, offset: explicitO
 
     const records = rawTheses.map((doc) => {
       const directPdf = doc.pdfUrl && doc.pdfUrl.trim() ? doc.pdfUrl.trim() : null;
-      const isDirectPdf = Boolean(directPdf && (doc.isDirectPdf || directPdf.includes('/pdf') || directPdf.endsWith('.pdf')));
+      const isDirectPdf = hasDirectPdf({ pdfUrl: directPdf, isDirectPdf: doc.isDirectPdf });
 
       const fullTextLocations = [];
       if (directPdf) {

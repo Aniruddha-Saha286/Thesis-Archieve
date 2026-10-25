@@ -74,24 +74,7 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-const ALLOWED_ORIGINS = new Set([
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:3000',
-  ...(process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim()) : []),
-  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map((o) => o.trim()) : []),
-]);
-
-function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const url = new URL(origin);
-    if (url.hostname.endsWith('.vercel.app')) return true;
-  } catch {}
-  return false;
-}
+const { isAllowedOrigin } = require('./utils/allowedOrigins');
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -244,6 +227,7 @@ async function startServer() {
 
       const { runAllScheduledAlerts } = require('./services/topicAlertService');
       require('./services/discoveryFeed').startDiscoveryScheduler();
+      runAllScheduledAlerts().catch((err) => console.error('Initial alerts runner error:', err.message));
       const ALERT_INTERVAL_MS = 15 * 60 * 1000;
       setInterval(() => {
         runAllScheduledAlerts().catch((err) => console.error('Alerts runner error:', err.message));

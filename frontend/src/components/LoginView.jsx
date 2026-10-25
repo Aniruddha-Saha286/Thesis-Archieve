@@ -24,7 +24,7 @@ export default function LoginView() {
   const isGoogleConfigured = Boolean(
     rawClientId &&
     rawClientId !== '—' &&
-    !rawClientId.includes('—') &&
+    !rawClientId.includes('placeholder') &&
     rawClientId.trim().length > 5
   );
 

@@ -22,22 +22,33 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchCurrentUser = async () => {
+    const requestToken = localStorage.getItem('thesis_vault_token');
+    if (!requestToken) return;
     try {
-      setLoading(true);
       const res = await axios.get('/api/auth/me');
+      if (requestToken !== localStorage.getItem('thesis_vault_token')) return;
       setUser(res.data.user);
+      if (res.data.user?.status !== 'approved') clearOfflineData(localStorage);
       cacheOfflineSession(localStorage, res.data.user);
     } catch (err) {
-      if (!navigator.onLine || !err.response) {
+      if (requestToken !== localStorage.getItem('thesis_vault_token')) return;
+      if (err.response?.data?.status === 'banned') {
+        clearOfflineData(localStorage);
+        setUser(prev => prev ? { ...prev, status: 'banned', banReason: err.response.data.banReason } : null);
+        return;
+      }
+      if (!navigator.onLine || !err.response || err.response.status >= 500) {
         const cached = await offlineSession(localStorage);
+        if (requestToken !== localStorage.getItem('thesis_vault_token')) return;
         if (cached) { setUser(cached); return; }
+        return;
       }
       clearOfflineData(localStorage);
       console.warn('Session expired or invalid token:', err.message);
       setToken(null);
       setUser(null);
     } finally {
-      setLoading(false);
+      if (requestToken === localStorage.getItem('thesis_vault_token')) setLoading(false);
     }
   };
 
@@ -55,9 +66,15 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   useEffect(() => {
-    const reconnect = () => { if (token) fetchCurrentUser(); };
+    const reconnect = () => { if (token && document.visibilityState !== 'hidden') fetchCurrentUser(); };
     window.addEventListener('online', reconnect);
-    return () => window.removeEventListener('online', reconnect);
+    document.addEventListener('visibilitychange', reconnect);
+    const timer = token ? setInterval(reconnect, 60000) : null;
+    return () => {
+      window.removeEventListener('online', reconnect);
+      document.removeEventListener('visibilitychange', reconnect);
+      clearInterval(timer);
+    };
   }, [token]);
 
   const login = async (email, password) => {
@@ -79,6 +96,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUserStatus = (newStatus, extraFields = {}) => {
+    if (newStatus !== 'approved') clearOfflineData(localStorage);
     setUser((prev) => (prev ? { ...prev, status: newStatus, ...extraFields } : prev));
   };
 

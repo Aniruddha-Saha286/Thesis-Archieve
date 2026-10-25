@@ -97,10 +97,14 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       filterParts.push('is_oa:true');
     }
 
-    if (filters.yearMin) {
+    if (filters.fromPublicationDate && /^\d{4}-\d{2}-\d{2}$/.test(filters.fromPublicationDate)) {
+      filterParts.push(`from_publication_date:${filters.fromPublicationDate}`);
+    } else if (filters.yearMin) {
       filterParts.push(`from_publication_date:${filters.yearMin}-01-01`);
     }
-    if (filters.yearMax) {
+    if (filters.toPublicationDate && /^\d{4}-\d{2}-\d{2}$/.test(filters.toPublicationDate)) {
+      filterParts.push(`to_publication_date:${filters.toPublicationDate}`);
+    } else if (filters.yearMax) {
       filterParts.push(`to_publication_date:${filters.yearMax}-12-31`);
     }
 

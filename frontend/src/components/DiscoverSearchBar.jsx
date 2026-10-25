@@ -11,6 +11,7 @@ import {
   Users,
   Lightbulb,
   ArrowRight,
+  Bell,
 } from 'lucide-react';
 
 export default function DiscoverSearchBar({
@@ -35,6 +36,7 @@ export default function DiscoverSearchBar({
   filtersOpen = false,
   onOpenCoverage,
   onOpenTopicCheck,
+  onFollowSearch,
 }) {
   const [inputValue, setInputValue] = useState(searchQuery);
   const [suggestions, setSuggestions] = useState([]);
@@ -190,10 +192,13 @@ export default function DiscoverSearchBar({
     <div className="discovery-search border-b border-[#E2DFD8] dark:border-[#2A2824]">
       <div className="research-hero text-white transition-colors py-7 md:py-10">
       <div className="max-w-7xl mx-auto px-4 md:px-6 space-y-5">
+        <div className="discovery-hero-intro">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold tracking-widest uppercase text-amber-300 mb-2">Your next discovery starts here</p>
-          <h1 className="font-serif-title text-3xl md:text-5xl leading-tight">Make room for a great idea.</h1>
+          <h1 className="font-serif-title text-3xl md:text-5xl leading-tight">A curious question.<br /><em className="text-[#CFE4BA]">A world worth exploring.</em></h1>
           <p className="text-sm md:text-base text-stone-300 mt-3 leading-relaxed">Find the papers behind your topic. Save what matters, then explore the gaps.</p>
+        </div>
+        <div className="discovery-journey" aria-hidden="true"><div><span>01</span><FileText size={18} /><strong>Find a starting point</strong></div><div><span>02</span><Lightbulb size={18} /><strong>Connect the ideas</strong></div><div><span>03</span><ArrowRight size={18} /><strong>Make it your own</strong></div></div>
         </div>
         <div className="flex flex-col-reverse md:flex-row md:items-center gap-2.5">
         {/* Prominent Search Form */}
@@ -376,6 +381,7 @@ export default function DiscoverSearchBar({
           </p>
         )}
 
+        {onFollowSearch && inputValue.trim() && searchMode !== 'authors' && <button type="button" onClick={() => onFollowSearch(inputValue.trim())} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-300/40 bg-white/10 text-emerald-100 text-sm hover:bg-white/20 cursor-pointer"><Bell size={15} />Follow this search<span className="text-xs text-emerald-200/80">Get new-paper alerts</span></button>}
         {onOpenTopicCheck && searchMode !== 'authors' && (
           <button
             type="button"
