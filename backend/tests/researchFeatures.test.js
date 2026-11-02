@@ -62,6 +62,10 @@ async function runResearchFeaturesTests() {
   storage.setItem('thesis_vault_token', 'different-session'); assert.equal(await offline.offlineSession(storage), null);
   offline.cacheOfflineLibrary(storage, 'one', [{ title: 'Own library' }]); assert.equal(offline.offlineLibrary(storage, 'two'), null);
   offline.clearOfflineData(storage); assert.equal(offline.offlineLibrary(storage, 'one'), null); assert.equal(storage.getItem('thesis_vault_token'), 'different-session');
+  const pendingSession = offline.cacheOfflineSession(storage, { id: 'one', status: 'approved', role: 'student' });
+  offline.clearOfflineData(storage);
+  await pendingSession;
+  assert.equal(await offline.offlineSession(storage), null, 'An in-flight cache write cannot restore offline access after revocation');
   assert.equal(seedIdentifier({ id: 'openalex_W123' }).id, 'W123'); assert.equal(seedIdentifier({ doi: 'http://localhost/internal' }), null);
   citationCache.clear(); let graphCalls = 0;
   const graph = await neighborhood({ id: 'W123' }, async url => {

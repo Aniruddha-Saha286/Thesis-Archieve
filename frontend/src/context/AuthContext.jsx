@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { cacheOfflineSession, offlineSession, clearOfflineData } from '../utils/offlineLibrary';
 
@@ -20,18 +20,21 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('thesis_vault_token') || null);
   const [loading, setLoading] = useState(true);
+  const accountRequest = useRef(0);
 
   const fetchCurrentUser = async () => {
     const requestToken = localStorage.getItem('thesis_vault_token');
     if (!requestToken) return;
+    const request = ++accountRequest.current;
+    const isCurrent = () => request === accountRequest.current && requestToken === localStorage.getItem('thesis_vault_token');
     try {
       const res = await axios.get('/api/auth/me');
-      if (requestToken !== localStorage.getItem('thesis_vault_token')) return;
+      if (!isCurrent()) return;
       setUser(res.data.user);
       if (res.data.user?.status !== 'approved') clearOfflineData(localStorage);
       cacheOfflineSession(localStorage, res.data.user);
     } catch (err) {
-      if (requestToken !== localStorage.getItem('thesis_vault_token')) return;
+      if (!isCurrent()) return;
       if (err.response?.data?.status === 'banned') {
         clearOfflineData(localStorage);
         setUser(prev => prev ? { ...prev, status: 'banned', banReason: err.response.data.banReason } : null);
@@ -39,7 +42,7 @@ export const AuthProvider = ({ children }) => {
       }
       if (!navigator.onLine || !err.response || err.response.status >= 500) {
         const cached = await offlineSession(localStorage);
-        if (requestToken !== localStorage.getItem('thesis_vault_token')) return;
+        if (!isCurrent()) return;
         if (cached) { setUser(cached); return; }
         return;
       }
@@ -48,7 +51,7 @@ export const AuthProvider = ({ children }) => {
       setToken(null);
       setUser(null);
     } finally {
-      if (requestToken === localStorage.getItem('thesis_vault_token')) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -96,11 +99,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUserStatus = (newStatus, extraFields = {}) => {
+    // A live status change supersedes any account lookup already in flight.
+    ++accountRequest.current;
+    setLoading(false);
     if (newStatus !== 'approved') clearOfflineData(localStorage);
     setUser((prev) => (prev ? { ...prev, status: newStatus, ...extraFields } : prev));
   };
 
   const logout = () => {
+    ++accountRequest.current;
     localStorage.removeItem('thesis_vault_token');
     clearOfflineData(localStorage);
     setToken(null);

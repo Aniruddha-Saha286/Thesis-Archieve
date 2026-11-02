@@ -1,5 +1,6 @@
 const PREFIX = 'tta:offline:v1:';
 const SESSION_KEY = PREFIX + 'session';
+const cacheGenerations = new WeakMap();
 async function tokenTag(token) {
   if (!token) return '';
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
@@ -8,9 +9,10 @@ async function tokenTag(token) {
 export async function cacheOfflineSession(storage, user) {
   const id = user?.id || user?._id;
   if (!storage || !id || user.status !== 'approved' || user.role !== 'student') return;
+  const generation = cacheGenerations.get(storage) || 0;
   try {
     const token = storage.getItem('thesis_vault_token'); const tag = await tokenTag(token);
-    if (!tag || token !== storage.getItem('thesis_vault_token')) return;
+    if (!tag || token !== storage.getItem('thesis_vault_token') || generation !== (cacheGenerations.get(storage) || 0)) return;
     storage.setItem(SESSION_KEY, JSON.stringify({ id: String(id), name: user.name, status: 'approved', role: 'student', isProfileComplete: true, offline: true, tokenTag: tag }));
   } catch { /* Storage full or unavailable. */ }
 }
@@ -27,5 +29,7 @@ export function offlineLibrary(storage, userId) {
 }
 export function clearOfflineData(storage) {
   if (!storage) return;
+  // Cancel writes awaiting a token digest when access is revoked or signed out.
+  cacheGenerations.set(storage, (cacheGenerations.get(storage) || 0) + 1);
   try { for (let i = storage.length - 1; i >= 0; i--) { const key = storage.key(i); if (key?.startsWith(PREFIX)) storage.removeItem(key); } } catch { /* Storage unavailable. */ }
 }

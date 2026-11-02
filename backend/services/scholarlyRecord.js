@@ -52,7 +52,7 @@ function createNormalizedRecord(data) {
 
   let publicationType = data.publicationType || 'unknown';
   if (['thesis', 'dissertation'].includes(publicationType)) {
-  } else if (data.degreeType && /\b(thesis|dissertation|ph\.?d|master'?s thesis|doctoral)\b/i.test(data.degreeType)) {
+  } else if (['unknown', 'all'].includes(publicationType) && data.degreeType && /\b(thesis|dissertation|ph\.?d|master'?s thesis|doctoral)\b/i.test(data.degreeType)) {
     publicationType = 'thesis';
   } else if (publicationType === 'preprint' || data.source === 'arXiv') {
     publicationType = data.hasJournalRef ? 'journal-article' : 'preprint';

@@ -41,7 +41,10 @@ const authenticateSession = (allowSuspended = false) => async function authentic
       console.error(err.message);
       return res.status(500).json({ message: 'Authentication service configuration error.' });
     }
-    return res.status(401).json({ message: 'Invalid or expired token.' });
+    if (err instanceof jwt.JsonWebTokenError || err instanceof jwt.TokenExpiredError || err instanceof jwt.NotBeforeError || err.name === 'CastError') {
+      return res.status(401).json({ message: 'Invalid or expired token.' });
+    }
+    return res.status(503).json({ message: 'Account verification is temporarily unavailable. Please try again.' });
   }
 };
 const authenticateToken = authenticateSession();

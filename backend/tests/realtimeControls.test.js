@@ -67,6 +67,12 @@ async function runRealtimeControlsTests() {
     assert.strictEqual((await request('/api/admin/presence', { as: null })).status, 401);
     assert.strictEqual((await request('/api/admin/presence', { as: student })).status, 403);
     assert.strictEqual((await request('/api/admin/presence')).status, 200);
+    const healthyLookup = User.findById;
+    try {
+      User.findById = () => ({ select: async () => { throw new Error('Database temporarily unavailable'); } });
+      assert.strictEqual((await request('/api/auth/me', { as: student })).status, 503, 'A database outage must not be reported as an invalid session');
+      assert.strictEqual((await request('/protected', { as: student })).status, 503);
+    } finally { User.findById = healthyLookup; }
     const statusEvent = event(studentSocket, 'user:status_changed');
     const suspended = await request(`/api/admin/student/${student._id}/ban`, { method: 'POST', body: { reason: 'Test suspension' } });
     assert.strictEqual(suspended.status, 200); assert.strictEqual((await statusEvent).status, 'banned');

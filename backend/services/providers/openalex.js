@@ -1,5 +1,6 @@
 const { createNormalizedRecord } = require('../scholarlyRecord');
 const { getSubjectById, extractSubjectsFromOpenAlex, mapToCanonicalSubject } = require('../subjectCatalog');
+const { hasDirectPdf } = require('../resourceLinks');
 
 async function fetchOpenAlexWithRetry(url, options = {}, maxRetries = 2) {
   let attempt = 0;
@@ -90,10 +91,9 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       }
     }
 
-    if (filters.hasPdf) {
-      filterParts.push('has_fulltext:true');
-      filterParts.push('is_oa:true');
-    } else if (filters.isOpenAccess) {
+    // Searchable full text is different from a linked PDF. The session pipeline
+    // checks the actual PDF locations without discarding unindexed PDFs here.
+    if (filters.isOpenAccess) {
       filterParts.push('is_oa:true');
     }
 
@@ -108,8 +108,15 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
       filterParts.push(`to_publication_date:${filters.yearMax}-12-31`);
     }
 
-    if (filters.institutionId) {
-      const instId = String(filters.institutionId).trim().split('/').pop();
+    let institutionId = filters.institutionId;
+    if (!institutionId && filters.institutionName) {
+      const targetName = filters.institutionName.trim().toLowerCase();
+      const suggestions = await require('../institutionService').suggestInstitutions(filters.institutionName, { academicOnly: false, limit: 5 });
+      const exact = suggestions.find(inst => [inst.name, ...(inst.aliases || [])].some(name => String(name).trim().toLowerCase() === targetName));
+      if (exact) institutionId = exact.id;
+    }
+    if (institutionId) {
+      const instId = String(institutionId).trim().split('/').pop();
       filterParts.push(`institutions.id:${instId}`);
     }
 
@@ -259,16 +266,10 @@ async function searchOpenAlex({ query = '', page = 1, limit = 20, filters = {}, 
         } catch (e) {}
       }
 
-      const candidatePdf = w.best_oa_location?.pdf_url || w.primary_location?.pdf_url || w.open_access?.oa_url || null;
-      const isDirectPdf = Boolean(
-        candidatePdf && (
-          /\.pdf(\?|$|#)/i.test(candidatePdf) ||
-          candidatePdf.includes('/pdf/') ||
-          candidatePdf.includes('downloadpdf') ||
-          candidatePdf.includes('/servlets/purl/') ||
-          candidatePdf.includes('file?id=')
-        )
-      );
+      const declaredPdf = [w.best_oa_location, w.primary_location, ...(w.locations || [])]
+        .map(location => location?.pdf_url).find(url => hasDirectPdf({ pdfUrl: url, isDirectPdf: true }));
+      const candidatePdf = declaredPdf || w.open_access?.oa_url || null;
+      const isDirectPdf = hasDirectPdf({ pdfUrl: candidatePdf, isDirectPdf: Boolean(declaredPdf) });
 
       const fullTextLocations = [];
       if (candidatePdf) {

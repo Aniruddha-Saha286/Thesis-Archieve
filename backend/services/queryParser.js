@@ -258,6 +258,9 @@ function parseAndValidateThesisQuery(rawQuery = {}) {
   let cleanCountryCodes = [];
 
   if (rawCountryParam) {
+    if (typeof rawCountryParam !== 'string' && !(Array.isArray(rawCountryParam) && rawCountryParam.every(code => typeof code === 'string'))) {
+      return { valid: false, status: 400, code: 'INVALID_COUNTRY_CODE', message: 'Country filters must be two-letter codes.' };
+    }
     let candidates = [];
     if (Array.isArray(rawCountryParam)) {
       candidates = rawCountryParam.map((c) => String(c).trim().toUpperCase()).filter(Boolean);

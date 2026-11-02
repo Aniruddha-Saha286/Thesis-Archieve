@@ -1,4 +1,4 @@
-const DEGREE_PATTERNS = { bsc: /b\.?\s?sc|bachelor|undergraduate|final year/i, msc: /m\.?\s?sc|master/i, phd: /ph\.?\s?d|doctor/i };
+const DEGREE_PATTERNS = { bsc: /\bb\.?\s*sc\b|\bbachelor(?:'?s)?\b|\bundergraduate\b|\bfinal[- ]year\b/i, msc: /\bm\.?\s*sc\b|\bmaster(?:'?s)?\b/i, phd: /\bph\.?\s*d\b|\bdoctor(?:al|ate)?\b/i };
 const PROGRAM_PATTERNS = { cse: /computer|\bcse\b/i, eee: /electrical|electronic|\beee\b/i, business: /business|economics|\bbba\b/i, pharmacy: /pharma/i };
 function safeLink(value, hosts) {
   try {

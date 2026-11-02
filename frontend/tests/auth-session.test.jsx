@@ -1,5 +1,5 @@
 import { it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import axios from 'axios';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 vi.mock('axios', () => ({ default: { get: vi.fn(), post: vi.fn(), defaults: { headers: { common: {} } }, interceptors: { request: { use: vi.fn() } } } }));
@@ -37,4 +37,17 @@ it('a delayed account response cannot restore a session after sign-out', async (
   complete({ data: { user } });
   await waitFor(() => expect(localStorage.getItem('thesis_vault_token')).toBeNull());
   expect(screen.getByText('Signed out')).toBeVisible();
+});
+it('an older refresh cannot overwrite a newer suspension', async () => {
+  axios.get.mockResolvedValueOnce({ data: { user } });
+  render(<AuthProvider><Account /></AuthProvider>);
+  await screen.findByText('Account: approved');
+  let complete;
+  axios.get.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }))
+    .mockResolvedValueOnce({ data: { user: { ...user, status: 'banned' } } });
+  fireEvent.click(screen.getByText('Refresh account'));
+  fireEvent.click(screen.getByText('Refresh account'));
+  await screen.findByText('Account: banned');
+  await act(async () => complete({ data: { user } }));
+  expect(screen.getByText('Account: banned')).toBeVisible();
 });

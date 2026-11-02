@@ -80,6 +80,7 @@ async function runDiscoveryRadarTests() {
   const jobs = jobsFor({}, now); assert(jobs.some(j => j.venueId === 'eccv' && j.year === 2026)); assert(!jobs.some(j => j.venueId === 'iccv' && j.year === 2026));
   assert(matchesAlert(accepted, { topic: 'ICLR', venueId: 'iclr' })); assert(!matchesAlert(pre, { topic: 'ICLR', venueId: 'iclr' }));
   assert(!matchesAlert(accepted, { topic: 'crop disease' }));
+  assert(!matchesAlert({ ...accepted, category: 'Computer Science' }, { topic: 'ICLR', venueId: 'iclr', category: 'Medicine' }), 'Venue follows must still respect the selected discipline');
   const originals = { find: DiscoveryPaper.find, findOne: DiscoveryPaper.findOne, create: DiscoveryPaper.create, update: DiscoveryPaper.updateOne, syncFind: DiscoverySync.find, syncLease: DiscoverySync.findOneAndUpdate, syncUpdate: DiscoverySync.updateOne, notify: Notification.findOneAndUpdate };
   const chain = data => ({ sort() { return this; }, limit() { return this; }, select() { return this; }, lean: async () => data });
   try {

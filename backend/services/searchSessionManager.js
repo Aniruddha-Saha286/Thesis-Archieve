@@ -371,7 +371,6 @@ function computeRelevanceScore(record, queryWords) {
 function sortRecords(records, sort, query, pageNum) {
   if (sort === 'citations') {
     records.sort((a, b) => {
-      if (pageNum === 1 && a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       const citA = typeof a.citationCount === 'number' ? a.citationCount : -1;
       const citB = typeof b.citationCount === 'number' ? b.citationCount : -1;
       if (citB !== citA) return citB - citA;
@@ -379,7 +378,6 @@ function sortRecords(records, sort, query, pageNum) {
     });
   } else if (sort === 'newest') {
     records.sort((a, b) => {
-      if (pageNum === 1 && a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       const yrA = a.publishedYear || 0;
       const yrB = b.publishedYear || 0;
       const dateA = a.datePrecision === 'year' ? 0 : Date.parse(a.publicationDate) || 0;
@@ -426,10 +424,11 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
       return false;
     }
 
-    if (instId || instName) {
+    if ((instId || instName) && instMode !== 'awarding') {
       const authorAtInst = matchingAuthorships.some((a) =>
         (a.institutions || []).some((inst) =>
-          instMatchesTarget(inst.id, inst.name, instId, instName)
+          instMatchesTarget(inst.id, inst.name, instId, instName) &&
+          (!targetCountries.length || targetCountries.includes(inst.countryCode || resolveCountryCode(inst.name || a.rawAffiliation)))
         )
       );
       if (!authorAtInst) {
@@ -437,7 +436,7 @@ function matchesInstitutionalAndAuthorFilters(record, filters) {
       }
     }
 
-    if (targetCountries.length > 0) {
+    if (targetCountries.length > 0 && !(instMode === 'awarding' && (instId || instName))) {
       const authorInCountry = matchingAuthorships.some((a) =>
         (a.institutions || []).some((inst) => {
           const cCode = inst.countryCode || resolveCountryCode(inst.name || a.rawAffiliation);

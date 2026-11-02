@@ -5,8 +5,8 @@ const { emitToUser } = require('../socket');
 function matchesAlert(record, alert) {
   if (alert.publicationType === 'thesis' && !['thesis', 'dissertation'].includes(record.publicationType)) return false;
   if (alert.venueId && record.venueId !== alert.venueId) return false;
-  if (alert.venueId && [alert.venueId, 'arxiv cs.cv'].includes(alert.topic.trim().toLowerCase())) return true;
   if (alert.category && alert.category !== 'All Disciplines' && record.category !== alert.category) return false;
+  if (alert.venueId && [alert.venueId, 'arxiv cs.cv'].includes(alert.topic.trim().toLowerCase())) return true;
   return queryMatch(record, alert.topic).accepted;
 }
 async function checkDiscoveryAlert(user, alert, until = new Date()) {
