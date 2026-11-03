@@ -2,6 +2,7 @@ const { runScholarlyRecordTests } = require('./scholarlyRecord.test');
 const { runDeduplicationTests } = require('./deduplication.test');
 const { runCitationTests } = require('./citation.test');
 const { runSecurityTests } = require('./security.test');
+const { runMongoOperatorTests } = require('./mongoOperators.test');
 const { runSearchAndPaginationTests } = require('./searchAndPagination.test');
 const { testSearchSessionArchitecture } = require('./searchSessionPagination.test');
 const { runSearchCorrectnessRegressionTests } = require('./searchCorrectnessRegression.test');
@@ -42,6 +43,7 @@ async function main() {
 
   try {
     runSecurityTests();
+    await runMongoOperatorTests();
     console.log('');
     runScholarlyRecordTests();
     console.log('');

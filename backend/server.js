@@ -107,6 +107,7 @@ app.use(
 app.use(express.json({ limit: '5mb' }));
 app.use(jsonCompression());
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(require('./middleware/rejectMongoOperators'));
 
 app.get('/api/health', (req, res) => {
   res.json({
